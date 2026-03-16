@@ -402,8 +402,18 @@ export default function App() {
 
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
-    if (params.get("connected") === "true") window.history.replaceState({}, "", "/");
-    fetchWhoopData();
+    if (params.get("connected") === "true") {
+      window.history.replaceState({}, "", "/");
+      fetchWhoopData();
+    } else {
+      const hasCookie = document.cookie.includes("whoop_access");
+      if (hasCookie) {
+        fetchWhoopData();
+      } else {
+        setWhoopConnected(false);
+        setWhoopLoading(false);
+      }
+    }
   }, []);
 
   const fetchWhoopData = async () => {
