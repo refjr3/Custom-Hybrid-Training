@@ -5,6 +5,7 @@ export default async function handler(req, res) {
   const redirectUri = "https://custom-hybrid-training.vercel.app/api/auth/callback";
 
   if (!code) return res.redirect(302, "/?error=no_code");
+  if (!clientId || !clientSecret) return res.redirect(302, "/?error=missing_env");
 
   try {
     const tokenRes = await fetch("https://api.prod.whoop.com/oauth/oauth2/token", {
@@ -23,30 +24,13 @@ export default async function handler(req, res) {
     const tokens = await tokenRes.json();
     if (!tokens.access_token) return res.redirect(302, "/?error=no_token");
 
-    const at = Buffer.from(tokens.access_token).toString('base64');
-    const rt = Buffer.from(tokens.refresh_token || '').toString('base64');
-
-    res.setHeader("Content-Type", "text/html");
-    return res.status(200).send(`<!DOCTYPE html>
-<html><head><title>Connecting...</title>
-<script>
-window.onload = function() {
-  try {
-    var at = atob('${at}');
-    var rt = atob('${rt}');
-    window.localStorage.setItem('whoop_access', at);
-    window.localStorage.setItem('whoop_refresh', rt);
-    window.location.replace('/');
-  } catch(e) {
-    document.body.innerHTML = 'Error: ' + e.message;
-  }
-};
-</script>
-</head>
-<body style="background:#000;color:#fff;font-family:monospace;padding:40px;text-align:center;">
-<p>Connecting WHOOP...</p>
-</body></html>`);
-
+    const opts = "Path=/; HttpOnly; SameSite=Lax; Max-Age=3600";
+    const optsRefresh = "Path=/; HttpOnly; SameSite=Lax; Max-Age=2592000";
+    res.setHeader("Set-Cookie", [
+      `whoop_access=${tokens.access_token}; ${opts}`,
+      `whoop_refresh=${tokens.refresh_token || ""}; ${optsRefresh}`,
+    ]);
+    return res.redirect(302, "/?connected=true");
   } catch (err) {
     return res.redirect(302, "/?error=exception");
   }
