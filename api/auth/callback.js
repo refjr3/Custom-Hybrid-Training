@@ -21,6 +21,7 @@ export default async function handler(req, res) {
     });
 
     const tokens = await tokenRes.json();
+    console.log("WHOOP token response:", JSON.stringify(tokens));
     if (!tokens.access_token) return res.redirect(302, "/?error=no_token");
 
     // Use JSON.stringify to safely encode tokens
