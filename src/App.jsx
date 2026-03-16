@@ -463,21 +463,21 @@ export default function App() {
   const [biomarkers, setBiomarkers]     = useState([]);
 
   useEffect(() => {
-    const params = new URLSearchParams(window.location.search);
-if (params.get("connected") === "true") {
-  const at = params.get("access_token");
-      const rt = params.get("refresh_token");
-      if (at) {
-        localStorage.setItem("whoop_access", at);
-        if (rt) localStorage.setItem("whoop_refresh", rt);
-      }
-      window.history.replaceState({}, "", "/");
-    }
-    const token = localStorage.getItem("whoop_access");
-    if (token) fetchWhoopData(token);
-    else { setWhoopConnected(false); setWhoopLoading(false); }
-    fetchBiomarkers();
-  }, []);
+  const params = new URLSearchParams(window.location.search);
+  const at = params.get("at");
+  const rt = params.get("rt");
+  if (at) {
+    const decoded = atob(at);
+    const decodedRt = rt ? atob(rt) : "";
+    localStorage.setItem("whoop_access", decoded);
+    if (decodedRt) localStorage.setItem("whoop_refresh", decodedRt);
+    window.history.replaceState({}, "", "/");
+  }
+  const token = localStorage.getItem("whoop_access");
+  if (token) fetchWhoopData(token);
+  else { setWhoopConnected(false); setWhoopLoading(false); }
+  fetchBiomarkers();
+}, []);
 
   const fetchWhoopData = async (token) => {
     const t = token || localStorage.getItem("whoop_access");
