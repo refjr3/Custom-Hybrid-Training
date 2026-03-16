@@ -433,21 +433,6 @@ export default function App() {
   }
 };
 
-  const fetchWhoopData = async () => {
-    try {
-      const res = await fetch("/api/whoop/recovery");
-      if (res.status === 401) { setWhoopConnected(false); setWhoopLoading(false); return; }
-      const data = await res.json();
-      setWhoopData(data);
-      setWhoopConnected(true);
-    } catch (e) { 
-  setWhoopConnected(false);
-  setWhoopLoading(false);
-} finally { 
-  setWhoopLoading(false); 
-}
-  };
-
   const block  = BLOCKS.find(b => b.id === blockId);
   const weeks  = block.weeks;
   const week   = weeks.find(w => w.id === weekId) || weeks[0];
