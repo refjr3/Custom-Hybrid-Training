@@ -397,7 +397,7 @@ export default function App() {
 
   // WHOOP live data
   const [whoopData, setWhoopData]       = useState(null);
-  const [whoopLoading, setWhoopLoading] = useState(false);
+  const [whoopLoading, setWhoopLoading] = useState(true);
   const [whoopConnected, setWhoopConnected] = useState(false);
 
   useEffect(() => {
@@ -406,32 +406,16 @@ export default function App() {
     fetchWhoopData();
   }, []);
 
-  const fetchWhoopData = async (token) => {
-  const t = token || localStorage.getItem("whoop_access");
-  if (!t) {
-    setWhoopConnected(false);
-    setWhoopLoading(false);
-    return;
-  }
-  try {
-    const res = await fetch("/api/whoop/recovery", {
-      headers: { Authorization: `Bearer ${t}` },
-    });
-    if (res.status === 401 || res.status === 500) {
-      localStorage.removeItem("whoop_access");
-      setWhoopConnected(false);
-      setWhoopLoading(false);
-      return;
-    }
-    const data = await res.json();
-    setWhoopData(data);
-    setWhoopConnected(true);
-  } catch (e) {
-    setWhoopConnected(false);
-  } finally {
-    setWhoopLoading(false);
-  }
-};
+  const fetchWhoopData = async () => {
+    try {
+      const res = await fetch("/api/whoop/recovery");
+      if (res.status === 401) { setWhoopConnected(false); setWhoopLoading(false); return; }
+      const data = await res.json();
+      setWhoopData(data);
+      setWhoopConnected(true);
+    } catch { setWhoopConnected(false); }
+    finally { setWhoopLoading(false); }
+  };
 
   const block  = BLOCKS.find(b => b.id === blockId);
   const weeks  = block.weeks;
@@ -449,14 +433,10 @@ export default function App() {
     ? (sess === "am" ? getEffAm(dayData) : dayData.pm)
     : null;
 
-const rec    = whoopData?.recovery?.score ?? 0;
-const sleep  = whoopData?.sleep?.score ?? 0;
-const strain = whoopData?.strain?.score ?? 0;
-const rc     = whoopColor(rec);
-const hrv    = whoopData?.recovery?.hrv ?? 0;
-const rhr    = whoopData?.recovery?.rhr ?? 0;
-const sleepHours = whoopData?.sleep?.hours ?? 0;
-const sleepEff   = whoopData?.sleep?.efficiency ?? 0;
+  const rec   = whoopData?.recovery?.score ?? 0;
+  const sleep = whoopData?.sleep?.score ?? 0;
+  const strain = whoopData?.strain?.score ?? 0;
+  const rc    = whoopColor(rec);
 
   // Figure out today's primary session for "Today" tab
   const todayDayNames = ["SUN","MON","TUE","WED","THU","FRI","SAT"];
@@ -487,7 +467,7 @@ const sleepEff   = whoopData?.sleep?.efficiency ?? 0;
 
           {/* ── WHOOP RINGS ── */}
           <div style={{ padding:"8px 20px 20px" }}>
-            {!whoopConnected ? (
+            {!whoopConnected && !whoopLoading ? (
               <div style={{ background:C.card, borderRadius:20, padding:"28px 20px", textAlign:"center", border:`1px solid ${C.border}` }}>
                 <div style={{ fontFamily:C.ff, fontSize:20, color:C.muted, marginBottom:8 }}>WHOOP NOT CONNECTED</div>
                 <div style={{ fontFamily:C.fm, fontSize:9, color:C.muted, letterSpacing:2, marginBottom:16 }}>Connect to see live recovery data</div>
@@ -521,7 +501,7 @@ const sleepEff   = whoopData?.sleep?.efficiency ?? 0;
                     </div>
                     <div style={{ fontFamily:C.fs, fontSize:13, color:C.text, lineHeight:1.5 }}>{whoopMsg(rec)}</div>
                     <div style={{ fontFamily:C.fm, fontSize:8, color:C.muted, marginTop:6 }}>
-                      HRV {hrv}ms · RHR {rhr}bpm
+                      HRV {whoopData.recovery.hrv}ms · RHR {whoopData.recovery.rhr}bpm
                     </div>
                   </div>
                 )}
@@ -529,9 +509,9 @@ const sleepEff   = whoopData?.sleep?.efficiency ?? 0;
                 {/* Extra stats row */}
                 {whoopData && (
                   <div style={{ display:"flex", gap:8 }}>
-                    <StatPill label="HRV" value={`${hrv}ms`} />
-                    <StatPill label="RHR" value={`${rhr}`} />
-                    <StatPill label="EFFICIENCY" value={`${sleepEff}%`} />
+                    <StatPill label="HRV" value={`${whoopData.recovery.hrv}ms`} />
+                    <StatPill label="RHR" value={`${whoopData.recovery.rhr}`} />
+                    <StatPill label="EFFICIENCY" value={`${whoopData.sleep.efficiency}%`} />
                   </div>
                 )}
               </>
