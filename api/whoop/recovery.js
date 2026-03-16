@@ -34,7 +34,7 @@ export default async function handler(req, res) {
     const newTokens = await refreshToken(refresh);
     if (!newTokens.access_token) return res.status(401).json({ error: "refresh_failed" });
     access = newTokens.access_token;
-    const opts = "Path=/; HttpOnly; Secure; SameSite=Lax";
+    const opts = "Path=/; HttpOnly; SameSite=Lax";
     res.setHeader("Set-Cookie", [
       `whoop_access=${newTokens.access_token}; ${opts}; Max-Age=3600`,
       `whoop_refresh=${newTokens.refresh_token || refresh}; ${opts}; Max-Age=2592000`,
@@ -45,8 +45,8 @@ export default async function handler(req, res) {
     const headers = { Authorization: `Bearer ${access}` };
     const [recRes, sleepRes, cycleRes] = await Promise.all([
       fetch("https://api.prod.whoop.com/developer/v2/recovery?limit=1", { headers }),
-fetch("https://api.prod.whoop.com/developer/v2/activity/sleep?limit=1", { headers }),
-fetch("https://api.prod.whoop.com/developer/v2/cycle?limit=1", { headers }),
+      fetch("https://api.prod.whoop.com/developer/v2/activity/sleep?limit=1", { headers }),
+      fetch("https://api.prod.whoop.com/developer/v2/cycle?limit=1", { headers }),
     ]);
 
     const [recData, sleepData, cycleData] = await Promise.all([
@@ -57,7 +57,7 @@ fetch("https://api.prod.whoop.com/developer/v2/cycle?limit=1", { headers }),
     const sleep = sleepData.records?.[0];
     const cycle = cycleData.records?.[0];
 
-    res.status(200).json({
+    return res.status(200).json({
       recovery: {
         score: Math.round(rec?.score?.recovery_score ?? 0),
         hrv:   Math.round(rec?.score?.hrv_rmssd_milli ?? 0),
@@ -77,6 +77,6 @@ fetch("https://api.prod.whoop.com/developer/v2/cycle?limit=1", { headers }),
       },
     });
   } catch (err) {
-    res.status(500).json({ error: "fetch_failed", details: err.message });
+    return res.status(500).json({ error: "fetch_failed", details: err.message });
   }
 }
