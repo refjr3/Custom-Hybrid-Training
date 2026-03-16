@@ -408,20 +408,30 @@ export default function App() {
 
   const fetchWhoopData = async (token) => {
   const t = token || localStorage.getItem("whoop_access");
-      if (res.status === 401 || res.status === 500) {
-        setWhoopConnected(false);
-        setWhoopLoading(false);
-        return;
-      }
-      const data = await res.json();
-      setWhoopData(data);
-      setWhoopConnected(true);
-    } catch {
+  if (!t) {
+    setWhoopConnected(false);
+    setWhoopLoading(false);
+    return;
+  }
+  try {
+    const res = await fetch("/api/whoop/recovery", {
+      headers: { Authorization: `Bearer ${t}` },
+    });
+    if (res.status === 401 || res.status === 500) {
+      localStorage.removeItem("whoop_access");
       setWhoopConnected(false);
-    } finally {
       setWhoopLoading(false);
+      return;
     }
-  };
+    const data = await res.json();
+    setWhoopData(data);
+    setWhoopConnected(true);
+  } catch {
+    setWhoopConnected(false);
+  } finally {
+    setWhoopLoading(false);
+  }
+};
 
   const fetchWhoopData = async () => {
     try {
