@@ -440,7 +440,7 @@ export default function App() {
       const data = await res.json();
       setWhoopData(data);
       setWhoopConnected(true);
-    } catch { 
+    } catch (e) { 
   setWhoopConnected(false);
   setWhoopLoading(false);
 } finally { 
