@@ -397,7 +397,7 @@ export default function App() {
 
   // WHOOP live data
   const [whoopData, setWhoopData]       = useState(null);
-  const [whoopLoading, setWhoopLoading] = useState(true);
+  const [whoopLoading, setWhoopLoading] = useState(false);
   const [whoopConnected, setWhoopConnected] = useState(false);
 
   useEffect(() => {
