@@ -433,10 +433,14 @@ export default function App() {
     ? (sess === "am" ? getEffAm(dayData) : dayData.pm)
     : null;
 
-  const rec   = whoopData?.recovery?.score ?? 0;
-  const sleep = whoopData?.sleep?.score ?? 0;
-  const strain = whoopData?.strain?.score ?? 0;
-  const rc    = whoopColor(rec);
+const rec    = whoopData?.recovery?.score ?? 0;
+const sleep  = whoopData?.sleep?.score ?? 0;
+const strain = whoopData?.strain?.score ?? 0;
+const rc     = whoopColor(rec);
+const hrv    = whoopData?.recovery?.hrv ?? 0;
+const rhr    = whoopData?.recovery?.rhr ?? 0;
+const sleepHours = whoopData?.sleep?.hours ?? 0;
+const sleepEff   = whoopData?.sleep?.efficiency ?? 0;
 
   // Figure out today's primary session for "Today" tab
   const todayDayNames = ["SUN","MON","TUE","WED","THU","FRI","SAT"];
@@ -501,7 +505,7 @@ export default function App() {
                     </div>
                     <div style={{ fontFamily:C.fs, fontSize:13, color:C.text, lineHeight:1.5 }}>{whoopMsg(rec)}</div>
                     <div style={{ fontFamily:C.fm, fontSize:8, color:C.muted, marginTop:6 }}>
-                      HRV {whoopData.recovery.hrv}ms · RHR {whoopData.recovery.rhr}bpm
+                      HRV {hrv}ms · RHR {rhr}bpm
                     </div>
                   </div>
                 )}
@@ -509,9 +513,9 @@ export default function App() {
                 {/* Extra stats row */}
                 {whoopData && (
                   <div style={{ display:"flex", gap:8 }}>
-                    <StatPill label="HRV" value={`${whoopData.recovery.hrv}ms`} />
-                    <StatPill label="RHR" value={`${whoopData.recovery.rhr}`} />
-                    <StatPill label="EFFICIENCY" value={`${whoopData.sleep.efficiency}%`} />
+                    <StatPill label="HRV" value={`${hrv}ms`} />
+                    <StatPill label="RHR" value={`${rhr}`} />
+                    <StatPill label="EFFICIENCY" value={`${sleepEff}%`} />
                   </div>
                 )}
               </>
