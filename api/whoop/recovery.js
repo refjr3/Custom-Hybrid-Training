@@ -54,8 +54,13 @@ export default async function handler(req, res) {
     ]);
 
     const rec   = recData.records?.[0];
-    const sleep = sleepData.records?.[0];
-    const cycle = cycleData.records?.[0];
+const sleep = sleepData.records?.[0];
+const cycle = cycleData.records?.[0];
+
+// Debug — remove after testing
+console.log("REC:", JSON.stringify(recData));
+console.log("SLEEP:", JSON.stringify(sleepData));
+console.log("CYCLE:", JSON.stringify(cycleData));
 
     res.status(200).json({
       recovery: {
