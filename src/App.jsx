@@ -199,7 +199,6 @@ const TodayCard = ({ name, onTap }) => {
   );
 };
 
-// ─── AI CHAT COMPONENT ───────────────────────────────────
 const AIChat = ({ whoopData, currentWeek, recentActivities, onPlanChange }) => {
   const [messages, setMessages] = useState([
     { role:"assistant", content:"Hey Rafael — I have your WHOOP data, training plan, and biomarkers loaded. What do you need?", planChange:null }
@@ -219,7 +218,6 @@ const AIChat = ({ whoopData, currentWeek, recentActivities, onPlanChange }) => {
     setInput("");
     setMessages(prev => [...prev, { role:"user", content:userMsg, planChange:null }]);
     setLoading(true);
-
     try {
       const res = await fetch("/api/coach/chat", {
         method:"POST",
@@ -232,11 +230,7 @@ const AIChat = ({ whoopData, currentWeek, recentActivities, onPlanChange }) => {
         }),
       });
       const data = await res.json();
-      setMessages(prev => [...prev, {
-        role:"assistant",
-        content: data.message || "Something went wrong.",
-        planChange: data.planChange || null,
-      }]);
+      setMessages(prev => [...prev, { role:"assistant", content: data.message || "Something went wrong.", planChange: data.planChange || null }]);
     } catch (e) {
       setMessages(prev => [...prev, { role:"assistant", content:"Connection error. Try again.", planChange:null }]);
     } finally {
@@ -247,13 +241,9 @@ const AIChat = ({ whoopData, currentWeek, recentActivities, onPlanChange }) => {
   const handlePlanChange = (planChange, action) => {
     if (action === "accept") {
       onPlanChange(planChange);
-      setMessages(prev => prev.map(m =>
-        m.planChange === planChange ? { ...m, planChangeStatus:"accepted" } : m
-      ));
+      setMessages(prev => prev.map(m => m.planChange === planChange ? { ...m, planChangeStatus:"accepted" } : m));
     } else {
-      setMessages(prev => prev.map(m =>
-        m.planChange === planChange ? { ...m, planChangeStatus:"rejected" } : m
-      ));
+      setMessages(prev => prev.map(m => m.planChange === planChange ? { ...m, planChangeStatus:"rejected" } : m));
     }
   };
 
@@ -277,7 +267,6 @@ const AIChat = ({ whoopData, currentWeek, recentActivities, onPlanChange }) => {
 
   return (
     <div style={{ position:"fixed", inset:0, zIndex:150, background:"rgba(0,0,0,0.95)", display:"flex", flexDirection:"column", maxWidth:480, margin:"0 auto" }}>
-      {/* Chat header */}
       <div style={{ padding:"16px 20px", borderBottom:`1px solid ${C.border}`, display:"flex", justifyContent:"space-between", alignItems:"center", flexShrink:0 }}>
         <div style={{ display:"flex", alignItems:"center", gap:12 }}>
           <div style={{ width:36, height:36, borderRadius:"50%", background:`${C.green}22`, border:`1px solid ${C.green}44`, display:"flex", alignItems:"center", justifyContent:"center" }}>
@@ -290,33 +279,19 @@ const AIChat = ({ whoopData, currentWeek, recentActivities, onPlanChange }) => {
         </div>
         <button onClick={() => setExpanded(false)} style={{ background:C.card, border:"none", color:C.muted, width:32, height:32, borderRadius:"50%", cursor:"pointer", fontSize:14 }}>✕</button>
       </div>
-
-      {/* Messages */}
       <div style={{ flex:1, overflowY:"auto", padding:"16px 20px", display:"flex", flexDirection:"column", gap:12 }}>
         {messages.map((m, i) => (
           <div key={i} style={{ display:"flex", flexDirection:"column", alignItems: m.role==="user" ? "flex-end" : "flex-start" }}>
-            <div style={{
-              maxWidth:"85%", padding:"12px 16px", borderRadius: m.role==="user" ? "16px 16px 4px 16px" : "16px 16px 16px 4px",
-              background: m.role==="user" ? C.green : C.card,
-              color: m.role==="user" ? "#000" : C.text,
-            }}>
+            <div style={{ maxWidth:"85%", padding:"12px 16px", borderRadius: m.role==="user" ? "16px 16px 4px 16px" : "16px 16px 16px 4px", background: m.role==="user" ? C.green : C.card, color: m.role==="user" ? "#000" : C.text }}>
               <div style={{ fontFamily:C.fs, fontSize:13, lineHeight:1.6 }}>{m.content}</div>
             </div>
-
-            {/* Plan change card */}
             {m.planChange && !m.planChangeStatus && (
               <div style={{ maxWidth:"85%", marginTop:8, background:C.card2, borderRadius:12, padding:"12px 14px", border:`1px solid ${C.green}44` }}>
                 <div style={{ fontFamily:C.fm, fontSize:7, color:C.green, letterSpacing:3, marginBottom:6 }}>PROPOSED CHANGE</div>
                 <div style={{ fontFamily:C.ff, fontSize:14, color:C.text, marginBottom:4 }}>{m.planChange.description}</div>
                 <div style={{ display:"flex", gap:8, marginTop:10 }}>
-                  <button onClick={() => handlePlanChange(m.planChange, "accept")}
-                    style={{ flex:1, padding:"10px", background:C.green, color:"#000", border:"none", borderRadius:8, cursor:"pointer", fontFamily:C.ff, fontSize:12, letterSpacing:2 }}>
-                    ACCEPT
-                  </button>
-                  <button onClick={() => handlePlanChange(m.planChange, "reject")}
-                    style={{ flex:1, padding:"10px", background:"transparent", color:C.muted, border:`1px solid ${C.border}`, borderRadius:8, cursor:"pointer", fontFamily:C.ff, fontSize:12, letterSpacing:2 }}>
-                    REJECT
-                  </button>
+                  <button onClick={() => handlePlanChange(m.planChange, "accept")} style={{ flex:1, padding:"10px", background:C.green, color:"#000", border:"none", borderRadius:8, cursor:"pointer", fontFamily:C.ff, fontSize:12, letterSpacing:2 }}>ACCEPT</button>
+                  <button onClick={() => handlePlanChange(m.planChange, "reject")} style={{ flex:1, padding:"10px", background:"transparent", color:C.muted, border:`1px solid ${C.border}`, borderRadius:8, cursor:"pointer", fontFamily:C.ff, fontSize:12, letterSpacing:2 }}>REJECT</button>
                 </div>
               </div>
             )}
@@ -336,36 +311,19 @@ const AIChat = ({ whoopData, currentWeek, recentActivities, onPlanChange }) => {
         )}
         <div ref={messagesEndRef} />
       </div>
-
-      {/* Quick prompts */}
       <div style={{ padding:"8px 20px 0", display:"flex", gap:8, overflowX:"auto", scrollbarWidth:"none", flexShrink:0 }}>
         {["What should I do today?","Adjust for my WHOOP score","Log new blood work","How was my last run?"].map((p,i) => (
-          <button key={i} onClick={() => setInput(p)}
-            style={{ flexShrink:0, padding:"6px 12px", background:C.card, border:`1px solid ${C.border}`, borderRadius:20, cursor:"pointer", fontFamily:C.fm, fontSize:8, color:C.muted, letterSpacing:1, whiteSpace:"nowrap" }}>
-            {p}
-          </button>
+          <button key={i} onClick={() => setInput(p)} style={{ flexShrink:0, padding:"6px 12px", background:C.card, border:`1px solid ${C.border}`, borderRadius:20, cursor:"pointer", fontFamily:C.fm, fontSize:8, color:C.muted, letterSpacing:1, whiteSpace:"nowrap" }}>{p}</button>
         ))}
       </div>
-
-      {/* Input */}
       <div style={{ padding:"12px 20px 20px", display:"flex", gap:10, flexShrink:0 }}>
-        <input
-          value={input}
-          onChange={e => setInput(e.target.value)}
-          onKeyDown={e => e.key === "Enter" && sendMessage()}
-          placeholder="Ask your coach anything..."
-          style={{ flex:1, background:C.card, border:`1px solid ${C.border}`, borderRadius:12, padding:"12px 16px", color:C.text, fontFamily:C.fs, fontSize:14, outline:"none" }}
-        />
-        <button onClick={sendMessage} disabled={loading || !input.trim()}
-          style={{ width:48, height:48, background: input.trim() ? C.green : C.card, border:"none", borderRadius:12, cursor: input.trim() ? "pointer" : "default", color: input.trim() ? "#000" : C.muted, fontSize:18, flexShrink:0 }}>
-          ↑
-        </button>
+        <input value={input} onChange={e => setInput(e.target.value)} onKeyDown={e => e.key === "Enter" && sendMessage()} placeholder="Ask your coach anything..." style={{ flex:1, background:C.card, border:`1px solid ${C.border}`, borderRadius:12, padding:"12px 16px", color:C.text, fontFamily:C.fs, fontSize:14, outline:"none" }} />
+        <button onClick={sendMessage} disabled={loading || !input.trim()} style={{ width:48, height:48, background: input.trim() ? C.green : C.card, border:"none", borderRadius:12, cursor: input.trim() ? "pointer" : "default", color: input.trim() ? "#000" : C.muted, fontSize:18, flexShrink:0 }}>↑</button>
       </div>
     </div>
   );
 };
 
-// ─── SESSION MODAL ────────────────────────────────────────
 const SessionModal = ({ name, dayData, sess, weekId, onClose, onSessSwitch, sundayChoice, setSundayChoice }) => {
   if (!name && !dayData?.isSunday && !dayData?.isRaceDay) return null;
   const w = name ? WL[name] : null;
@@ -390,10 +348,7 @@ const SessionModal = ({ name, dayData, sess, weekId, onClose, onSessSwitch, sund
         {dayData?.pm && (
           <div style={{ display:"flex", borderBottom:`1px solid ${C.border}` }}>
             {[["am","AM"],["pm","PM"]].map(([s,l]) => (
-              <button key={s} onClick={() => onSessSwitch(s)}
-                style={{ flex:1, padding:"12px", fontFamily:C.ff, fontSize:13, letterSpacing:3, background:"transparent", color: sess===s ? C.text : C.muted, border:"none", borderBottom:`2px solid ${sess===s ? accent : "transparent"}`, cursor:"pointer" }}>
-                {l} SESSION
-              </button>
+              <button key={s} onClick={() => onSessSwitch(s)} style={{ flex:1, padding:"12px", fontFamily:C.ff, fontSize:13, letterSpacing:3, background:"transparent", color: sess===s ? C.text : C.muted, border:"none", borderBottom:`2px solid ${sess===s ? accent : "transparent"}`, cursor:"pointer" }}>{l} SESSION</button>
             ))}
           </div>
         )}
@@ -402,8 +357,7 @@ const SessionModal = ({ name, dayData, sess, weekId, onClose, onSessSwitch, sund
             <div style={{ fontFamily:C.fm, fontSize:8, color:C.muted, letterSpacing:3, marginBottom:12 }}>CHOOSE YOUR SESSION</div>
             <div style={{ display:"flex", gap:10 }}>
               {[["mobility","MOBILITY","+ Contrast Therapy"],["plyo","PLYO + CORE","+ Contrast Therapy"]].map(([key,label,sub]) => (
-                <button key={key} onClick={() => setSundayChoice(p => ({...p,[weekId]:key}))}
-                  style={{ flex:1, padding:"14px 10px", background: sundayChoice[weekId]===key ? accent : C.card, color: sundayChoice[weekId]===key ? "#000" : C.text, border:`1px solid ${sundayChoice[weekId]===key ? accent : C.border}`, borderRadius:12, cursor:"pointer", fontFamily:C.ff, fontSize:14, letterSpacing:2 }}>
+                <button key={key} onClick={() => setSundayChoice(p => ({...p,[weekId]:key}))} style={{ flex:1, padding:"14px 10px", background: sundayChoice[weekId]===key ? accent : C.card, color: sundayChoice[weekId]===key ? "#000" : C.text, border:`1px solid ${sundayChoice[weekId]===key ? accent : C.border}`, borderRadius:12, cursor:"pointer", fontFamily:C.ff, fontSize:14, letterSpacing:2 }}>
                   {label}<div style={{ fontFamily:C.fm, fontSize:7, color: sundayChoice[weekId]===key ? "#00000088" : C.muted, marginTop:4 }}>{sub}</div>
                 </button>
               ))}
@@ -447,7 +401,6 @@ const SessionModal = ({ name, dayData, sess, weekId, onClose, onSessSwitch, sund
   );
 };
 
-// ─── MAIN APP ─────────────────────────────────────────────
 export default function App() {
   const [nav, setNav]         = useState("today");
   const [blockId, setBlockId] = useState("taper");
@@ -455,37 +408,25 @@ export default function App() {
   const [selDay, setSelDay]   = useState(null);
   const [sess, setSess]       = useState("am");
   const [sundayChoice, setSundayChoice] = useState({});
-  const [statsOpen, setStatsOpen]       = useState(false);
   const [whoopData, setWhoopData]       = useState(null);
-  const [whoopLoading, setWhoopLoading] = useState(false);
+  const [whoopLoading, setWhoopLoading] = useState(true);
   const [whoopConnected, setWhoopConnected] = useState(false);
   const [recentActivities, setRecentActivities] = useState([]);
-  const [biomarkers, setBiomarkers]     = useState([]);
+  const [biomarkers, setBiomarkers] = useState([]);
 
   useEffect(() => {
-  const params = new URLSearchParams(window.location.search);
-  const at = params.get("at");
-  const rt = params.get("rt");
-  if (at) {
-    const decoded = atob(at);
-    const decodedRt = rt ? atob(rt) : "";
-    localStorage.setItem("whoop_access", decoded);
-    if (decodedRt) localStorage.setItem("whoop_refresh", decodedRt);
-    window.history.replaceState({}, "", "/");
-  }
-  const token = localStorage.getItem("whoop_access");
-  if (token) fetchWhoopData(token);
-  else { setWhoopConnected(false); setWhoopLoading(false); }
-  fetchBiomarkers();
-}, []);
+    const params = new URLSearchParams(window.location.search);
+    if (params.get("connected") === "true") {
+      window.history.replaceState({}, "", "/");
+    }
+    fetchWhoopData();
+    fetchBiomarkers();
+  }, []);
 
-  const fetchWhoopData = async (token) => {
-    const t = token || localStorage.getItem("whoop_access");
-    if (!t) { setWhoopConnected(false); setWhoopLoading(false); return; }
+  const fetchWhoopData = async () => {
     try {
-      const res = await fetch("/api/whoop/recovery", { headers:{ Authorization:`Bearer ${t}` } });
-      if (res.status === 401 || res.status === 500) {
-        localStorage.removeItem("whoop_access");
+      const res = await fetch("/api/whoop/recovery");
+      if (res.status === 401) {
         setWhoopConnected(false);
         setWhoopLoading(false);
         return;
@@ -509,7 +450,6 @@ export default function App() {
 
   const handlePlanChange = (planChange) => {
     console.log("Plan change accepted:", planChange);
-    // Future: write to Supabase training_days table
   };
 
   const block  = BLOCKS.find(b => b.id === blockId);
@@ -524,27 +464,25 @@ export default function App() {
   const getEffAm = (d) => d.isSunday ? getSundayWo(weekId) : d.am;
   const modalName = dayData ? (sess === "am" ? getEffAm(dayData) : dayData.pm) : null;
 
-  const rec    = whoopData?.recovery?.score ?? 0;
-  const sleep  = whoopData?.sleep?.score ?? 0;
-  const strain = whoopData?.strain?.score ?? 0;
-  const hrv    = whoopData?.recovery?.hrv ?? 0;
-  const rhr    = whoopData?.recovery?.rhr ?? 0;
+  const rec        = whoopData?.recovery?.score ?? 0;
+  const sleep      = whoopData?.sleep?.score ?? 0;
+  const strain     = whoopData?.strain?.score ?? 0;
+  const hrv        = whoopData?.recovery?.hrv ?? 0;
+  const rhr        = whoopData?.recovery?.rhr ?? 0;
   const sleepHours = whoopData?.sleep?.hours ?? 0;
   const sleepEff   = whoopData?.sleep?.efficiency ?? 0;
-  const rc     = whoopColor(rec);
+  const rc         = whoopColor(rec);
 
   const todayDayNames = ["SUN","MON","TUE","WED","THU","FRI","SAT"];
   const todayDayName  = todayDayNames[new Date().getDay()];
   const todayDayData  = week.days.find(d => d.day === todayDayName) || week.days[0];
   const todayAm  = todayDayData ? getEffAm(todayDayData) : null;
   const todayPm  = todayDayData?.pm || null;
-
   const flaggedBio = biomarkers.filter(b => b.flag === "HIGH" || b.flag === "LOW");
 
   return (
     <div style={{ minHeight:"100vh", background:C.bg, color:C.text, fontFamily:C.fs, maxWidth:480, margin:"0 auto", paddingBottom:80 }}>
 
-      {/* ══ TODAY ══ */}
       {nav === "today" && (
         <div>
           <div style={{ padding:"16px 20px 12px", display:"flex", justifyContent:"space-between", alignItems:"center" }}>
@@ -564,29 +502,25 @@ export default function App() {
                 <div style={{ fontFamily:C.fm, fontSize:9, color:C.muted, letterSpacing:2, marginBottom:16 }}>Connect to see live recovery data</div>
                 <a href="/api/auth/login" style={{ display:"inline-block", background:C.green, color:"#000", padding:"12px 28px", fontFamily:C.ff, fontSize:14, letterSpacing:3, textDecoration:"none", borderRadius:8 }}>CONNECT WHOOP</a>
               </div>
+            ) : whoopLoading ? (
+              <div style={{ display:"flex", justifyContent:"center", alignItems:"center", height:200 }}>
+                <div style={{ fontFamily:C.fm, fontSize:9, color:C.muted, letterSpacing:2 }}>LOADING...</div>
+              </div>
             ) : (
               <>
                 <div style={{ display:"flex", justifyContent:"center", marginBottom:20 }}>
-                  {whoopLoading ? (
-                    <div style={{ width:140, height:140, borderRadius:"50%", background:C.card, display:"flex", alignItems:"center", justifyContent:"center" }}>
-                      <div style={{ fontFamily:C.fm, fontSize:9, color:C.muted, letterSpacing:2 }}>LOADING...</div>
-                    </div>
-                  ) : (
-                    <Ring score={rec} size={140} stroke={12} color={rc} label="RECOVERY" sublabel={whoopLabel(rec)} />
-                  )}
+                  <Ring score={rec} size={140} stroke={12} color={rc} label="RECOVERY" sublabel={whoopLabel(rec)} />
                 </div>
                 <div style={{ display:"flex", gap:16, justifyContent:"center", marginBottom:20 }}>
                   <Ring score={sleep} size={80} stroke={8} color={C.blue} label="SLEEP" />
                   <Ring score={Math.round((strain/21)*100)} size={80} stroke={8} color="#FF7700" label="STRAIN" sublabel={`${strain}`} />
                   <Ring score={Math.min(Math.round((sleepHours/9)*100),100)} size={80} stroke={8} color={C.muted} label="HRS" sublabel={`${sleepHours}h`} />
                 </div>
-                {whoopData && (
-                  <div style={{ background:`${rc}15`, border:`1px solid ${rc}33`, borderRadius:14, padding:"12px 16px", marginBottom:16 }}>
-                    <div style={{ fontFamily:C.fm, fontSize:8, color:rc, letterSpacing:3, fontWeight:700, marginBottom:4 }}>● {whoopLabel(rec)} DAY</div>
-                    <div style={{ fontFamily:C.fs, fontSize:13, color:C.text, lineHeight:1.5 }}>{whoopMsg(rec)}</div>
-                    <div style={{ fontFamily:C.fm, fontSize:8, color:C.muted, marginTop:6 }}>HRV {hrv}ms · RHR {rhr}bpm · Sleep {sleepEff}% efficiency</div>
-                  </div>
-                )}
+                <div style={{ background:`${rc}15`, border:`1px solid ${rc}33`, borderRadius:14, padding:"12px 16px", marginBottom:16 }}>
+                  <div style={{ fontFamily:C.fm, fontSize:8, color:rc, letterSpacing:3, fontWeight:700, marginBottom:4 }}>● {whoopLabel(rec)} DAY</div>
+                  <div style={{ fontFamily:C.fs, fontSize:13, color:C.text, lineHeight:1.5 }}>{whoopMsg(rec)}</div>
+                  <div style={{ fontFamily:C.fm, fontSize:8, color:C.muted, marginTop:6 }}>HRV {hrv}ms · RHR {rhr}bpm · Sleep {sleepEff}% efficiency</div>
+                </div>
                 <div style={{ display:"flex", gap:8 }}>
                   <StatPill label="HRV" value={`${hrv}ms`} />
                   <StatPill label="RHR" value={`${rhr}`} />
@@ -599,8 +533,7 @@ export default function App() {
           <div style={{ padding:"0 20px 20px" }}>
             <div style={{ fontFamily:C.fm, fontSize:8, color:C.muted, letterSpacing:3, marginBottom:12 }}>TODAY · {todayDayName}</div>
             {todayDayData?.isRaceDay ? (
-              <div onClick={() => { setSelDay(todayDayName); setSess("am"); }}
-                style={{ background:`${C.red}22`, border:`1px solid ${C.red}44`, borderRadius:16, padding:"20px", textAlign:"center", cursor:"pointer" }}>
+              <div onClick={() => { setSelDay(todayDayName); setSess("am"); }} style={{ background:`${C.red}22`, border:`1px solid ${C.red}44`, borderRadius:16, padding:"20px", textAlign:"center", cursor:"pointer" }}>
                 <div style={{ fontFamily:C.ff, fontSize:32, color:C.red }}>🏁 RACE DAY</div>
                 <div style={{ fontFamily:C.ff, fontSize:18, color:C.red }}>MIAMI · APR 4</div>
               </div>
@@ -609,10 +542,7 @@ export default function App() {
                 <div style={{ fontFamily:C.fm, fontSize:8, color:C.muted, letterSpacing:3, marginBottom:12 }}>SUNDAY · CHOOSE</div>
                 <div style={{ display:"flex", gap:10 }}>
                   {[["mobility","MOBILITY"],["plyo","PLYO + CORE"]].map(([key,label]) => (
-                    <button key={key} onClick={() => setSundayChoice(p => ({...p,[weekId]:key}))}
-                      style={{ flex:1, padding:"14px", background: sundayChoice[weekId]===key ? C.green : C.card2, color: sundayChoice[weekId]===key ? "#000" : C.text, border:`1px solid ${sundayChoice[weekId]===key ? C.green : C.border}`, borderRadius:12, cursor:"pointer", fontFamily:C.ff, fontSize:14, letterSpacing:2 }}>
-                      {label}
-                    </button>
+                    <button key={key} onClick={() => setSundayChoice(p => ({...p,[weekId]:key}))} style={{ flex:1, padding:"14px", background: sundayChoice[weekId]===key ? C.green : C.card2, color: sundayChoice[weekId]===key ? "#000" : C.text, border:`1px solid ${sundayChoice[weekId]===key ? C.green : C.border}`, borderRadius:12, cursor:"pointer", fontFamily:C.ff, fontSize:14, letterSpacing:2 }}>{label}</button>
                   ))}
                 </div>
                 {sundayChoice[weekId] && <div style={{ marginTop:12 }}><TodayCard name={getSundayWo(weekId)} onTap={() => setSelDay(todayDayName)} /></div>}
@@ -634,7 +564,6 @@ export default function App() {
             )}
           </div>
 
-          {/* Flagged biomarkers */}
           {flaggedBio.length > 0 && (
             <div style={{ padding:"0 20px 20px" }}>
               <div style={{ fontFamily:C.fm, fontSize:8, color:C.muted, letterSpacing:3, marginBottom:10 }}>FLAGGED BIOMARKERS</div>
@@ -652,24 +581,19 @@ export default function App() {
         </div>
       )}
 
-      {/* ══ PLAN ══ */}
       {nav === "plan" && (
         <div>
           <div style={{ padding:"16px 20px 10px" }}>
             <div style={{ fontFamily:C.fm, fontSize:8, color:C.muted, letterSpacing:3, marginBottom:10 }}>TRAINING BLOCK</div>
             <div style={{ display:"flex", gap:6, overflowX:"auto", scrollbarWidth:"none" }}>
               {BLOCKS.map(b => (
-                <button key={b.id} onClick={() => { setBlockId(b.id); setWeekId(b.weeks[0].id); setSelDay(null); }}
-                  style={{ flexShrink:0, padding:"8px 14px", background: blockId===b.id ? C.text : C.card, color: blockId===b.id ? "#000" : C.muted, border:`1px solid ${blockId===b.id ? C.text : C.border}`, borderRadius:20, cursor:"pointer", fontFamily:C.ff, fontSize:11, letterSpacing:2 }}>
-                  {b.label}
-                </button>
+                <button key={b.id} onClick={() => { setBlockId(b.id); setWeekId(b.weeks[0].id); setSelDay(null); }} style={{ flexShrink:0, padding:"8px 14px", background: blockId===b.id ? C.text : C.card, color: blockId===b.id ? "#000" : C.muted, border:`1px solid ${blockId===b.id ? C.text : C.border}`, borderRadius:20, cursor:"pointer", fontFamily:C.ff, fontSize:11, letterSpacing:2 }}>{b.label}</button>
               ))}
             </div>
           </div>
           <div style={{ display:"flex", overflowX:"auto", scrollbarWidth:"none", borderBottom:`1px solid ${C.border}`, paddingLeft:20 }}>
             {weeks.map(w => (
-              <button key={w.id} onClick={() => { setWeekId(w.id); setSelDay(null); }}
-                style={{ flexShrink:0, padding:"10px 14px", background:"transparent", color: weekId===w.id ? C.text : C.muted, border:"none", borderBottom:`2px solid ${weekId===w.id ? C.green : "transparent"}`, cursor:"pointer", fontFamily:C.fm, fontSize:7, letterSpacing:2, whiteSpace:"nowrap" }}>
+              <button key={w.id} onClick={() => { setWeekId(w.id); setSelDay(null); }} style={{ flexShrink:0, padding:"10px 14px", background:"transparent", color: weekId===w.id ? C.text : C.muted, border:"none", borderBottom:`2px solid ${weekId===w.id ? C.green : "transparent"}`, cursor:"pointer", fontFamily:C.fm, fontSize:7, letterSpacing:2, whiteSpace:"nowrap" }}>
                 {w.label.includes("·") ? w.label.split("·")[1]?.trim() : w.label}
                 <div style={{ fontSize:6, marginTop:2, opacity:0.6 }}>{w.dates}</div>
               </button>
@@ -686,8 +610,7 @@ export default function App() {
               const ac  = d.isSunday && !sundayChoice[weekId] ? C.light : getAccent(eAm);
               const isSel = selDay === d.day;
               return (
-                <button key={d.day} onClick={() => { setSelDay(isSel ? null : d.day); setSess("am"); }}
-                  style={{ background: isSel ? C.card : "transparent", border:"none", borderRight: i<6 ? `1px solid ${C.border}` : "none", borderBottom:`2px solid ${isSel ? ac : "transparent"}`, padding:"12px 4px 10px", cursor:"pointer", textAlign:"center", WebkitTapHighlightColor:"transparent" }}>
+                <button key={d.day} onClick={() => { setSelDay(isSel ? null : d.day); setSess("am"); }} style={{ background: isSel ? C.card : "transparent", border:"none", borderRight: i<6 ? `1px solid ${C.border}` : "none", borderBottom:`2px solid ${isSel ? ac : "transparent"}`, padding:"12px 4px 10px", cursor:"pointer", textAlign:"center", WebkitTapHighlightColor:"transparent" }}>
                   <div style={{ fontFamily:C.fm, fontSize:7, color: isSel ? C.muted : C.light, letterSpacing:1 }}>{d.day}</div>
                   <div style={{ fontFamily:C.fm, fontSize:6, color:C.light, margin:"2px 0 8px" }}>{d.date.split(" ")[1]}</div>
                   <div style={{ width:8, height:8, borderRadius:"50%", background:ac, margin:"0 auto", opacity: isSel ? 1 : 0.6 }} />
@@ -706,10 +629,7 @@ export default function App() {
                   <div style={{ fontFamily:C.fm, fontSize:8, color:C.muted, letterSpacing:3, marginBottom:10 }}>CHOOSE SESSION</div>
                   <div style={{ display:"flex", gap:8 }}>
                     {[["mobility","MOBILITY"],["plyo","PLYO + CORE"]].map(([key,label]) => (
-                      <button key={key} onClick={() => setSundayChoice(p => ({...p,[weekId]:key}))}
-                        style={{ flex:1, padding:"12px", background: sundayChoice[weekId]===key ? C.green : C.card2, color: sundayChoice[weekId]===key ? "#000" : C.text, border:`1px solid ${sundayChoice[weekId]===key ? C.green : C.border}`, borderRadius:10, cursor:"pointer", fontFamily:C.ff, fontSize:12, letterSpacing:2 }}>
-                        {label}
-                      </button>
+                      <button key={key} onClick={() => setSundayChoice(p => ({...p,[weekId]:key}))} style={{ flex:1, padding:"12px", background: sundayChoice[weekId]===key ? C.green : C.card2, color: sundayChoice[weekId]===key ? "#000" : C.text, border:`1px solid ${sundayChoice[weekId]===key ? C.green : C.border}`, borderRadius:10, cursor:"pointer", fontFamily:C.ff, fontSize:12, letterSpacing:2 }}>{label}</button>
                     ))}
                   </div>
                 </div>
@@ -717,10 +637,7 @@ export default function App() {
               {dayData.pm && (
                 <div style={{ display:"flex", borderBottom:`1px solid ${C.border}` }}>
                   {[["am","AM"],["pm","PM"]].map(([s,l]) => (
-                    <button key={s} onClick={() => setSess(s)}
-                      style={{ flex:1, padding:"10px", fontFamily:C.ff, fontSize:12, letterSpacing:3, background:"transparent", color: sess===s ? C.text : C.muted, border:"none", borderBottom:`2px solid ${sess===s ? C.green : "transparent"}`, cursor:"pointer" }}>
-                      {l} SESSION
-                    </button>
+                    <button key={s} onClick={() => setSess(s)} style={{ flex:1, padding:"10px", fontFamily:C.ff, fontSize:12, letterSpacing:3, background:"transparent", color: sess===s ? C.text : C.muted, border:"none", borderBottom:`2px solid ${sess===s ? C.green : "transparent"}`, cursor:"pointer" }}>{l} SESSION</button>
                   ))}
                 </div>
               )}
@@ -742,10 +659,7 @@ export default function App() {
                           <div style={{ fontFamily:C.fm, fontSize:7, color:C.muted, letterSpacing:2, marginBottom:14 }}>{wo.tag} · {wo.duration}</div>
                         </>
                       )}
-                      <button onClick={() => setSelDay(dayData.day)}
-                        style={{ width:"100%", padding:"12px", background:ac, color: ac === C.green ? "#000" : "#fff", border:"none", borderRadius:10, cursor:"pointer", fontFamily:C.ff, fontSize:14, letterSpacing:3 }}>
-                        VIEW FULL SESSION →
-                      </button>
+                      <button onClick={() => setSelDay(dayData.day)} style={{ width:"100%", padding:"12px", background:ac, color: ac === C.green ? "#000" : "#fff", border:"none", borderRadius:10, cursor:"pointer", fontFamily:C.ff, fontSize:14, letterSpacing:3 }}>VIEW FULL SESSION →</button>
                     </>
                   );
                 })()}
@@ -765,7 +679,6 @@ export default function App() {
         </div>
       )}
 
-      {/* ══ SUPPLEMENTS ══ */}
       {nav === "supps" && (
         <div style={{ padding:"20px" }}>
           <div style={{ fontFamily:C.ff, fontSize:28, letterSpacing:2, marginBottom:4 }}>SUPPLEMENTS<span style={{ color:C.red }}>.</span></div>
@@ -791,7 +704,6 @@ export default function App() {
         </div>
       )}
 
-      {/* ══ STATS ══ */}
       {nav === "stats" && (
         <div style={{ padding:"20px" }}>
           <div style={{ fontFamily:C.ff, fontSize:28, letterSpacing:2, marginBottom:4 }}>MY STATS<span style={{ color:C.green }}>.</span></div>
@@ -832,11 +744,9 @@ export default function App() {
         </div>
       )}
 
-      {/* ══ BOTTOM NAV ══ */}
       <div style={{ position:"fixed", bottom:0, left:"50%", transform:"translateX(-50%)", width:"100%", maxWidth:480, background:C.bg, borderTop:`1px solid ${C.border}`, display:"flex", zIndex:100 }}>
         {[["today","⚡","TODAY"],["plan","📅","PLAN"],["supps","💊","SUPPS"],["stats","📊","STATS"]].map(([id,icon,label]) => (
-          <button key={id} onClick={() => setNav(id)}
-            style={{ flex:1, padding:"12px 4px 20px", background:"transparent", border:"none", cursor:"pointer", display:"flex", flexDirection:"column", alignItems:"center", gap:4 }}>
+          <button key={id} onClick={() => setNav(id)} style={{ flex:1, padding:"12px 4px 20px", background:"transparent", border:"none", cursor:"pointer", display:"flex", flexDirection:"column", alignItems:"center", gap:4 }}>
             <div style={{ fontSize:18 }}>{icon}</div>
             <div style={{ fontFamily:C.fm, fontSize:7, letterSpacing:2, color: nav===id ? C.green : C.muted, fontWeight: nav===id ? 700 : 400 }}>{label}</div>
             {nav===id && <div style={{ width:4, height:4, borderRadius:"50%", background:C.green, marginTop:2 }} />}
@@ -844,26 +754,10 @@ export default function App() {
         ))}
       </div>
 
-      {/* ══ AI CHAT ══ */}
-      <AIChat
-        whoopData={whoopData}
-        currentWeek={week}
-        recentActivities={recentActivities}
-        onPlanChange={handlePlanChange}
-      />
+      <AIChat whoopData={whoopData} currentWeek={week} recentActivities={recentActivities} onPlanChange={handlePlanChange} />
 
-      {/* ══ SESSION MODAL ══ */}
       {selDay && (
-        <SessionModal
-          name={modalName}
-          dayData={dayData}
-          sess={sess}
-          weekId={weekId}
-          onClose={() => setSelDay(null)}
-          onSessSwitch={setSess}
-          sundayChoice={sundayChoice}
-          setSundayChoice={setSundayChoice}
-        />
+        <SessionModal name={modalName} dayData={dayData} sess={sess} weekId={weekId} onClose={() => setSelDay(null)} onSessSwitch={setSess} sundayChoice={sundayChoice} setSundayChoice={setSundayChoice} />
       )}
     </div>
   );
