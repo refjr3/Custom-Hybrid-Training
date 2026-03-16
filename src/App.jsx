@@ -406,9 +406,8 @@ export default function App() {
     fetchWhoopData();
   }, []);
 
-  const fetchWhoopData = async () => {
-    try {
-      const res = await fetch("/api/whoop/recovery");
+  const fetchWhoopData = async (token) => {
+  const t = token || localStorage.getItem("whoop_access");
       if (res.status === 401 || res.status === 500) {
         setWhoopConnected(false);
         setWhoopLoading(false);
