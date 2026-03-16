@@ -44,9 +44,9 @@ export default async function handler(req, res) {
   try {
     const headers = { Authorization: `Bearer ${access}` };
     const [recRes, sleepRes, cycleRes] = await Promise.all([
-      fetch("https://api.prod.whoop.com/developer/v1/recovery?limit=1", { headers }),
-      fetch("https://api.prod.whoop.com/developer/v1/sleep?limit=1", { headers }),
-      fetch("https://api.prod.whoop.com/developer/v1/cycle?limit=1", { headers }),
+      fetch("https://api.prod.whoop.com/developer/v2/recovery?limit=1", { headers }),
+fetch("https://api.prod.whoop.com/developer/v2/activity/sleep?limit=1", { headers }),
+fetch("https://api.prod.whoop.com/developer/v2/cycle?limit=1", { headers }),
     ]);
 
     const [recData, sleepData, cycleData] = await Promise.all([
