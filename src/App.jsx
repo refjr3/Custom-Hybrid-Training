@@ -475,7 +475,7 @@ const sleepEff   = whoopData?.sleep?.efficiency ?? 0;
 
           {/* ── WHOOP RINGS ── */}
           <div style={{ padding:"8px 20px 20px" }}>
-            {!whoopConnected && !whoopLoading ? (
+            {!whoopConnected ? (
               <div style={{ background:C.card, borderRadius:20, padding:"28px 20px", textAlign:"center", border:`1px solid ${C.border}` }}>
                 <div style={{ fontFamily:C.ff, fontSize:20, color:C.muted, marginBottom:8 }}>WHOOP NOT CONNECTED</div>
                 <div style={{ fontFamily:C.fm, fontSize:9, color:C.muted, letterSpacing:2, marginBottom:16 }}>Connect to see live recovery data</div>
