@@ -463,9 +463,10 @@ export default function App() {
   const [biomarkers, setBiomarkers]     = useState([]);
 
   useEffect(() => {
-    const params = new URLSearchParams(window.location.search);
-    if (params.get("connected") === "true") {
-      const at = params.get("access_token");
+    const hash = window.location.hash.substring(1);
+const params = new URLSearchParams(hash);
+if (params.get("connected") === "true") {
+  const at = params.get("access_token");
       const rt = params.get("refresh_token");
       if (at) {
         localStorage.setItem("whoop_access", at);
