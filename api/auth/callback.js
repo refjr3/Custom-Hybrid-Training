@@ -25,11 +25,7 @@ export default async function handler(req, res) {
     if (!tokens.access_token) return res.redirect(302, "/?error=no_token");
 
     // Pass tokens back via URL params (stored in localStorage by the app)
-    const params = new URLSearchParams({
-      access_token: tokens.access_token,
-      refresh_token: tokens.refresh_token || "",
-      connected: "true",
-    });
+    return res.redirect(302, `/#access_token=${tokens.access_token}&refresh_token=${tokens.refresh_token || ""}&connected=true`);
 
     return res.redirect(302, `/?${params.toString()}`);
   } catch (err) {
