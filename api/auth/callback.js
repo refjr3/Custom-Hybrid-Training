@@ -21,18 +21,33 @@ export default async function handler(req, res) {
     });
 
     const tokens = await tokenRes.json();
-    console.log("WHOOP token response:", JSON.stringify(tokens));
     if (!tokens.access_token) return res.redirect(302, "/?error=no_token");
 
-    // Use JSON.stringify to safely encode tokens
-    const accessToken = JSON.stringify(tokens.access_token);
-    const refreshToken = JSON.stringify(tokens.refresh_token || "");
+    const at = Buffer.from(tokens.access_token).toString('base64');
+    const rt = Buffer.from(tokens.refresh_token || '').toString('base64');
 
-    const encoded = Buffer.from(tokens.access_token).toString('base64');
-const encodedRefresh = Buffer.from(tokens.refresh_token || '').toString('base64');
-return res.redirect(302, `/?at=${encoded}&rt=${encodedRefresh}`);
+    res.setHeader("Content-Type", "text/html");
+    return res.status(200).send(`<!DOCTYPE html>
+<html><head><title>Connecting...</title>
+<script>
+window.onload = function() {
+  try {
+    var at = atob('${at}');
+    var rt = atob('${rt}');
+    window.localStorage.setItem('whoop_access', at);
+    window.localStorage.setItem('whoop_refresh', rt);
+    window.location.replace('/');
+  } catch(e) {
+    document.body.innerHTML = 'Error: ' + e.message;
+  }
+};
+</script>
+</head>
+<body style="background:#000;color:#fff;font-family:monospace;padding:40px;text-align:center;">
+<p>Connecting WHOOP...</p>
+</body></html>`);
 
   } catch (err) {
-    return res.redirect(302, "/?error=exception&msg=" + encodeURIComponent(err.message));
+    return res.redirect(302, "/?error=exception");
   }
 }
