@@ -402,19 +402,27 @@ export default function App() {
 
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
-    if (params.get("connected") === "true") {
-      window.history.replaceState({}, "", "/");
-      fetchWhoopData();
-    } else {
-      const hasCookie = document.cookie.includes("whoop_access");
-      if (hasCookie) {
-        fetchWhoopData();
-      } else {
+    if (params.get("connected") === "true") window.history.replaceState({}, "", "/");
+    fetchWhoopData();
+  }, []);
+
+  const fetchWhoopData = async () => {
+    try {
+      const res = await fetch("/api/whoop/recovery");
+      if (res.status === 401 || res.status === 500) {
         setWhoopConnected(false);
         setWhoopLoading(false);
+        return;
       }
+      const data = await res.json();
+      setWhoopData(data);
+      setWhoopConnected(true);
+    } catch {
+      setWhoopConnected(false);
+    } finally {
+      setWhoopLoading(false);
     }
-  }, []);
+  };
 
   const fetchWhoopData = async () => {
     try {
