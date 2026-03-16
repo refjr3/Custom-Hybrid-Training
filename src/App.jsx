@@ -413,8 +413,12 @@ export default function App() {
       const data = await res.json();
       setWhoopData(data);
       setWhoopConnected(true);
-    } catch { setWhoopConnected(false); }
-    finally { setWhoopLoading(false); }
+    } catch { 
+  setWhoopConnected(false);
+  setWhoopLoading(false);
+} finally { 
+  setWhoopLoading(false); 
+}
   };
 
   const block  = BLOCKS.find(b => b.id === blockId);
