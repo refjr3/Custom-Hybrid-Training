@@ -1,43 +1,56 @@
 import { useState, useEffect } from "react";
 
+// ─── DESIGN TOKENS ───────────────────────────────────────
 const C = {
-  bg:"#f0ece4", card:"#e8e4dc", card2:"#ddd9d0",
-  border:"#1a1a1a", text:"#1a1a1a", muted:"#888", light:"#bbb",
-  red:"#FF3C00", green:"#2a6a2a",
-  ff:"'Bebas Neue','Arial Black',sans-serif",
-  fm:"'Space Mono',monospace",
-  fs:"'Inter',-apple-system,sans-serif",
+  bg:      "#000000",
+  surface: "#111111",
+  card:    "#1a1a1a",
+  card2:   "#222222",
+  border:  "#2a2a2a",
+  text:    "#ffffff",
+  muted:   "#888888",
+  light:   "#555555",
+  red:     "#FF3C00",
+  green:   "#00D4A0",
+  yellow:  "#FFD600",
+  blue:    "#0088FF",
+  ff:      "'Bebas Neue','Arial Black',sans-serif",
+  fm:      "'Space Mono',monospace",
+  fs:      "'Inter',-apple-system,sans-serif",
 };
 
+// ─── HR ZONES ────────────────────────────────────────────
 const HR_ZONES = [
-  { zone:"Z1", name:"WARM UP",   pct:"69–80%",  bpm:"114–136", color:"#aaa" },
+  { zone:"Z1", name:"WARM UP",   pct:"69–80%",  bpm:"114–136", color:"#555" },
   { zone:"Z2", name:"EASY",      pct:"80–89%",  bpm:"132–151", color:C.green },
-  { zone:"Z3", name:"AEROBIC",   pct:"89–91%",  bpm:"147–154", color:"#b87800" },
-  { zone:"Z4", name:"THRESHOLD", pct:"91–99%",  bpm:"150–168", color:"#cc6600" },
+  { zone:"Z3", name:"AEROBIC",   pct:"89–91%",  bpm:"147–154", color:"#FFB800" },
+  { zone:"Z4", name:"THRESHOLD", pct:"91–99%",  bpm:"150–168", color:"#FF7700" },
   { zone:"Z5", name:"MAXIMUM",   pct:"99–114%", bpm:"163–194", color:C.red },
 ];
 
+// ─── SUPPLEMENTS ─────────────────────────────────────────
 const SUPPS = [
-  { time:"MORNING", icon:"☀", items:[
-    { name:"Beta Alanine", dose:"3.2–6.4g", note:"Take with breakfast. Tingling is normal.", timing:"AM" },
-    { name:"Creatine Monohydrate", dose:"5g", note:"Daily. Timing doesn't matter — just be consistent.", timing:"ANY" },
-    { name:"Whey Protein #1", dose:"25–40g", note:"Post AM workout or with breakfast.", timing:"POST AM" },
+  { time:"MORNING", color:C.yellow, items:[
+    { name:"Beta Alanine",          dose:"3.2–6.4g",   note:"With breakfast. Tingling is normal.",              timing:"AM" },
+    { name:"Creatine Monohydrate",  dose:"5g",         note:"Daily. Any time — just stay consistent.",          timing:"ANY" },
+    { name:"Whey Protein #1",       dose:"25–40g",     note:"Post AM workout or with breakfast.",               timing:"POST AM" },
   ]},
-  { time:"AFTERNOON", icon:"💪", items:[
-    { name:"Whey Protein #2", dose:"25–40g", note:"Post PM workout or between meals.", timing:"POST PM" },
+  { time:"AFTERNOON", color:C.red, items:[
+    { name:"Whey Protein #2",       dose:"25–40g",     note:"Post PM workout or between meals.",                timing:"POST PM" },
   ]},
-  { time:"NIGHT", icon:"🌙", items:[
-    { name:"Magnesium Glycinate", dose:"300–400mg", note:"Supports deep sleep and HRV. 30–60 min before bed.", timing:"NIGHT" },
-    { name:"L-Theanine", dose:"200–400mg", note:"Pairs with magnesium. Non-sedating calm sleep.", timing:"NIGHT" },
-    { name:"Sermorelin", dose:"Per protocol", note:"Empty stomach before sleep for maximum GH pulse.", timing:"PRE-SLEEP" },
+  { time:"NIGHT", color:C.blue, items:[
+    { name:"Magnesium Glycinate",   dose:"300–400mg",  note:"Supports deep sleep and HRV. 30–60 min pre-bed.", timing:"NIGHT" },
+    { name:"L-Theanine",            dose:"200–400mg",  note:"Pairs with magnesium for calm, natural sleep.",    timing:"NIGHT" },
+    { name:"Sermorelin",            dose:"Per Rx",     note:"Empty stomach before sleep. Max GH pulse.",        timing:"PRE-SLEEP" },
   ]},
-  { time:"DAILY TARGETS", icon:"📋", items:[
-    { name:"Protein Target", dose:"180–215g", note:"~1g per lb lean mass. Split across meals + 2 shakes.", timing:"ALL DAY" },
-    { name:"Hydration", dose:"3–4L water", note:"Critical for creatine efficacy and endurance.", timing:"ALL DAY" },
-    { name:"LDL / ApoB Flag", dose:"Diet focus", note:"LDL 145, ApoB 103 — HIGH. Reduce sat fat, increase fiber.", timing:"EVERY MEAL" },
+  { time:"DAILY TARGETS", color:"#aaa", items:[
+    { name:"Protein",               dose:"180–215g",   note:"~1g per lb lean mass. 2 shakes + meals.",         timing:"ALL DAY" },
+    { name:"Hydration",             dose:"3–4L",       note:"Critical for creatine + endurance performance.",  timing:"ALL DAY" },
+    { name:"LDL / ApoB",            dose:"Diet flag",  note:"LDL 145 ⚠ · ApoB 103 ⚠ — reduce sat fat.",      timing:"EVERY MEAL" },
   ]},
 ];
 
+// ─── WORKOUT LIBRARY ─────────────────────────────────────
 const WL = {
   "FOR TIME — Ultimate HYROX": {
     type:"FOR TIME", duration:"~55 min", tag:"HYROX SIM", accent:C.red,
@@ -65,580 +78,740 @@ const WL = {
     note:"Aerobic monster. Pace the ski erg to sustain quality broad jumps throughout.",
   },
   "EMOM 60 — Hyrox Stations": {
-    type:"EMOM", duration:"60 min", tag:"STATION DRILL", accent:C.border,
-    steps:["Every 2 min x 30 rounds:","Min 1 — 350m Ski Erg","Min 2 — 25m Sandbag Lunges","Min 3 — 350m Run","Min 4 — 2:00 Wall Balls","Min 5 — 2:00 Rest","— Rotate for 60 min —"],
+    type:"EMOM", duration:"60 min", tag:"STATION DRILL", accent:"#aaa",
+    steps:["Every 2 min x 30 rounds:","Min 1 — 350m Ski Erg","Min 2 — 25m Sandbag Lunges","Min 3 — 350m Run","Min 4 — 2:00 Wall Balls","Min 5 — 2:00 Rest"],
     note:"EMOM keeps you honest. If you can't finish in 2 min, scale the distance.",
   },
   "EMOM 40 — Full Hyrox": {
-    type:"EMOM", duration:"40 min", tag:"STATION DRILL", accent:C.border,
+    type:"EMOM", duration:"40 min", tag:"STATION DRILL", accent:"#aaa",
     steps:["Every 1 min x 40 rounds (5 cycles):","Min 1 — 200m Ski Erg","Min 2 — 12 DB Deadlifts","Min 3 — 200m Row Erg","Min 4 — 20m Burpee Broad Jump","Min 5 — 200m Run","Min 6 — 20m Sled Push","Min 7 — 20 Wall Balls","Min 8 — Rest"],
     note:"8-minute cycle repeated 5x. Every minute has a job.",
   },
   "INTERVAL — 6 Rounds Run Ski Wall Balls": {
-    type:"INTERVAL", duration:"~50 min", tag:"RUNNING QUALITY", accent:C.border,
+    type:"INTERVAL", duration:"~50 min", tag:"RUNNING QUALITY", accent:C.blue,
     steps:["6 Rounds — 8:00 on / 2:00 rest:","800m Run","+ 400m Ski Erg","+ Max Wall Balls remaining time","— Full 2:00 rest between rounds —"],
     note:"480s/120s x 6. The wall balls are the finisher — push them.",
   },
   "STRENGTH A — Full Body Power": {
-    type:"STRENGTH", duration:"65 min", tag:"FULL BODY · PUSH DOMINANT", accent:C.border,
-    steps:["— LOWER —","Barbell Squat — 4×5 @ 80%+ 1RM","Bulgarian Split Squat — 3×8/side","Leg Extension — 3×12","— PUSH —","Incline Bench Press — 4×6","Push Press — 3×5 explosive","Lateral Raise — 3×15","Explosive Plyo Push-ups — 3×8","— CORE —","Dead Bug — 3×10/side","Copenhagen Plank — 3×20 sec/side"],
-    note:"Push dominant day. Barbell squat is your anchor — load it. Plyo push-ups finish with explosiveness.",
+    type:"STRENGTH", duration:"65 min", tag:"PUSH DOMINANT", accent:"#aaa",
+    steps:["— LOWER —","Barbell Squat — 4×5 @ 80%+","Bulgarian Split Squat — 3×8/side","Leg Extension — 3×12","— PUSH —","Incline Bench Press — 4×6","Push Press — 3×5 explosive","Lateral Raise — 3×15","Explosive Plyo Push-ups — 3×8","— CORE —","Dead Bug — 3×10/side","Copenhagen Plank — 3×20 sec/side"],
+    note:"Push dominant day. Barbell squat is your anchor — load it.",
   },
   "STRENGTH B — Full Body Pull": {
-    type:"STRENGTH", duration:"65 min", tag:"FULL BODY · PULL DOMINANT", accent:C.border,
-    steps:["— LOWER —","Barbell Deadlift — 4×4 @ 82%+ 1RM","Hip Thrust — 4×8 heavy","Hamstring Curl — 3×12","— PULL —","Barbell Rows — 4×6 explosive","Pull-ups — 4×6 weighted","Dumbbell Bent Over Row — 3×10/side","Bicep Curls — 3×12","— HYROX CARRY —","KB Swings — 4×20 heavy"],
+    type:"STRENGTH", duration:"65 min", tag:"PULL DOMINANT", accent:"#aaa",
+    steps:["— LOWER —","Barbell Deadlift — 4×4 @ 82%+","Hip Thrust — 4×8 heavy","Hamstring Curl — 3×12","— PULL —","Barbell Rows — 4×6 explosive","Pull-ups — 4×6 weighted","DB Bent Over Row — 3×10/side","Bicep Curls — 3×12","— CARRY —","KB Swings — 4×20 heavy"],
     note:"Pull dominant day. Deadlift is the anchor. KB swings finish it.",
   },
   "STRENGTH C — Full Body Hybrid": {
-    type:"STRENGTH", duration:"65 min", tag:"FULL BODY · HYBRID", accent:C.border,
-    steps:["— LOWER —","Romanian Deadlift — 4×6 heavy","Leg Extension — 3×12","— PUSH / PULL SUPERSET —","A1: Overhead DB Press — 4×10","A2: Pull-ups — 4×8 bodyweight","B1: Dips — 3×10","B2: Dumbbell Bent Over Row — 3×10/side","C1: Seated Tricep Extension — 3×12","C2: Bicep Curls — 3×12","— EXPLOSIVE —","Explosive Plyo Push-ups — 3×8"],
+    type:"STRENGTH", duration:"65 min", tag:"SUPERSET FORMAT", accent:"#aaa",
+    steps:["— LOWER —","Romanian Deadlift — 4×6","Leg Extension — 3×12","— SUPERSET —","A1: Overhead DB Press — 4×10","A2: Pull-ups — 4×8","B1: Dips — 3×10","B2: DB Bent Over Row — 3×10/side","C1: Seated Tricep Extension — 3×12","C2: Bicep Curls — 3×12","— EXPLOSIVE —","Explosive Plyo Push-ups — 3×8"],
     note:"Superset format keeps HR elevated. Rest 60–90 sec between supersets only.",
   },
   "THRESHOLD — 10×2 Min": {
-    type:"THRESHOLD", duration:"45 min", tag:"Z4 · 150–168 BPM", accent:C.border,
-    steps:["Warm-up — 1.5 mile @ Z2","10 × 2 min @ Z4 threshold (150–168 bpm)","40 sec standing recovery each rep","Cool-down — 1.5 mile easy","Strides — 4×20 sec at end"],
-    note:"Z4 = 91–99% LTHR = 150–168 bpm on your Garmin. Bread-and-butter running session.",
+    type:"THRESHOLD", duration:"45 min", tag:"Z4 · 150–168 BPM", accent:C.blue,
+    steps:["Warm-up — 1.5 mile @ Z2","10 × 2 min @ Z4 (150–168 bpm)","40 sec standing recovery each","Cool-down — 1.5 mile easy","Strides — 4×20 sec at end"],
+    note:"Z4 = 91–99% LTHR = 150–168 bpm on your Garmin. RMR bread-and-butter.",
   },
   "TEMPO — 20 Min Sustained": {
-    type:"TEMPO", duration:"40 min", tag:"Z3–Z4 · 147–168 BPM", accent:C.border,
-    steps:["Warm-up — 1 mile @ Z2","20 min sustained tempo @ Z3–Z4 (147–162 bpm)","Focus on smooth, controlled effort","Cool-down — 1 mile easy"],
-    note:"Tempo pace = comfortably hard. Short sentences but not a full conversation.",
+    type:"TEMPO", duration:"40 min", tag:"Z3–Z4 · 147–168 BPM", accent:C.blue,
+    steps:["Warm-up — 1 mile @ Z2","20 min sustained @ Z3–Z4 (147–162 bpm)","Smooth, controlled effort throughout","Cool-down — 1 mile easy"],
+    note:"Comfortably hard. Short sentences OK, full conversation impossible.",
   },
   "VO2 MAX — Short Intervals": {
     type:"VO2 MAX", duration:"40 min", tag:"Z5 · 163–194 BPM", accent:C.red,
     steps:["Warm-up — 1 mile @ Z2","8 × 3 min @ Z5 (163–194 bpm)","3 min active recovery jog each","Cool-down — 1 mile easy"],
-    note:"Z5 = 99–114% LTHR. Hardest running session. Only do this when WHOOP is green.",
+    note:"Z5 = 99–114% LTHR. Only do this when WHOOP is GREEN. Yellow = swap to tempo.",
   },
   "ZONE 2 — Easy Aerobic": {
     type:"ZONE 2", duration:"30–45 min", tag:"Z2 · 132–151 BPM", accent:C.green,
-    steps:["HR target: Z2 — 132–151 bpm","Pace: conversational — full sentences","Cadence: 175–180 spm target","Duration: WHOOP dependent","Post-run: 10 min hip mobility"],
-    note:"Z2 = 80–89% of LTHR 165–170 = 132–151 bpm. Walk if HR climbs above 151.",
+    steps:["HR target: Z2 — 132–151 bpm","Conversational pace — full sentences","Cadence: 175–180 spm","Duration: WHOOP dependent","Post-run: 10 min hip mobility"],
+    note:"Walk if HR climbs above 151. No exceptions. This is your aerobic engine.",
   },
   "LONG RUN — Base Builder": {
     type:"LONG RUN", duration:"75–120 min", tag:"Z2 · 132–151 BPM", accent:C.green,
-    steps:["Full run @ conversational pace","Z2 target: 132–151 bpm entire run","Fuel: gel every 40–45 min","Hydration: sip every 20 min","Last 10%: can drift to Z3 (up to 154 bpm)"],
-    note:"This grows 1–2 miles each week. Most important session of the week.",
+    steps:["Full run @ conversational pace","Z2: 132–151 bpm entire run","Fuel: gel every 40–45 min","Hydration: every 20 min","Last 10%: can drift to Z3 (154 bpm)"],
+    note:"Grows 1–2 miles each week. Most important session of the week.",
   },
   "SUNDAY — Mobility Protocol": {
-    type:"MOBILITY", duration:"35–45 min", tag:"ACTIVE RECOVERY", accent:"#999",
-    steps:["— FLOW (15 min) —","Hip flexor flow — 3×60 sec/side","Hamstring stretch — 3×45 sec/side","Thoracic rotation — 10 reps/side","Pigeon pose — 2×60 sec/side","— FOAM ROLL (10 min) —","Quads, IT band, calves, upper back","— CONTRAST THERAPY —","Cold shower or ice bath: 3–5 min","Hot shower or sauna: 10–15 min","Repeat 2–3 rounds if available"],
-    note:"Full nervous system reset. Contrast therapy is the priority — drives HRV up for Monday.",
+    type:"MOBILITY", duration:"35–45 min", tag:"ACTIVE RECOVERY", accent:C.green,
+    steps:["— FLOW (15 min) —","Hip flexor — 3×60 sec/side","Hamstring stretch — 3×45 sec/side","Thoracic rotation — 10 reps/side","Pigeon pose — 2×60 sec/side","— FOAM ROLL (10 min) —","Quads, IT band, calves, upper back","— CONTRAST THERAPY —","Cold: 3–5 min ice bath or cold shower","Heat: 10–15 min sauna or hot bath","Repeat 2–3 rounds"],
+    note:"Contrast therapy is the priority — drives HRV up for Monday.",
   },
   "SUNDAY — Plyo & Core": {
-    type:"PLYO + CORE", duration:"45–55 min", tag:"EXPLOSIVE + STABILITY", accent:C.border,
-    steps:["— PLYOMETRICS (20 min) —","Box Jumps — 4×6 max height","Broad Jumps — 4×5 explosive","Depth Drops — 3×5/side","Lateral Bounds — 3×8/side","Single-leg Hop — 3×6/side","— CORE CIRCUIT (20 min) —","Dead Bug — 3×12/side","Copenhagen Plank — 3×25 sec/side","Pallof Press — 3×12/side","Ab Wheel Rollout — 3×10","Hollow Body Hold — 3×30 sec","— CONTRAST THERAPY —","Cold: 3–5 min · Heat: 10–15 min"],
+    type:"PLYO + CORE", duration:"45–55 min", tag:"EXPLOSIVE + STABILITY", accent:"#aaa",
+    steps:["— PLYOMETRICS —","Box Jumps — 4×6 max height","Broad Jumps — 4×5 explosive","Depth Drops — 3×5/side","Lateral Bounds — 3×8/side","Single-leg Hop — 3×6/side","— CORE —","Dead Bug — 3×12/side","Copenhagen Plank — 3×25 sec/side","Pallof Press — 3×12/side","Ab Wheel Rollout — 3×10","Hollow Body Hold — 3×30 sec","— CONTRAST THERAPY —","Cold: 3–5 min · Heat: 10–15 min"],
     note:"Plyo work builds explosive power for HYROX sled and burpee broad jumps.",
   },
   "RECOVERY — Active Reset": {
-    type:"RECOVERY", duration:"30–40 min", tag:"ACTIVE RECOVERY", accent:"#999",
-    steps:["— ACTIVE RECOVERY RUN —","20–25 min very easy jog (HR <120 bpm)","No structure. No pace target.","— CONTRAST THERAPY —","Cold exposure: 3–5 min cold shower or ice bath","Heat: sauna or hot bath 10–15 min","Alternate 2–3 rounds if available","— WHOOP NOTE —","Green >66%: Full protocol above","Yellow 35–65%: Run only or therapy only","Red <35%: Skip run. Therapy only."],
+    type:"RECOVERY", duration:"30–40 min", tag:"ACTIVE RECOVERY", accent:C.green,
+    steps:["— ACTIVE RECOVERY RUN —","20–25 min very easy jog (HR <120 bpm)","No structure. No pace target.","— CONTRAST THERAPY —","Cold: 3–5 min cold shower or ice bath","Heat: 10–15 min sauna or hot bath","2–3 rounds if available","— WHOOP GATE —","Green >66%: Full protocol","Yellow 35–65%: Run only or therapy only","Red <35%: Therapy only. No run."],
     note:"Active reset beats total rest. Run flushes legs, contrast therapy resets the nervous system.",
   },
 };
 
-const d = (day, date, am, pm, note2a, isRaceDay, isSunday) =>
-  ({ day, date, am, pm:pm||null, note2a:note2a||null, isRaceDay:!!isRaceDay, isSunday:!!isSunday });
-const buildWeek = (id, label, dates, phase, subtitle, days) =>
-  ({ id, label, dates, phase, subtitle, days });
+// ─── SCHEDULE ────────────────────────────────────────────
+const d = (day,date,am,pm,note2a,isRaceDay,isSunday) =>
+  ({day,date,am,pm:pm||null,note2a:note2a||null,isRaceDay:!!isRaceDay,isSunday:!!isSunday});
+const bw = (id,label,dates,phase,subtitle,days) =>
+  ({id,label,dates,phase,subtitle,days});
 
 const taperWeeks = [
-  buildWeek("tw1","TAPER WK 1","Mar 15–21","MIAMI TAPER","Moderate Volume · Stay Sharp",[
+  bw("tw1","TAPER WK 1","Mar 15–21","MIAMI TAPER","Moderate Volume · Stay Sharp",[
     d("MON","Mar 16","FOR TIME — Hyrox Full Runs Half Stations",null,"80% effort. Don't race it."),
     d("TUE","Mar 17","THRESHOLD — 10×2 Min",null,"Scale to 6×2. Maintain Z4 quality."),
     d("WED","Mar 18","STRENGTH A — Full Body Power","ZONE 2 — Easy Aerobic","AM strength · PM 30 min Z2."),
-    d("THU","Mar 19","TEMPO — 20 Min Sustained",null,"Controlled. Z3–Z4 boundary. No Z5."),
+    d("THU","Mar 19","TEMPO — 20 Min Sustained",null,"Controlled. Z3–Z4. No Z5."),
     d("FRI","Mar 20","FOR TIME — Hyrox Full Send",null,"Lap every station."),
     d("SAT","Mar 21","LONG RUN — Base Builder",null,"8–9 miles @ Z2. Last long effort before Miami."),
-    d("SUN","Mar 22",null,null,"WHOOP governs. Choose below.",false,true),
+    d("SUN","Mar 22",null,null,"Choose your Sunday session below.",false,true),
   ]),
-  buildWeek("tw2","TAPER WK 2","Mar 22–28","MIAMI TAPER","Reduced Volume · Race Sharpness",[
+  bw("tw2","TAPER WK 2","Mar 22–28","MIAMI TAPER","Reduced Volume · Race Sharpness",[
     d("MON","Mar 23","EMOM 40 — Full Hyrox",null,"Controlled EMOM. Keep HR managed."),
     d("TUE","Mar 24","THRESHOLD — 10×2 Min",null,"Scale to 4×2 @ race pace only."),
-    d("WED","Mar 25","STRENGTH B — Full Body Pull","ZONE 2 — Easy Aerobic","AM pull · PM 25 min easy only."),
+    d("WED","Mar 25","STRENGTH B — Full Body Pull","ZONE 2 — Easy Aerobic","AM pull · PM 25 min easy."),
     d("THU","Mar 26","TEMPO — 20 Min Sustained",null,"Short and sharp. No Z5 this week."),
     d("FRI","Mar 27","ZONE 2 — Easy Aerobic",null,"15 min shakeout + 3 strides."),
-    d("SAT","Mar 28","RECOVERY — Active Reset",null,"Full rest. High carb dinner. 8+ hrs sleep."),
+    d("SAT","Mar 28","RECOVERY — Active Reset",null,"High carb dinner. 8+ hrs sleep."),
     d("SUN","Mar 29","RECOVERY — Active Reset",null,"Travel prep. Visualize race. Early bed."),
   ]),
-  buildWeek("rw","RACE WEEK","Mar 29–Apr 4","MIAMI RACE","Minimal Load · Peak Freshness",[
+  bw("rw","RACE WEEK","Mar 29–Apr 4","MIAMI RACE","Minimal Load · Peak Freshness",[
     d("MON","Mar 30","ZONE 2 — Easy Aerobic",null,"15 min only. 3 strides. Walk away."),
     d("TUE","Mar 31","RECOVERY — Active Reset",null,"Full rest. Carb load begins."),
     d("WED","Apr 1","RECOVERY — Active Reset",null,"Off feet. High carb. Sleep."),
-    d("THU","Apr 2","RECOVERY — Active Reset",null,"Travel day. Electrolytes. Race kit check tonight."),
-    d("FRI","Apr 3","RECOVERY — Active Reset",null,"Race eve. Early dinner 6pm. Bed 9pm. No stimulants."),
-    d("SAT","Apr 4","🏁 RACE DAY — MIAMI",null,"Wake 3 hrs before gun · High carb low fiber · 10 min jog + 4 strides · EXECUTE",true),
-    d("SUN","Apr 5","RECOVERY — Active Reset",null,"Celebrate. Walk. High protein. Phase 1 starts Monday."),
+    d("THU","Apr 2","RECOVERY — Active Reset",null,"Travel day. Electrolytes. Race kit check."),
+    d("FRI","Apr 3","RECOVERY — Active Reset",null,"Race eve. Dinner 6pm. Bed 9pm."),
+    d("SAT","Apr 4","🏁 RACE DAY — MIAMI",null,"Wake 3hrs early · High carb · 10min jog + 4 strides · EXECUTE",true),
+    d("SUN","Apr 5","RECOVERY — Active Reset",null,"Celebrate. High protein. Phase 1 Monday."),
   ]),
 ];
 
 const makePhase = (num) => {
-  const months = ["","Apr","May","Jun","Jul"];
-  const mo = months[num];
+  const mo = ["","Apr","May","Jun","Jul"][num];
   const px = ["","p1","p2","p3","p4"][num];
   const subs = ["Base Rebuild · Reintroduce Volume","Volume Up · Compromised Runs Longer","Peak Week · Full HYROX Simulation","Deload · Recover & Consolidate"];
-  const strDays = ["STRENGTH A — Full Body Power","STRENGTH B — Full Body Pull","STRENGTH C — Full Body Hybrid","STRENGTH A — Full Body Power"];
-  const hyroxMon = ["FOR TIME — Hyrox Full Runs Half Stations","EMOM 60 — Hyrox Stations","FOR TIME — Ultimate HYROX","AMRAP 40 — Hyrox Grind"];
-  const hyroxFri = ["FOR TIME — Hyrox Full Send","AMRAP 40 — Hyrox Grind","AMRAP 60 — Ski Row Burpee","EMOM 40 — Full Hyrox"];
-  const thuSessions = ["TEMPO — 20 Min Sustained","VO2 MAX — Short Intervals","VO2 MAX — Short Intervals","TEMPO — 20 Min Sustained"];
-  const longRunNotes = ["7–8 miles @ Z2. Gel at 40 min.","9–10 miles @ Z2. Gel every 40 min.","11–12 miles @ Z2. Milestone.","8 miles easy. Adaptation happens here."];
-
-  return [0,1,2,3].map(i => buildWeek(
-    `${px}w${i+1}`, `PHASE ${num} · WK ${i+1}`, `${mo} ${7+i*7}–${13+i*7}`, `PHASE ${num}`, subs[i],
-    [
-      d("MON",`${mo} ${7+i*7}`,hyroxMon[i],null,"Monday HYROX session. Lap every station."),
+  const str  = ["STRENGTH A — Full Body Power","STRENGTH B — Full Body Pull","STRENGTH C — Full Body Hybrid","STRENGTH A — Full Body Power"];
+  const hMon = ["FOR TIME — Hyrox Full Runs Half Stations","EMOM 60 — Hyrox Stations","FOR TIME — Ultimate HYROX","AMRAP 40 — Hyrox Grind"];
+  const hFri = ["FOR TIME — Hyrox Full Send","AMRAP 40 — Hyrox Grind","AMRAP 60 — Ski Row Burpee","EMOM 40 — Full Hyrox"];
+  const thu  = ["TEMPO — 20 Min Sustained","VO2 MAX — Short Intervals","VO2 MAX — Short Intervals","TEMPO — 20 Min Sustained"];
+  const lrn  = ["7–8 miles @ Z2. Gel at 40 min.","9–10 miles @ Z2. Gel every 40 min.","11–12 miles @ Z2. Milestone.","8 miles easy. Adaptation happens here."];
+  return [0,1,2,3].map(i => bw(
+    `${px}w${i+1}`,`PHASE ${num} · WK ${i+1}`,`${mo} ${7+i*7}–${13+i*7}`,`PHASE ${num}`,subs[i],[
+      d("MON",`${mo} ${7+i*7}`,hMon[i],null,"Monday HYROX. Lap every station."),
       d("TUE",`${mo} ${8+i*7}`,"THRESHOLD — 10×2 Min",null,"Z4 = 150–168 bpm on your Garmin."),
-      d("WED",`${mo} ${9+i*7}`,strDays[i],"ZONE 2 — Easy Aerobic","AM strength · PM 30 min Z2. 2-a-day."),
-      d("THU",`${mo} ${10+i*7}`,thuSessions[i],null,i===1||i===2?"WHOOP must be green for VO2 Max.":"Controlled tempo. Z3–Z4 boundary."),
-      d("FRI",`${mo} ${11+i*7}`,hyroxFri[i],null,"Friday HYROX. Different format than Monday."),
-      d("SAT",`${mo} ${12+i*7}`,"LONG RUN — Base Builder",null,longRunNotes[i]),
-      d("SUN",`${mo} ${13+i*7}`,null,null,"Your call — choose below.",false,true),
+      d("WED",`${mo} ${9+i*7}`,str[i],"ZONE 2 — Easy Aerobic","AM strength · PM 30 min Z2. 2-a-day."),
+      d("THU",`${mo} ${10+i*7}`,thu[i],null,i===1||i===2?"GREEN WHOOP only for VO2 Max.":"Controlled tempo. Z3–Z4."),
+      d("FRI",`${mo} ${11+i*7}`,hFri[i],null,"Friday HYROX. Different format than Monday."),
+      d("SAT",`${mo} ${12+i*7}`,"LONG RUN — Base Builder",null,lrn[i]),
+      d("SUN",`${mo} ${13+i*7}`,null,null,"Choose your Sunday session below.",false,true),
     ]
   ));
 };
 
-const phase1Weeks = makePhase(1);
-const phase2Weeks = makePhase(2);
-const phase3Weeks = makePhase(3);
-const phase4Weeks = makePhase(4);
-
 const BLOCKS = [
-  { id:"taper",  label:"MIAMI TAPER", weeks:taperWeeks },
-  { id:"phase1", label:"PHASE 1",     weeks:phase1Weeks },
-  { id:"phase2", label:"PHASE 2",     weeks:phase2Weeks },
-  { id:"phase3", label:"PHASE 3",     weeks:phase3Weeks },
-  { id:"phase4", label:"PHASE 4",     weeks:phase4Weeks },
+  {id:"taper", label:"MIAMI TAPER",weeks:taperWeeks},
+  {id:"phase1",label:"PHASE 1",    weeks:makePhase(1)},
+  {id:"phase2",label:"PHASE 2",    weeks:makePhase(2)},
+  {id:"phase3",label:"PHASE 3",    weeks:makePhase(3)},
+  {id:"phase4",label:"PHASE 4",    weeks:makePhase(4)},
 ];
 
+// ─── HELPERS ─────────────────────────────────────────────
 const getAccent = (name) => {
-  if (!name) return "#ccc";
-  if (name.includes("🏁")) return C.red;
-  if (name.includes("FOR TIME")||name.includes("AMRAP")) return C.red;
-  if (name.includes("ZONE 2")||name.includes("LONG RUN")) return C.green;
-  if (name.includes("RECOVERY")||name.includes("MOBILITY")) return "#999";
-  if (name.includes("VO2")) return C.red;
-  return C.border;
+  if (!name) return C.light;
+  if (name.includes("🏁")||name.includes("FOR TIME")||name.includes("AMRAP")||name.includes("VO2")) return C.red;
+  if (name.includes("ZONE 2")||name.includes("LONG RUN")||name.includes("RECOVERY")||name.includes("MOBILITY")) return C.green;
+  if (name.includes("THRESHOLD")||name.includes("TEMPO")||name.includes("INTERVAL")) return C.blue;
+  return "#888";
 };
 
 const getTypeLabel = (name) => {
   if (!name) return "CHOOSE";
   if (name.includes("🏁")) return "RACE";
+  return WL[name]?.type || name.split(" — ")[0];
+};
+
+const whoopColor = (s) => s >= 67 ? C.green : s >= 34 ? C.yellow : C.red;
+const whoopLabel = (s) => s >= 67 ? "GREEN" : s >= 34 ? "YELLOW" : "RED";
+const whoopMsg   = (s) => s >= 67 ? "Execute today's plan as written" : s >= 34 ? "Reduce intensity 20% · Skip VO2 Max" : "Recovery only · Contrast therapy · Rest";
+
+// ─── SVG RING ────────────────────────────────────────────
+const Ring = ({ score, size=120, stroke=10, color, label, sublabel }) => {
+  const r = (size - stroke) / 2;
+  const circ = 2 * Math.PI * r;
+  const offset = circ - (score / 100) * circ;
+  return (
+    <div style={{ position:"relative", width:size, height:size, flexShrink:0 }}>
+      <svg width={size} height={size} style={{ transform:"rotate(-90deg)" }}>
+        <circle cx={size/2} cy={size/2} r={r} fill="none" stroke="#1e1e1e" strokeWidth={stroke} />
+        <circle cx={size/2} cy={size/2} r={r} fill="none" stroke={color} strokeWidth={stroke}
+          strokeDasharray={circ} strokeDashoffset={offset} strokeLinecap="round"
+          style={{ transition:"stroke-dashoffset 0.6s ease" }} />
+      </svg>
+      <div style={{ position:"absolute", inset:0, display:"flex", flexDirection:"column", alignItems:"center", justifyContent:"center" }}>
+        <div style={{ fontFamily:C.ff, fontSize:size*0.28, color, lineHeight:1, letterSpacing:-1 }}>{score}</div>
+        {label && <div style={{ fontFamily:C.fm, fontSize:size*0.07, color:C.muted, letterSpacing:2, marginTop:2 }}>{label}</div>}
+        {sublabel && <div style={{ fontFamily:C.fm, fontSize:size*0.065, color, letterSpacing:1, marginTop:1 }}>{sublabel}</div>}
+      </div>
+    </div>
+  );
+};
+
+// ─── STAT PILL ───────────────────────────────────────────
+const StatPill = ({ label, value, color }) => (
+  <div style={{ background:C.card, borderRadius:12, padding:"10px 14px", flex:1, textAlign:"center" }}>
+    <div style={{ fontFamily:C.fm, fontSize:7, color:C.muted, letterSpacing:2, marginBottom:4 }}>{label}</div>
+    <div style={{ fontFamily:C.ff, fontSize:20, color: color || C.text }}>{value}</div>
+  </div>
+);
+
+// ─── TODAY SESSION CARD ──────────────────────────────────
+const TodayCard = ({ name, onTap }) => {
+  if (!name) return null;
   const w = WL[name];
-  return w ? w.type : name.split(" — ")[0];
+  if (!w) return null;
+  const accent = getAccent(name);
+  return (
+    <div onClick={onTap} style={{ background:C.card, borderRadius:16, overflow:"hidden", cursor:"pointer", border:`1px solid ${C.border}` }}>
+      <div style={{ padding:"14px 16px 12px", borderBottom:`1px solid ${C.border}` }}>
+        <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center" }}>
+          <div style={{ background:`${accent}22`, border:`1px solid ${accent}44`, borderRadius:20, padding:"3px 10px", fontFamily:C.fm, fontSize:8, color:accent, letterSpacing:2 }}>{w.type}</div>
+          <div style={{ fontFamily:C.fm, fontSize:8, color:C.muted, letterSpacing:1 }}>{w.duration}</div>
+        </div>
+        <div style={{ fontFamily:C.ff, fontSize:22, color:C.text, letterSpacing:0.5, marginTop:8, lineHeight:1.1 }}>
+          {name.split(" — ")[1] || name}
+        </div>
+        <div style={{ fontFamily:C.fm, fontSize:8, color:C.muted, letterSpacing:2, marginTop:4 }}>{w.tag}</div>
+      </div>
+      <div style={{ padding:"10px 16px", display:"flex", gap:8 }}>
+        {w.steps.slice(0,3).filter(s => !s.startsWith("—")).map((s,i) => (
+          <div key={i} style={{ background:C.card2, borderRadius:8, padding:"6px 10px", fontFamily:C.fm, fontSize:8, color:C.muted, flexShrink:0 }}>{s}</div>
+        ))}
+        <div style={{ background:C.card2, borderRadius:8, padding:"6px 10px", fontFamily:C.fm, fontSize:8, color:C.light, flexShrink:0 }}>+{w.steps.filter(s=>!s.startsWith("—")).length - 3} more</div>
+      </div>
+    </div>
+  );
 };
 
-const getWhoopColor = (score) => {
-  if (score >= 67) return "#4CAF50";
-  if (score >= 34) return "#FFD600";
-  return C.red;
+// ─── SESSION DETAIL MODAL ────────────────────────────────
+const SessionModal = ({ name, dayData, sess, weekId, onClose, onSessSwitch, sundayChoice, setSundayChoice }) => {
+  if (!name && !dayData?.isSunday && !dayData?.isRaceDay) return null;
+  const w = name ? WL[name] : null;
+  const accent = name ? getAccent(name) : C.muted;
+
+  return (
+    <div style={{ position:"fixed", inset:0, zIndex:200, background:"rgba(0,0,0,0.95)", overflowY:"auto" }}>
+      <div style={{ maxWidth:480, margin:"0 auto", minHeight:"100vh", display:"flex", flexDirection:"column" }}>
+
+        {/* Header */}
+        <div style={{ padding:"20px 20px 16px", borderBottom:`1px solid ${C.border}`, display:"flex", justifyContent:"space-between", alignItems:"flex-start", position:"sticky", top:0, background:C.bg, zIndex:10 }}>
+          <div>
+            {w && <div style={{ fontFamily:C.fm, fontSize:8, color:accent, letterSpacing:3, marginBottom:6 }}>{w.type} · {w.tag}</div>}
+            {dayData?.isRaceDay ? (
+              <div style={{ fontFamily:C.ff, fontSize:36, color:C.red, lineHeight:1 }}>RACE DAY<br/>MIAMI 🏁</div>
+            ) : w ? (
+              <div style={{ fontFamily:C.ff, fontSize:28, color:C.text, letterSpacing:0.5, lineHeight:1.1 }}>{name.split(" — ")[1] || name}</div>
+            ) : (
+              <div style={{ fontFamily:C.ff, fontSize:24, color:C.muted }}>SUNDAY SESSION</div>
+            )}
+            {w && <div style={{ fontFamily:C.fm, fontSize:8, color:C.muted, marginTop:4 }}>{w.duration}</div>}
+          </div>
+          <button onClick={onClose} style={{ background:C.card, border:"none", color:C.muted, width:36, height:36, borderRadius:"50%", cursor:"pointer", fontSize:16, fontFamily:C.fs }}>✕</button>
+        </div>
+
+        {/* AM/PM toggle */}
+        {dayData?.pm && (
+          <div style={{ display:"flex", borderBottom:`1px solid ${C.border}` }}>
+            {[["am","AM"],["pm","PM"]].map(([s,l]) => (
+              <button key={s} onClick={() => onSessSwitch(s)}
+                style={{ flex:1, padding:"12px", fontFamily:C.ff, fontSize:13, letterSpacing:3, background:"transparent", color: sess===s ? C.text : C.muted, border:"none", borderBottom:`2px solid ${sess===s ? accent : "transparent"}`, cursor:"pointer" }}>
+                {l} SESSION
+              </button>
+            ))}
+          </div>
+        )}
+
+        {/* Sunday chooser */}
+        {dayData?.isSunday && (
+          <div style={{ padding:"16px 20px", borderBottom:`1px solid ${C.border}` }}>
+            <div style={{ fontFamily:C.fm, fontSize:8, color:C.muted, letterSpacing:3, marginBottom:12 }}>CHOOSE YOUR SESSION</div>
+            <div style={{ display:"flex", gap:10 }}>
+              {[["mobility","MOBILITY","+ Contrast Therapy"],["plyo","PLYO + CORE","+ Contrast Therapy"]].map(([key,label,sub]) => (
+                <button key={key} onClick={() => setSundayChoice(p => ({...p,[weekId]:key}))}
+                  style={{ flex:1, padding:"14px 10px", background: sundayChoice[weekId]===key ? accent : C.card, color: sundayChoice[weekId]===key ? "#000" : C.text, border:`1px solid ${sundayChoice[weekId]===key ? accent : C.border}`, borderRadius:12, cursor:"pointer", fontFamily:C.ff, fontSize:14, letterSpacing:2 }}>
+                  {label}<div style={{ fontFamily:C.fm, fontSize:7, color: sundayChoice[weekId]===key ? "#00000088" : C.muted, marginTop:4, letterSpacing:1 }}>{sub}</div>
+                </button>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {/* Content */}
+        <div style={{ padding:"20px", flex:1 }}>
+          {dayData?.isRaceDay ? (
+            <div style={{ display:"flex", flexDirection:"column", gap:8 }}>
+              {["Wake 3 hrs before gun — calm morning","High carb, low fiber breakfast — no dairy","10 min easy jog + 4 strides","Skip stimulants — the race environment is your caffeine","EXECUTE YOUR PACING STRATEGY — TRUST THE WORK"].map((s,i) => (
+                <div key={i} style={{ display:"flex", gap:14, padding:"14px 16px", background: i===4 ? C.red : C.card, borderRadius:12, alignItems:"flex-start" }}>
+                  <span style={{ fontFamily:C.ff, fontSize:11, color: i===4?"rgba(255,255,255,0.5)":C.light, minWidth:20, marginTop:1 }}>{String(i+1).padStart(2,"0")}</span>
+                  <span style={{ fontFamily:C.fs, fontSize:14, color: i===4?"#fff":C.text, fontWeight: i===4?700:400, lineHeight:1.5 }}>{s}</span>
+                </div>
+              ))}
+            </div>
+          ) : w ? (
+            <>
+              <div style={{ display:"flex", flexDirection:"column", gap:6, marginBottom:20 }}>
+                {w.steps.map((s,i) => {
+                  const isDivider = s.startsWith("—");
+                  return isDivider ? (
+                    <div key={i} style={{ fontFamily:C.fm, fontSize:8, color:C.light, letterSpacing:3, padding:"8px 0 2px" }}>{s.replace(/—/g,"").trim()}</div>
+                  ) : (
+                    <div key={i} style={{ display:"flex", gap:14, padding:"13px 16px", background:C.card, borderRadius:12, borderLeft:`3px solid ${accent}`, alignItems:"flex-start" }}>
+                      <span style={{ fontFamily:C.ff, fontSize:11, color:C.light, minWidth:20, marginTop:1 }}>{String(i+1).padStart(2,"0")}</span>
+                      <span style={{ fontFamily:C.fs, fontSize:14, color:C.text, lineHeight:1.5 }}>{s}</span>
+                    </div>
+                  );
+                })}
+              </div>
+
+              {/* Coach note */}
+              <div style={{ background:C.card, borderRadius:12, padding:"14px 16px", borderLeft:`3px solid ${C.border}` }}>
+                <div style={{ fontFamily:C.fm, fontSize:8, color:C.red, letterSpacing:3, marginBottom:6 }}>COACH NOTE</div>
+                <div style={{ fontFamily:C.fs, fontSize:13, color:C.muted, lineHeight:1.8 }}>{dayData?.note2a || w.note}</div>
+              </div>
+            </>
+          ) : null}
+        </div>
+      </div>
+    </div>
+  );
 };
 
-const getWhoopStatus = (score) => {
-  if (score >= 67) return "GREEN · EXECUTE";
-  if (score >= 34) return "YELLOW · MODIFY";
-  return "RED · RECOVER";
-};
-
+// ─── MAIN APP ────────────────────────────────────────────
 export default function App() {
+  const [nav, setNav]       = useState("today");
   const [blockId, setBlockId] = useState("taper");
-  const [weekId, setWeekId]   = useState("tw1");
-  const [selDay, setSelDay]   = useState(null);
-  const [sess, setSess]       = useState("am");
-  const [statsOpen, setStatsOpen] = useState(false);
-  const [menuTab, setMenuTab] = useState(null);
+  const [weekId, setWeekId] = useState("tw1");
+  const [selDay, setSelDay] = useState(null);
+  const [sess, setSess]     = useState("am");
   const [sundayChoice, setSundayChoice] = useState({});
+  const [statsOpen, setStatsOpen] = useState(false);
 
   // WHOOP live data
-  const [whoopData, setWhoopData] = useState(null);
+  const [whoopData, setWhoopData]       = useState(null);
   const [whoopLoading, setWhoopLoading] = useState(true);
   const [whoopConnected, setWhoopConnected] = useState(false);
 
   useEffect(() => {
-    // Check if just connected via OAuth callback
     const params = new URLSearchParams(window.location.search);
-    if (params.get("connected") === "true") {
-      window.history.replaceState({}, "", "/");
-    }
+    if (params.get("connected") === "true") window.history.replaceState({}, "", "/");
     fetchWhoopData();
   }, []);
 
   const fetchWhoopData = async () => {
     try {
       const res = await fetch("/api/whoop/recovery");
-      if (res.status === 401) {
-        setWhoopConnected(false);
-        setWhoopLoading(false);
-        return;
-      }
+      if (res.status === 401) { setWhoopConnected(false); setWhoopLoading(false); return; }
       const data = await res.json();
       setWhoopData(data);
       setWhoopConnected(true);
-    } catch {
-      setWhoopConnected(false);
-    } finally {
-      setWhoopLoading(false);
-    }
+    } catch { setWhoopConnected(false); }
+    finally { setWhoopLoading(false); }
   };
 
-  const block = BLOCKS.find(b => b.id === blockId);
-  const weeks = block.weeks;
-  const week  = weeks.find(w => w.id === weekId) || weeks[0];
+  const block  = BLOCKS.find(b => b.id === blockId);
+  const weeks  = block.weeks;
+  const week   = weeks.find(w => w.id === weekId) || weeks[0];
   const dayData = selDay ? week.days.find(d => d.day === selDay) : null;
 
-  const getSundayWorkout = (wid) => {
-    const choice = sundayChoice[wid];
-    if (choice === "mobility") return "SUNDAY — Mobility Protocol";
-    if (choice === "plyo")     return "SUNDAY — Plyo & Core";
-    return null;
+  const getSundayWo = (wid) => {
+    const c = sundayChoice[wid];
+    return c === "mobility" ? "SUNDAY — Mobility Protocol" : c === "plyo" ? "SUNDAY — Plyo & Core" : null;
   };
 
-  const getEffectiveAm = (d) => {
-    if (d.isSunday) return getSundayWorkout(weekId) || null;
-    return d.am;
-  };
+  const getEffAm = (d) => d.isSunday ? getSundayWo(weekId) : d.am;
 
-  const wkName = dayData ? (sess === "am" ? getEffectiveAm(dayData) : dayData.pm) : null;
-  const workout = wkName ? WL[wkName] : null;
+  const modalName = dayData
+    ? (sess === "am" ? getEffAm(dayData) : dayData.pm)
+    : null;
 
-  const switchBlock = (bid) => {
-    setBlockId(bid);
-    setSelDay(null);
-    setMenuTab(null);
-    const b = BLOCKS.find(x => x.id === bid);
-    setWeekId(b.weeks[0].id);
-  };
+  const rec   = whoopData?.recovery?.score ?? 0;
+  const sleep = whoopData?.sleep?.score ?? 0;
+  const strain = whoopData?.strain?.score ?? 0;
+  const rc    = whoopColor(rec);
 
-  const recoveryScore = whoopData?.recovery?.score ?? 0;
-  const whoopColor = getWhoopColor(recoveryScore);
+  // Figure out today's primary session for "Today" tab
+  const todayDayNames = ["SUN","MON","TUE","WED","THU","FRI","SAT"];
+  const todayDayName = todayDayNames[new Date().getDay()];
+  const todayDayData = week.days.find(d => d.day === todayDayName) || week.days[0];
+  const todayAm = todayDayData ? getEffAm(todayDayData) : null;
+  const todayPm = todayDayData?.pm || null;
 
   return (
-    <div style={{ minHeight:"100vh", background:C.bg, fontFamily:C.fs, color:C.text, maxWidth:480, margin:"0 auto" }}>
+    <div style={{ minHeight:"100vh", background:C.bg, color:C.text, fontFamily:C.fs, maxWidth:480, margin:"0 auto", paddingBottom:80 }}>
 
-      {/* ══ STICKY HEADER ══ */}
-      <div style={{ background:C.bg, borderBottom:`3px solid ${C.border}`, position:"sticky", top:0, zIndex:100 }}>
-
-        <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", padding:"12px 16px 8px" }}>
-          <div>
-            <div style={{ fontFamily:C.fm, fontSize:7, color:C.muted, letterSpacing:4, marginBottom:1 }}>HYBRID PERFORMANCE OS</div>
-            <div style={{ fontFamily:C.ff, fontSize:30, letterSpacing:2, lineHeight:1 }}>FAGUNDO<span style={{ color:C.red }}>.</span></div>
-          </div>
-          <div style={{ display:"flex", alignItems:"center", gap:10 }}>
-            {/* WHOOP Live Score */}
-            <div style={{ textAlign:"right" }}>
-              <div style={{ fontFamily:C.fm, fontSize:6, color:C.muted, letterSpacing:2 }}>WHOOP · LIVE</div>
-              {whoopLoading ? (
-                <div style={{ fontFamily:C.ff, fontSize:22, lineHeight:1, color:C.muted }}>--</div>
-              ) : !whoopConnected ? (
-                <a href="/api/auth/login" style={{ display:"block", fontFamily:C.ff, fontSize:10, color:C.red, letterSpacing:2, textDecoration:"none", marginTop:2, border:`1px solid ${C.red}`, padding:"4px 8px" }}>CONNECT</a>
-              ) : (
-                <>
-                  <div style={{ fontFamily:C.ff, fontSize:26, lineHeight:1, color:whoopColor }}>{recoveryScore}<span style={{ fontSize:13 }}>%</span></div>
-                  <div style={{ fontFamily:C.fm, fontSize:6, color:whoopColor, letterSpacing:1 }}>{getWhoopStatus(recoveryScore)}</div>
-                </>
-              )}
-            </div>
-            <button onClick={() => setMenuTab(prev => prev ? null : "blocks")}
-              style={{ background: menuTab ? C.border : "transparent", border:`1.5px solid ${C.border}`, padding:"8px 12px", cursor:"pointer", fontFamily:C.fm, fontSize:10, color: menuTab ? C.bg : C.text, letterSpacing:1 }}>
-              {menuTab ? "✕" : "☰"}
-            </button>
-          </div>
-        </div>
-
-        {/* WHOOP detail bar — only when connected */}
-        {whoopConnected && whoopData && (
-          <div style={{ display:"flex", borderTop:`1px solid ${C.border}`, background:C.card }}>
-            {[
-              ["RECOVERY", `${whoopData.recovery.score}%`, whoopColor],
-              ["SLEEP", `${whoopData.sleep.score}%`, C.text],
-              ["STRAIN", `${whoopData.strain.score}`, C.text],
-              ["HRV", `${whoopData.recovery.hrv}ms`, C.text],
-              ["RHR", `${whoopData.recovery.rhr}bpm`, C.text],
-              ["SLEEP HRS", `${whoopData.sleep.hours}h`, C.text],
-            ].map(([label, val, color]) => (
-              <div key={label} style={{ flex:1, padding:"8px 4px", textAlign:"center", borderRight:`1px solid ${C.border}` }}>
-                <div style={{ fontFamily:C.fm, fontSize:6, color:C.muted, letterSpacing:1, marginBottom:2 }}>{label}</div>
-                <div style={{ fontFamily:C.ff, fontSize:13, color }}>{val}</div>
+      {/* ══ TODAY TAB ══ */}
+      {nav === "today" && (
+        <div>
+          {/* Top bar */}
+          <div style={{ padding:"16px 20px 12px", display:"flex", justifyContent:"space-between", alignItems:"center" }}>
+            <div>
+              <div style={{ fontFamily:C.fm, fontSize:8, color:C.muted, letterSpacing:3 }}>HYBRID PERFORMANCE OS</div>
+              <div style={{ fontFamily:C.ff, fontSize:26, letterSpacing:2, lineHeight:1, marginTop:2 }}>
+                FAGUNDO<span style={{ color:C.red }}>.</span>
               </div>
-            ))}
-          </div>
-        )}
-
-        {/* Hamburger menu */}
-        {menuTab && (
-          <div style={{ borderTop:`1px solid ${C.border}`, background:C.card }}>
-            <div style={{ display:"flex", borderBottom:`1px solid ${C.border}` }}>
-              {[["blocks","TRAINING"],["supplements","SUPPS"],["zones","HR ZONES"]].map(([tab, label]) => (
-                <button key={tab} onClick={() => setMenuTab(prev => prev === tab ? "blocks" : tab)}
-                  style={{ flex:1, padding:"10px 4px", fontFamily:C.ff, fontSize:10, letterSpacing:2, background: menuTab===tab ? C.border : "transparent", color: menuTab===tab ? C.bg : C.muted, border:"none", borderRight:`1px solid ${C.border}`, cursor:"pointer" }}>
-                  {label}
-                </button>
-              ))}
             </div>
+            <div style={{ fontFamily:C.fm, fontSize:8, color:C.muted, letterSpacing:2, textAlign:"right" }}>
+              {week.phase}<br/>
+              <span style={{ color:C.text }}>{week.label.split("·")[1]?.trim() || week.label}</span>
+            </div>
+          </div>
 
-            {menuTab === "blocks" && BLOCKS.map(b => (
-              <button key={b.id} onClick={() => switchBlock(b.id)}
-                style={{ display:"block", width:"100%", textAlign:"left", padding:"14px 16px", background: blockId===b.id ? C.border : "transparent", color: blockId===b.id ? C.bg : C.text, border:"none", borderBottom:`1px solid ${C.border}`, fontFamily:C.ff, fontSize:15, letterSpacing:3, cursor:"pointer" }}>
-                {b.label}
-                {blockId===b.id && <span style={{ fontFamily:C.fm, fontSize:7, color:C.red, marginLeft:10 }}>● ACTIVE</span>}
-              </button>
-            ))}
-
-            {menuTab === "supplements" && (
-              <div style={{ padding:"14px", maxHeight:380, overflowY:"auto" }}>
-                <div style={{ fontFamily:C.ff, fontSize:10, color:C.red, letterSpacing:3, marginBottom:10 }}>DAILY SUPPLEMENT PROTOCOL</div>
-                {SUPPS.map((group, gi) => (
-                  <div key={gi} style={{ marginBottom:14 }}>
-                    <div style={{ fontFamily:C.fm, fontSize:7, color:C.muted, letterSpacing:3, marginBottom:7, borderBottom:`1px solid ${C.border}`, paddingBottom:5 }}>{group.icon} {group.time}</div>
-                    {group.items.map((item, ii) => (
-                      <div key={ii} style={{ marginBottom:7, padding:"10px 12px", background:C.bg, borderLeft:`3px solid ${C.border}` }}>
-                        <div style={{ display:"flex", justifyContent:"space-between", marginBottom:3 }}>
-                          <span style={{ fontFamily:C.ff, fontSize:12, letterSpacing:1 }}>{item.name}</span>
-                          <span style={{ fontFamily:C.fm, fontSize:8, color:C.red }}>{item.dose}</span>
-                        </div>
-                        <div style={{ fontFamily:C.fs, fontSize:10, color:C.muted, lineHeight:1.5, marginBottom:2 }}>{item.note}</div>
-                        <div style={{ fontFamily:C.fm, fontSize:6, color:C.light, letterSpacing:2 }}>TIMING: {item.timing}</div>
-                      </div>
-                    ))}
-                  </div>
-                ))}
+          {/* ── WHOOP RINGS ── */}
+          <div style={{ padding:"8px 20px 20px" }}>
+            {!whoopConnected && !whoopLoading ? (
+              <div style={{ background:C.card, borderRadius:20, padding:"28px 20px", textAlign:"center", border:`1px solid ${C.border}` }}>
+                <div style={{ fontFamily:C.ff, fontSize:20, color:C.muted, marginBottom:8 }}>WHOOP NOT CONNECTED</div>
+                <div style={{ fontFamily:C.fm, fontSize:9, color:C.muted, letterSpacing:2, marginBottom:16 }}>Connect to see live recovery data</div>
+                <a href="/api/auth/login" style={{ display:"inline-block", background:C.green, color:"#000", padding:"12px 28px", fontFamily:C.ff, fontSize:14, letterSpacing:3, textDecoration:"none", borderRadius:8 }}>CONNECT WHOOP</a>
               </div>
-            )}
-
-            {menuTab === "zones" && (
-              <div style={{ padding:"14px" }}>
-                <div style={{ fontFamily:C.ff, fontSize:10, color:C.red, letterSpacing:3, marginBottom:4 }}>HR ZONES · LTHR 165–170 BPM</div>
-                <div style={{ fontFamily:C.fm, fontSize:7, color:C.muted, letterSpacing:2, marginBottom:10 }}>Garmin %LTHR Default</div>
-                {HR_ZONES.map((z, i) => (
-                  <div key={i} style={{ display:"flex", alignItems:"center", gap:12, padding:"10px 12px", background:C.bg, borderLeft:`4px solid ${z.color}`, marginBottom:4 }}>
-                    <div style={{ fontFamily:C.ff, fontSize:14, color:z.color, minWidth:28 }}>{z.zone}</div>
-                    <div style={{ flex:1 }}>
-                      <div style={{ fontFamily:C.ff, fontSize:12, color:C.text, letterSpacing:1 }}>{z.name}</div>
-                      <div style={{ fontFamily:C.fm, fontSize:7, color:C.muted }}>{z.pct} LTHR</div>
+            ) : (
+              <>
+                {/* Main recovery ring */}
+                <div style={{ display:"flex", justifyContent:"center", marginBottom:20 }}>
+                  {whoopLoading ? (
+                    <div style={{ width:140, height:140, borderRadius:"50%", background:C.card, display:"flex", alignItems:"center", justifyContent:"center" }}>
+                      <div style={{ fontFamily:C.fm, fontSize:9, color:C.muted, letterSpacing:2 }}>LOADING...</div>
                     </div>
-                    <div style={{ fontFamily:C.fm, fontSize:10, color:z.color, fontWeight:700 }}>{z.bpm}</div>
-                  </div>
-                ))}
-                <div style={{ marginTop:10, padding:"10px 12px", background:C.card, borderLeft:`3px solid ${C.border}` }}>
-                  <div style={{ fontFamily:C.fm, fontSize:8, color:C.muted, lineHeight:1.8 }}>
-                    Z2 easy runs: <span style={{ color:C.green, fontWeight:700 }}>132–151 bpm</span><br/>
-                    Threshold: <span style={{ color:"#cc6600", fontWeight:700 }}>150–168 bpm</span><br/>
-                    VO2 Max: <span style={{ color:C.red, fontWeight:700 }}>163–194 bpm</span>
-                  </div>
-                </div>
-              </div>
-            )}
-          </div>
-        )}
-
-        {/* Week scroller */}
-        <div style={{ display:"flex", overflowX:"auto", borderTop:`1px solid ${C.border}`, scrollbarWidth:"none" }}>
-          {weeks.map(w => (
-            <button key={w.id} onClick={() => { setWeekId(w.id); setSelDay(null); }}
-              style={{ flexShrink:0, padding:"9px 12px", background: weekId===w.id ? C.border : "transparent", color: weekId===w.id ? C.bg : C.muted, border:"none", borderRight:`1px solid ${C.border}`, cursor:"pointer", fontFamily:C.fm, fontSize:7, letterSpacing:2, whiteSpace:"nowrap" }}>
-              <div style={{ fontWeight:700 }}>{w.label.includes("·") ? w.label.split("·")[1]?.trim() : w.label}</div>
-              <div style={{ fontSize:6, marginTop:2, opacity:0.6 }}>{w.dates}</div>
-            </button>
-          ))}
-        </div>
-      </div>
-
-      {/* ══ WEEK HERO ══ */}
-      <div style={{ padding:"14px 16px 10px", borderBottom:`1px solid ${C.border}`, background:C.card }}>
-        <div style={{ fontFamily:C.fm, fontSize:7, color:C.red, letterSpacing:4, marginBottom:3 }}>{week.phase}</div>
-        <div style={{ fontFamily:C.ff, fontSize:26, letterSpacing:1, lineHeight:1 }}>{week.label}</div>
-        <div style={{ fontFamily:C.fm, fontSize:8, color:C.muted, letterSpacing:2, marginTop:4 }}>{week.subtitle}</div>
-
-        {/* WHOOP coaching message */}
-        {whoopConnected && whoopData && (
-          <div style={{ marginTop:10, padding:"8px 12px", background:C.bg, borderLeft:`3px solid ${whoopColor}` }}>
-            <div style={{ fontFamily:C.fm, fontSize:8, color:whoopColor, letterSpacing:2, fontWeight:700, marginBottom:2 }}>
-              {recoveryScore >= 67 ? "● GREEN — EXECUTE TODAY'S PLAN AS WRITTEN" :
-               recoveryScore >= 34 ? "● YELLOW — REDUCE INTENSITY 20% · SKIP VO2 MAX" :
-               "● RED — RECOVERY ONLY · CONTRAST THERAPY · REST"}
-            </div>
-            <div style={{ fontFamily:C.fm, fontSize:7, color:C.muted }}>
-              HRV {whoopData.recovery.hrv}ms · RHR {whoopData.recovery.rhr}bpm · Sleep {whoopData.sleep.hours}h
-            </div>
-          </div>
-        )}
-      </div>
-
-      {/* ══ STATS TICKER ══ */}
-      <div onClick={() => setStatsOpen(!statsOpen)} style={{ borderBottom:`2px solid ${C.border}`, background:C.bg, cursor:"pointer" }}>
-        <div style={{ display:"flex", overflowX:"auto", padding:"9px 16px", gap:0, scrollbarWidth:"none", alignItems:"center" }}>
-          {[["BF","15.4%",false],["LM","179.7lb",false],["ALMI","10.7",false],["T","474ng",false],["LDL","145",true],["APO-B","103",true],["GLU","117",true],["VAT","66cm²",false]].map(([k,v,warn],i,arr) => (
-            <div key={i} style={{ flexShrink:0, paddingRight:14, marginRight:14, borderRight: i<arr.length-1 ? `1px solid ${C.border}` : "none" }}>
-              <div style={{ fontFamily:C.fm, fontSize:6, color:C.muted, letterSpacing:2 }}>{k}</div>
-              <div style={{ fontFamily:C.ff, fontSize:14, color: warn ? C.red : C.text }}>{v}{warn && <span style={{ color:C.red, fontSize:9 }}> ⚠</span>}</div>
-            </div>
-          ))}
-          <div style={{ flexShrink:0, marginLeft:8, fontFamily:C.fm, fontSize:7, color:C.red }}>{statsOpen ? "▲" : "▼"}</div>
-        </div>
-
-        {statsOpen && (
-          <div style={{ borderTop:`1px solid ${C.border}`, padding:16 }} onClick={e => e.stopPropagation()}>
-            {[
-              ["DXA · FEB 20 2026",[["Weight","209.0 lb"],["Body Fat","15.4%"],["Lean Mass","179.74 lb"],["ALMI","10.7 OPTIMAL"],["Bone T-Score","+2.2 OPTIMAL"],["VAT Area","66.1 cm² IDEAL"]]],
-              ["BLOOD · DEC 31 2024",[["Testosterone","474 ng/dL"],["LDL-C","145 HIGH ⚠"],["ApoB","103 HIGH ⚠"],["Glucose","117 HIGH ⚠"],["HDL-C","64 GOOD"],["TSH","0.943 NORMAL"]]],
-              ["TRAINING",[["Race Sequence","HM → MAR → 70.3 → 140.6"],["Next Race","MIAMI APR 4"],["Z2 Target","132–151 bpm"],["LTHR","165–170 bpm"],["High Intensity","58% ⚠ TOO HIGH"]]],
-            ].map(([title, items]) => (
-              <div key={title} style={{ marginBottom:14 }}>
-                <div style={{ fontFamily:C.ff, fontSize:11, color:C.red, letterSpacing:2, borderBottom:`1px solid ${C.border}`, paddingBottom:5, marginBottom:7 }}>{title}</div>
-                {items.map(([k,v]) => (
-                  <div key={k} style={{ display:"flex", justifyContent:"space-between", padding:"4px 0", borderBottom:`0.5px solid ${C.card2}` }}>
-                    <span style={{ fontFamily:C.fm, fontSize:7, color:C.muted }}>{k}</span>
-                    <span style={{ fontFamily:C.fm, fontSize:7, color: v.includes("⚠")||v.includes("HIGH") ? C.red : C.text }}>{v}</span>
-                  </div>
-                ))}
-              </div>
-            ))}
-          </div>
-        )}
-      </div>
-
-      {/* ══ DAY GRID ══ */}
-      <div style={{ display:"grid", gridTemplateColumns:"repeat(7,1fr)", borderBottom:`3px solid ${C.border}` }}>
-        {week.days.map((d, i) => {
-          const effectiveAm = getEffectiveAm(d);
-          const ac = d.isSunday && !sundayChoice[weekId] ? "#aaa" : getAccent(effectiveAm);
-          const isSel = selDay === d.day;
-          return (
-            <button key={d.day} onClick={() => { setSelDay(isSel ? null : d.day); setSess("am"); }}
-              style={{ background: isSel ? C.border : i%2===0 ? C.bg : C.card, border:"none", borderRight: i<6 ? `1px solid ${C.border}` : "none", borderTop:`4px solid ${isSel ? C.red : "transparent"}`, padding:"10px 4px 8px", cursor:"pointer", textAlign:"left", WebkitTapHighlightColor:"transparent", minHeight:80 }}>
-              <div style={{ fontFamily:C.fm, fontSize:7, color: isSel ? "#aaa" : C.muted, letterSpacing:2, marginBottom:1 }}>{d.day}</div>
-              <div style={{ fontFamily:C.fm, fontSize:6, color: isSel ? "#666" : C.light, marginBottom:7 }}>{d.date.split(" ")[1]}</div>
-              {d.isSunday ? (
-                <div style={{ fontFamily:C.ff, fontSize:8, color: isSel ? "#fff" : "#aaa", letterSpacing:1, lineHeight:1.3 }}>
-                  {sundayChoice[weekId] === "mobility" ? "MOBILITY" : sundayChoice[weekId] === "plyo" ? "PLYO+CORE" : "CHOOSE"}
-                </div>
-              ) : d.isRaceDay ? (
-                <div style={{ fontFamily:C.ff, fontSize:9, color:C.red }}>RACE</div>
-              ) : (
-                <div style={{ fontFamily:C.ff, fontSize:8, color: isSel ? "#fff" : ac, letterSpacing:1, lineHeight:1.3 }}>
-                  {getTypeLabel(d.am)}
-                </div>
-              )}
-              {d.pm && <div style={{ fontFamily:C.fm, fontSize:5, color: isSel ? "#666" : "#aaa", letterSpacing:1, marginTop:2 }}>+PM</div>}
-              <div style={{ height:2, background:ac, marginTop:6, opacity: isSel ? 1 : 0.3, borderRadius:1 }} />
-            </button>
-          );
-        })}
-      </div>
-
-      {/* ══ DAY DETAIL ══ */}
-      {dayData && (
-        <div style={{ background:C.card, borderBottom:`3px solid ${C.border}` }}>
-          {dayData.isSunday && (
-            <div style={{ padding:"14px 16px", borderBottom:`1px solid ${C.border}` }}>
-              <div style={{ fontFamily:C.ff, fontSize:11, color:C.red, letterSpacing:3, marginBottom:10 }}>SUNDAY · CHOOSE YOUR SESSION</div>
-              <div style={{ display:"flex", gap:8 }}>
-                {[["mobility","MOBILITY","+ CONTRAST THERAPY"],["plyo","PLYO + CORE","+ CONTRAST THERAPY"]].map(([key, label, sub]) => (
-                  <button key={key} onClick={() => setSundayChoice(p => ({ ...p, [weekId]:key }))}
-                    style={{ flex:1, padding:"14px 8px", fontFamily:C.ff, fontSize:13, letterSpacing:2, background: sundayChoice[weekId]===key ? C.border : C.bg, color: sundayChoice[weekId]===key ? C.bg : C.text, border:`1.5px solid ${C.border}`, cursor:"pointer" }}>
-                    {label}<br/><span style={{ fontFamily:C.fm, fontSize:7, color: sundayChoice[weekId]===key ? "#aaa" : C.muted, letterSpacing:1 }}>{sub}</span>
-                  </button>
-                ))}
-              </div>
-            </div>
-          )}
-
-          {dayData.pm && (
-            <div style={{ display:"flex", borderBottom:`1px solid ${C.border}` }}>
-              {[["am","AM SESSION"],["pm","PM SESSION"]].map(([s,label]) => (
-                <button key={s} onClick={() => setSess(s)}
-                  style={{ flex:1, fontFamily:C.ff, fontSize:12, letterSpacing:3, padding:"11px", background: sess===s ? C.border : "transparent", color: sess===s ? C.bg : C.muted, border:"none", borderBottom:`3px solid ${sess===s ? C.red : "transparent"}`, cursor:"pointer" }}>
-                  {label}
-                </button>
-              ))}
-            </div>
-          )}
-
-          <div style={{ padding:"18px 16px 14px" }}>
-            <div style={{ marginBottom:14 }}>
-              <div style={{ fontFamily:C.fm, fontSize:7, color:C.muted, letterSpacing:3, marginBottom:5 }}>
-                {dayData.day} · {dayData.date}{dayData.pm ? ` · ${sess.toUpperCase()}` : ""}
-              </div>
-              {dayData.isRaceDay && sess==="am" ? (
-                <div style={{ fontFamily:C.ff, fontSize:34, color:C.red, letterSpacing:2, lineHeight:1 }}>RACE DAY<br/>MIAMI</div>
-              ) : workout ? (
-                <>
-                  <div style={{ display:"flex", alignItems:"center", gap:8, marginBottom:7, flexWrap:"wrap" }}>
-                    <div style={{ background: workout.accent===C.red ? C.red : C.border, color:C.bg, padding:"4px 10px", fontFamily:C.ff, fontSize:11, letterSpacing:3 }}>{workout.type}</div>
-                    {dayData.pm && <div style={{ background:C.red, color:"#fff", padding:"4px 10px", fontFamily:C.ff, fontSize:10, letterSpacing:2 }}>2-A-DAY</div>}
-                    <div style={{ fontFamily:C.fm, fontSize:7, color:C.muted, letterSpacing:2 }}>{workout.duration}</div>
-                  </div>
-                  <div style={{ fontFamily:C.ff, fontSize:27, letterSpacing:1, lineHeight:1.1, color:C.text }}>{(wkName||"").split(" — ")[1] || wkName}</div>
-                  <div style={{ fontFamily:C.fm, fontSize:7, color:C.muted, letterSpacing:2, marginTop:4 }}>{workout.tag}</div>
-                </>
-              ) : dayData.isSunday && !sundayChoice[weekId] ? (
-                <div style={{ fontFamily:C.ff, fontSize:22, color:C.muted }}>SELECT A SESSION ABOVE</div>
-              ) : (
-                <div style={{ fontFamily:C.ff, fontSize:27, color:C.muted }}>REST DAY</div>
-              )}
-            </div>
-
-            {dayData.isRaceDay && sess==="am" ? (
-              <div style={{ display:"flex", flexDirection:"column", gap:2, marginBottom:12 }}>
-                {["Wake 3 hrs before gun","Pre-race fuel — high carb, low fiber, no dairy","10 min easy jog + 4 strides","Skip stimulants — the race is your caffeine","EXECUTE YOUR PACING STRATEGY"].map((s,i) => (
-                  <div key={i} style={{ display:"flex", gap:12, padding:"10px 12px", background: i===4 ? C.red : C.bg, borderLeft:`3px solid ${i===4?C.red:C.border}` }}>
-                    <span style={{ fontFamily:C.ff, fontSize:9, color: i===4?"rgba(255,255,255,0.5)":C.muted, minWidth:16 }}>{i+1}</span>
-                    <span style={{ fontFamily:C.fs, fontSize:12, color: i===4?"#fff":C.text, fontWeight: i===4?700:400, lineHeight:1.4 }}>{s}</span>
-                  </div>
-                ))}
-              </div>
-            ) : workout ? (
-              <div style={{ display:"flex", flexDirection:"column", gap:2, marginBottom:12 }}>
-                {workout.steps.map((s,i) => {
-                  const isDivider = s.startsWith("—");
-                  return isDivider ? (
-                    <div key={i} style={{ padding:"8px 0 2px", fontFamily:C.fm, fontSize:7, color:C.muted, letterSpacing:3 }}>{s.replace(/—/g,"").trim()}</div>
                   ) : (
-                    <div key={i} style={{ display:"flex", gap:12, padding:"10px 12px", background:C.bg, borderLeft:`3px solid ${workout.accent}` }}>
-                      <span style={{ fontFamily:C.ff, fontSize:9, color:C.muted, minWidth:16 }}>{i+1}</span>
-                      <span style={{ fontFamily:C.fs, fontSize:12, color:C.text, lineHeight:1.4 }}>{s}</span>
-                    </div>
-                  );
-                })}
-              </div>
-            ) : null}
-
-            {workout && (
-              <div style={{ padding:"11px 12px", background:C.bg, borderLeft:`3px solid ${C.border}` }}>
-                <div style={{ fontFamily:C.ff, fontSize:9, color:C.red, letterSpacing:3, marginBottom:3 }}>COACH NOTE</div>
-                <div style={{ fontFamily:C.fs, fontSize:11, color:C.muted, lineHeight:1.8 }}>
-                  {dayData.isRaceDay && sess==="am" ? dayData.note2a : dayData.note2a || workout?.note}
+                    <Ring score={rec} size={140} stroke={12} color={rc} label="RECOVERY" sublabel={whoopLabel(rec)} />
+                  )}
                 </div>
+
+                {/* Sleep + Strain rings */}
+                <div style={{ display:"flex", gap:16, justifyContent:"center", marginBottom:20 }}>
+                  <Ring score={sleep} size={80} stroke={8} color={C.blue} label="SLEEP" />
+                  <Ring score={Math.round((strain/21)*100)} size={80} stroke={8} color="#FF7700" label="STRAIN" sublabel={`${strain}`} />
+                  <Ring score={Math.round((whoopData?.sleep?.hours ?? 0) / 9 * 100)} size={80} stroke={8} color={C.muted} label="HRS" sublabel={`${whoopData?.sleep?.hours ?? "--"}h`} />
+                </div>
+
+                {/* WHOOP coaching message */}
+                {whoopData && (
+                  <div style={{ background:`${rc}15`, border:`1px solid ${rc}33`, borderRadius:14, padding:"12px 16px", marginBottom:16 }}>
+                    <div style={{ fontFamily:C.fm, fontSize:8, color:rc, letterSpacing:3, fontWeight:700, marginBottom:4 }}>
+                      ● {whoopLabel(rec)} DAY
+                    </div>
+                    <div style={{ fontFamily:C.fs, fontSize:13, color:C.text, lineHeight:1.5 }}>{whoopMsg(rec)}</div>
+                    <div style={{ fontFamily:C.fm, fontSize:8, color:C.muted, marginTop:6 }}>
+                      HRV {whoopData.recovery.hrv}ms · RHR {whoopData.recovery.rhr}bpm
+                    </div>
+                  </div>
+                )}
+
+                {/* Extra stats row */}
+                {whoopData && (
+                  <div style={{ display:"flex", gap:8 }}>
+                    <StatPill label="HRV" value={`${whoopData.recovery.hrv}ms`} />
+                    <StatPill label="RHR" value={`${whoopData.recovery.rhr}`} />
+                    <StatPill label="EFFICIENCY" value={`${whoopData.sleep.efficiency}%`} />
+                  </div>
+                )}
+              </>
+            )}
+          </div>
+
+          {/* ── TODAY'S SESSIONS ── */}
+          <div style={{ padding:"0 20px 20px" }}>
+            <div style={{ fontFamily:C.fm, fontSize:8, color:C.muted, letterSpacing:3, marginBottom:12 }}>TODAY'S SESSIONS · {todayDayName}</div>
+
+            {todayDayData?.isRaceDay ? (
+              <div onClick={() => { setSelDay(todayDayName); setSess("am"); setNav("plan"); }}
+                style={{ background:`${C.red}22`, border:`1px solid ${C.red}44`, borderRadius:16, padding:"20px", textAlign:"center", cursor:"pointer" }}>
+                <div style={{ fontFamily:C.ff, fontSize:32, color:C.red }}>🏁 RACE DAY</div>
+                <div style={{ fontFamily:C.ff, fontSize:18, color:C.red }}>MIAMI · APR 4</div>
+              </div>
+            ) : todayDayData?.isSunday ? (
+              <div style={{ background:C.card, borderRadius:16, padding:"16px", border:`1px solid ${C.border}` }}>
+                <div style={{ fontFamily:C.fm, fontSize:8, color:C.muted, letterSpacing:3, marginBottom:12 }}>SUNDAY · CHOOSE YOUR SESSION</div>
+                <div style={{ display:"flex", gap:10 }}>
+                  {[["mobility","MOBILITY"],["plyo","PLYO + CORE"]].map(([key,label]) => (
+                    <button key={key} onClick={() => setSundayChoice(p => ({...p,[weekId]:key}))}
+                      style={{ flex:1, padding:"14px", background: sundayChoice[weekId]===key ? C.green : C.card2, color: sundayChoice[weekId]===key ? "#000" : C.text, border:`1px solid ${sundayChoice[weekId]===key ? C.green : C.border}`, borderRadius:12, cursor:"pointer", fontFamily:C.ff, fontSize:14, letterSpacing:2 }}>
+                      {label}
+                    </button>
+                  ))}
+                </div>
+                {sundayChoice[weekId] && (
+                  <div style={{ marginTop:12 }}>
+                    <TodayCard name={getSundayWo(weekId)} onTap={() => { setSelDay(todayDayName); setSess("am"); }} />
+                  </div>
+                )}
+              </div>
+            ) : (
+              <div style={{ display:"flex", flexDirection:"column", gap:12 }}>
+                {todayAm && <TodayCard name={todayAm} onTap={() => { setSelDay(todayDayName); setSess("am"); }} />}
+                {todayPm && (
+                  <>
+                    <div style={{ display:"flex", alignItems:"center", gap:8 }}>
+                      <div style={{ flex:1, height:1, background:C.border }} />
+                      <div style={{ fontFamily:C.fm, fontSize:7, color:C.muted, letterSpacing:3 }}>PM SESSION</div>
+                      <div style={{ flex:1, height:1, background:C.border }} />
+                    </div>
+                    <TodayCard name={todayPm} onTap={() => { setSelDay(todayDayName); setSess("pm"); }} />
+                  </>
+                )}
               </div>
             )}
+          </div>
 
-            <button onClick={() => setSelDay(null)} style={{ marginTop:10, width:"100%", padding:"11px", background:"transparent", border:`1px solid ${C.border}`, fontFamily:C.fm, fontSize:8, letterSpacing:3, color:C.muted, cursor:"pointer" }}>CLOSE ✕</button>
+          {/* Biomarker flags */}
+          <div style={{ padding:"0 20px 20px" }}>
+            <div style={{ fontFamily:C.fm, fontSize:8, color:C.muted, letterSpacing:3, marginBottom:10 }}>FLAGGED BIOMARKERS</div>
+            <div style={{ display:"flex", gap:8, flexWrap:"wrap" }}>
+              {[["LDL","145 mg/dL","HIGH"],["ApoB","103 mg/dL","HIGH"],["Glucose","117 mg/dL","HIGH"]].map(([k,v,flag]) => (
+                <div key={k} style={{ background:`${C.red}15`, border:`1px solid ${C.red}33`, borderRadius:10, padding:"10px 14px", flex:1, minWidth:90 }}>
+                  <div style={{ fontFamily:C.fm, fontSize:7, color:C.red, letterSpacing:2, marginBottom:4 }}>{flag} ⚠</div>
+                  <div style={{ fontFamily:C.ff, fontSize:16, color:C.text }}>{v}</div>
+                  <div style={{ fontFamily:C.fm, fontSize:7, color:C.muted }}>{k}</div>
+                </div>
+              ))}
+            </div>
           </div>
         </div>
       )}
 
-      {/* ══ WEEKLY STRUCTURE ══ */}
-      <div style={{ padding:"14px 16px", borderBottom:`1px solid ${C.border}`, background:C.card }}>
-        <div style={{ fontFamily:C.ff, fontSize:10, letterSpacing:3, color:C.muted, marginBottom:8 }}>WEEKLY STRUCTURE</div>
-        {[["MON","HYROX SESSION",C.red],["TUE","THRESHOLD RUN",C.border],["WED","STRENGTH + Z2 PM",C.border],["THU","TEMPO / VO2 MAX",C.border],["FRI","HYROX SESSION",C.red],["SAT","LONG RUN",C.green],["SUN","MOBILITY OR PLYO+CORE","#999"]].map(([day,label,color]) => (
-          <div key={day} style={{ display:"flex", alignItems:"center", gap:10, padding:"5px 0", borderBottom:`0.5px solid ${C.card2}` }}>
-            <span style={{ fontFamily:C.ff, fontSize:11, color, minWidth:32 }}>{day}</span>
-            <span style={{ fontFamily:C.fm, fontSize:8, color:C.muted, letterSpacing:2 }}>{label}</span>
+      {/* ══ PLAN TAB ══ */}
+      {nav === "plan" && (
+        <div>
+          {/* Block selector */}
+          <div style={{ padding:"16px 20px 10px" }}>
+            <div style={{ fontFamily:C.fm, fontSize:8, color:C.muted, letterSpacing:3, marginBottom:10 }}>TRAINING BLOCK</div>
+            <div style={{ display:"flex", gap:6, overflowX:"auto", scrollbarWidth:"none" }}>
+              {BLOCKS.map(b => (
+                <button key={b.id} onClick={() => { setBlockId(b.id); setWeekId(b.weeks[0].id); setSelDay(null); }}
+                  style={{ flexShrink:0, padding:"8px 14px", background: blockId===b.id ? C.text : C.card, color: blockId===b.id ? "#000" : C.muted, border:`1px solid ${blockId===b.id ? C.text : C.border}`, borderRadius:20, cursor:"pointer", fontFamily:C.ff, fontSize:11, letterSpacing:2 }}>
+                  {b.label}
+                </button>
+              ))}
+            </div>
           </div>
+
+          {/* Week selector */}
+          <div style={{ display:"flex", overflowX:"auto", scrollbarWidth:"none", borderBottom:`1px solid ${C.border}`, paddingLeft:20 }}>
+            {weeks.map(w => (
+              <button key={w.id} onClick={() => { setWeekId(w.id); setSelDay(null); }}
+                style={{ flexShrink:0, padding:"10px 14px", background:"transparent", color: weekId===w.id ? C.text : C.muted, border:"none", borderBottom:`2px solid ${weekId===w.id ? C.green : "transparent"}`, cursor:"pointer", fontFamily:C.fm, fontSize:7, letterSpacing:2, whiteSpace:"nowrap" }}>
+                {w.label.includes("·") ? w.label.split("·")[1]?.trim() : w.label}
+                <div style={{ fontSize:6, marginTop:2, opacity:0.6 }}>{w.dates}</div>
+              </button>
+            ))}
+          </div>
+
+          {/* Week header */}
+          <div style={{ padding:"14px 20px 12px", borderBottom:`1px solid ${C.border}` }}>
+            <div style={{ fontFamily:C.fm, fontSize:7, color:C.green, letterSpacing:4, marginBottom:3 }}>{week.phase}</div>
+            <div style={{ fontFamily:C.ff, fontSize:24, letterSpacing:1 }}>{week.label}</div>
+            <div style={{ fontFamily:C.fm, fontSize:8, color:C.muted, marginTop:3 }}>{week.subtitle}</div>
+          </div>
+
+          {/* Day grid */}
+          <div style={{ display:"grid", gridTemplateColumns:"repeat(7,1fr)", borderBottom:`1px solid ${C.border}` }}>
+            {week.days.map((d, i) => {
+              const eAm = getEffAm(d);
+              const ac  = d.isSunday && !sundayChoice[weekId] ? C.light : getAccent(eAm);
+              const isSel = selDay === d.day;
+              return (
+                <button key={d.day} onClick={() => { setSelDay(isSel ? null : d.day); setSess("am"); }}
+                  style={{ background: isSel ? C.card : "transparent", border:"none", borderRight: i<6 ? `1px solid ${C.border}` : "none", borderBottom:`2px solid ${isSel ? ac : "transparent"}`, padding:"12px 4px 10px", cursor:"pointer", textAlign:"center", WebkitTapHighlightColor:"transparent" }}>
+                  <div style={{ fontFamily:C.fm, fontSize:7, color: isSel ? C.muted : C.light, letterSpacing:1 }}>{d.day}</div>
+                  <div style={{ fontFamily:C.fm, fontSize:6, color:C.light, margin:"2px 0 8px" }}>{d.date.split(" ")[1]}</div>
+                  <div style={{ width:8, height:8, borderRadius:"50%", background:ac, margin:"0 auto", opacity: isSel ? 1 : 0.6 }} />
+                  <div style={{ fontFamily:C.fm, fontSize:6, color: isSel ? ac : C.light, letterSpacing:1, marginTop:5, lineHeight:1.3 }}>
+                    {d.isSunday ? (sundayChoice[weekId] ? sundayChoice[weekId].toUpperCase() : "?") : d.isRaceDay ? "RACE" : getTypeLabel(d.am)}
+                  </div>
+                  {d.pm && <div style={{ fontFamily:C.fm, fontSize:5, color:C.light, marginTop:2 }}>+PM</div>}
+                </button>
+              );
+            })}
+          </div>
+
+          {/* Day detail inline */}
+          {dayData && (
+            <div style={{ margin:"16px 20px", background:C.card, borderRadius:16, overflow:"hidden", border:`1px solid ${C.border}` }}>
+              {dayData.isSunday && (
+                <div style={{ padding:"14px 16px", borderBottom:`1px solid ${C.border}` }}>
+                  <div style={{ fontFamily:C.fm, fontSize:8, color:C.muted, letterSpacing:3, marginBottom:10 }}>CHOOSE SESSION</div>
+                  <div style={{ display:"flex", gap:8 }}>
+                    {[["mobility","MOBILITY"],["plyo","PLYO + CORE"]].map(([key,label]) => (
+                      <button key={key} onClick={() => setSundayChoice(p => ({...p,[weekId]:key}))}
+                        style={{ flex:1, padding:"12px", background: sundayChoice[weekId]===key ? C.green : C.card2, color: sundayChoice[weekId]===key ? "#000" : C.text, border:`1px solid ${sundayChoice[weekId]===key ? C.green : C.border}`, borderRadius:10, cursor:"pointer", fontFamily:C.ff, fontSize:12, letterSpacing:2 }}>
+                        {label}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {dayData.pm && (
+                <div style={{ display:"flex", borderBottom:`1px solid ${C.border}` }}>
+                  {[["am","AM"],["pm","PM"]].map(([s,l]) => (
+                    <button key={s} onClick={() => setSess(s)}
+                      style={{ flex:1, padding:"10px", fontFamily:C.ff, fontSize:12, letterSpacing:3, background:"transparent", color: sess===s ? C.text : C.muted, border:"none", borderBottom:`2px solid ${sess===s ? C.green : "transparent"}`, cursor:"pointer" }}>
+                      {l} SESSION
+                    </button>
+                  ))}
+                </div>
+              )}
+
+              <div style={{ padding:"16px" }}>
+                {(() => {
+                  const wName = sess === "am" ? getEffAm(dayData) : dayData.pm;
+                  const wo = wName ? WL[wName] : null;
+                  const ac = wName ? getAccent(wName) : C.muted;
+                  if (!wo && !dayData.isRaceDay) return <div style={{ fontFamily:C.ff, fontSize:18, color:C.muted }}>SELECT A SESSION</div>;
+                  return (
+                    <>
+                      {wo && (
+                        <>
+                          <div style={{ display:"flex", alignItems:"center", gap:8, marginBottom:10 }}>
+                            <div style={{ background:`${ac}22`, border:`1px solid ${ac}44`, borderRadius:20, padding:"3px 10px", fontFamily:C.fm, fontSize:7, color:ac, letterSpacing:2 }}>{wo.type}</div>
+                            {dayData.pm && <div style={{ background:`${C.red}22`, border:`1px solid ${C.red}44`, borderRadius:20, padding:"3px 10px", fontFamily:C.fm, fontSize:7, color:C.red, letterSpacing:2 }}>2-A-DAY</div>}
+                          </div>
+                          <div style={{ fontFamily:C.ff, fontSize:22, color:C.text, marginBottom:4, lineHeight:1.1 }}>{wName.split(" — ")[1] || wName}</div>
+                          <div style={{ fontFamily:C.fm, fontSize:7, color:C.muted, letterSpacing:2, marginBottom:14 }}>{wo.tag} · {wo.duration}</div>
+                        </>
+                      )}
+                      <button onClick={() => setSelDay(dayData.day)}
+                        style={{ width:"100%", padding:"12px", background:ac, color: ac === C.green ? "#000" : "#fff", border:"none", borderRadius:10, cursor:"pointer", fontFamily:C.ff, fontSize:14, letterSpacing:3 }}>
+                        VIEW FULL SESSION →
+                      </button>
+                    </>
+                  );
+                })()}
+              </div>
+            </div>
+          )}
+
+          {/* Weekly structure */}
+          <div style={{ margin:"0 20px 20px" }}>
+            <div style={{ fontFamily:C.fm, fontSize:8, color:C.muted, letterSpacing:3, marginBottom:10 }}>WEEKLY STRUCTURE</div>
+            {[["MON","HYROX SESSION",C.red],["TUE","THRESHOLD RUN",C.blue],["WED","STRENGTH + Z2 PM","#aaa"],["THU","TEMPO / VO2 MAX",C.blue],["FRI","HYROX SESSION",C.red],["SAT","LONG RUN",C.green],["SUN","MOBILITY OR PLYO+CORE",C.green]].map(([day,label,color]) => (
+              <div key={day} style={{ display:"flex", alignItems:"center", gap:12, padding:"10px 0", borderBottom:`1px solid ${C.border}` }}>
+                <div style={{ width:8, height:8, borderRadius:"50%", background:color, flexShrink:0 }} />
+                <span style={{ fontFamily:C.ff, fontSize:13, color, minWidth:36 }}>{day}</span>
+                <span style={{ fontFamily:C.fm, fontSize:8, color:C.muted, letterSpacing:1 }}>{label}</span>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* ══ SUPPLEMENTS TAB ══ */}
+      {nav === "supps" && (
+        <div style={{ padding:"20px" }}>
+          <div style={{ fontFamily:C.ff, fontSize:28, letterSpacing:2, marginBottom:4 }}>SUPPLEMENTS<span style={{ color:C.red }}>.</span></div>
+          <div style={{ fontFamily:C.fm, fontSize:8, color:C.muted, letterSpacing:3, marginBottom:20 }}>DAILY PROTOCOL</div>
+
+          {SUPPS.map((group, gi) => (
+            <div key={gi} style={{ marginBottom:24 }}>
+              <div style={{ display:"flex", alignItems:"center", gap:10, marginBottom:12 }}>
+                <div style={{ width:3, height:20, background:group.color, borderRadius:2 }} />
+                <div style={{ fontFamily:C.fm, fontSize:8, color:group.color, letterSpacing:3 }}>{group.time}</div>
+              </div>
+              {group.items.map((item, ii) => (
+                <div key={ii} style={{ background:C.card, borderRadius:14, padding:"14px 16px", marginBottom:8, borderLeft:`3px solid ${group.color}44` }}>
+                  <div style={{ display:"flex", justifyContent:"space-between", alignItems:"flex-start", marginBottom:6 }}>
+                    <div style={{ fontFamily:C.ff, fontSize:16, letterSpacing:0.5, color:C.text }}>{item.name}</div>
+                    <div style={{ background:`${group.color}22`, border:`1px solid ${group.color}44`, borderRadius:20, padding:"3px 10px", fontFamily:C.fm, fontSize:8, color:group.color, letterSpacing:1, flexShrink:0, marginLeft:8 }}>{item.dose}</div>
+                  </div>
+                  <div style={{ fontFamily:C.fs, fontSize:12, color:C.muted, lineHeight:1.6, marginBottom:6 }}>{item.note}</div>
+                  <div style={{ fontFamily:C.fm, fontSize:7, color:C.light, letterSpacing:2 }}>TIMING: {item.timing}</div>
+                </div>
+              ))}
+            </div>
+          ))}
+        </div>
+      )}
+
+      {/* ══ STATS TAB ══ */}
+      {nav === "stats" && (
+        <div style={{ padding:"20px" }}>
+          <div style={{ fontFamily:C.ff, fontSize:28, letterSpacing:2, marginBottom:4 }}>MY STATS<span style={{ color:C.green }}>.</span></div>
+          <div style={{ fontFamily:C.fm, fontSize:8, color:C.muted, letterSpacing:3, marginBottom:20 }}>BODY COMPOSITION + BLOOD PANEL</div>
+
+          {/* DXA */}
+          <div style={{ marginBottom:20 }}>
+            <div style={{ fontFamily:C.fm, fontSize:8, color:C.green, letterSpacing:3, marginBottom:10 }}>DXA SCAN · FEB 20 2026</div>
+            <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:8 }}>
+              {[["BODY FAT","15.4%",C.green,"LEAN"],["LEAN MASS","179.7 lb","#aaa",""],["ALMI","10.7",C.green,"OPTIMAL"],["BONE T-SCORE","+2.2",C.green,"OPTIMAL"],["VAT AREA","66.1 cm²",C.green,"IDEAL"],["WEIGHT","209 lb","#aaa",""]].map(([label,val,color,flag]) => (
+                <div key={label} style={{ background:C.card, borderRadius:14, padding:"14px" }}>
+                  <div style={{ fontFamily:C.fm, fontSize:7, color:C.muted, letterSpacing:2, marginBottom:6 }}>{label}</div>
+                  <div style={{ fontFamily:C.ff, fontSize:20, color }}>{val}</div>
+                  {flag && <div style={{ fontFamily:C.fm, fontSize:7, color, marginTop:4, letterSpacing:1 }}>● {flag}</div>}
+                </div>
+              ))}
+            </div>
+          </div>
+
+          {/* Blood */}
+          <div style={{ marginBottom:20 }}>
+            <div style={{ fontFamily:C.fm, fontSize:8, color:C.red, letterSpacing:3, marginBottom:10 }}>BLOOD PANEL · DEC 31 2024</div>
+            <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:8 }}>
+              {[["TESTOSTERONE","474 ng/dL","#aaa","MID RANGE"],["LDL-C","145 mg/dL",C.red,"HIGH ⚠"],["APO-B","103 mg/dL",C.red,"HIGH ⚠"],["GLUCOSE","117 mg/dL",C.red,"HIGH ⚠"],["HDL-C","64 mg/dL",C.green,"GOOD"],["TSH","0.943","#aaa","NORMAL"]].map(([label,val,color,flag]) => (
+                <div key={label} style={{ background:C.card, borderRadius:14, padding:"14px", border: color===C.red ? `1px solid ${C.red}33` : `1px solid ${C.border}` }}>
+                  <div style={{ fontFamily:C.fm, fontSize:7, color:C.muted, letterSpacing:2, marginBottom:6 }}>{label}</div>
+                  <div style={{ fontFamily:C.ff, fontSize:18, color }}>{val}</div>
+                  {flag && <div style={{ fontFamily:C.fm, fontSize:7, color, marginTop:4, letterSpacing:1 }}>● {flag}</div>}
+                </div>
+              ))}
+            </div>
+          </div>
+
+          {/* HR Zones */}
+          <div>
+            <div style={{ fontFamily:C.fm, fontSize:8, color:"#aaa", letterSpacing:3, marginBottom:10 }}>HR ZONES · LTHR 165–170 BPM</div>
+            {HR_ZONES.map((z, i) => (
+              <div key={i} style={{ display:"flex", alignItems:"center", gap:12, padding:"12px 14px", background:C.card, borderRadius:12, marginBottom:6, borderLeft:`3px solid ${z.color}` }}>
+                <div style={{ fontFamily:C.ff, fontSize:16, color:z.color, minWidth:32 }}>{z.zone}</div>
+                <div style={{ flex:1 }}>
+                  <div style={{ fontFamily:C.ff, fontSize:14, color:C.text }}>{z.name}</div>
+                  <div style={{ fontFamily:C.fm, fontSize:7, color:C.muted, marginTop:2 }}>{z.pct} LTHR</div>
+                </div>
+                <div style={{ fontFamily:C.fm, fontSize:11, color:z.color, fontWeight:700 }}>{z.bpm}</div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* ══ BOTTOM NAV ══ */}
+      <div style={{ position:"fixed", bottom:0, left:"50%", transform:"translateX(-50%)", width:"100%", maxWidth:480, background:C.bg, borderTop:`1px solid ${C.border}`, display:"flex", zIndex:100 }}>
+        {[
+          ["today","⚡","TODAY"],
+          ["plan","📅","PLAN"],
+          ["supps","💊","SUPPS"],
+          ["stats","📊","STATS"],
+        ].map(([id, icon, label]) => (
+          <button key={id} onClick={() => setNav(id)}
+            style={{ flex:1, padding:"12px 4px 20px", background:"transparent", border:"none", cursor:"pointer", display:"flex", flexDirection:"column", alignItems:"center", gap:4 }}>
+            <div style={{ fontSize:18 }}>{icon}</div>
+            <div style={{ fontFamily:C.fm, fontSize:7, letterSpacing:2, color: nav===id ? C.green : C.muted, fontWeight: nav===id ? 700 : 400 }}>{label}</div>
+            {nav===id && <div style={{ width:4, height:4, borderRadius:"50%", background:C.green, marginTop:2 }} />}
+          </button>
         ))}
       </div>
 
-      {/* ══ WHOOP FOOTER ══ */}
-      <div style={{ padding:"14px 16px", background:C.bg }}>
-        <div style={{ fontFamily:C.fm, fontSize:7, color:C.muted, letterSpacing:3, marginBottom:8 }}>WHOOP PROTOCOL</div>
-        {[["● GREEN >66%","Execute as written","#2a6a2a"],["● YELLOW 35–65%","Reduce intensity 20% · No VO2 Max","#b87800"],["● RED <35%","Recovery only — contrast therapy",C.red]].map(([label,sub,color]) => (
-          <div key={label} style={{ display:"flex", justifyContent:"space-between", alignItems:"center", padding:"8px 10px", background:C.card, borderLeft:`3px solid ${color}`, marginBottom:4 }}>
-            <span style={{ fontFamily:C.fm, fontSize:7, color, letterSpacing:2, fontWeight:700 }}>{label}</span>
-            <span style={{ fontFamily:C.fm, fontSize:7, color:C.muted }}>{sub}</span>
-          </div>
-        ))}
-        <div style={{ fontFamily:C.fm, fontSize:6, color:C.light, letterSpacing:2, marginTop:10, textAlign:"center" }}>
-          {whoopConnected ? "● WHOOP CONNECTED · LIVE DATA" : "● WHOOP NOT CONNECTED · TAP CONNECT"}
-        </div>
-      </div>
+      {/* ══ SESSION MODAL ══ */}
+      {selDay && (
+        <SessionModal
+          name={modalName}
+          dayData={dayData}
+          sess={sess}
+          weekId={weekId}
+          onClose={() => setSelDay(null)}
+          onSessSwitch={setSess}
+          sundayChoice={sundayChoice}
+          setSundayChoice={setSundayChoice}
+        />
+      )}
 
     </div>
   );
