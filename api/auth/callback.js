@@ -28,38 +28,9 @@ export default async function handler(req, res) {
     const accessToken = JSON.stringify(tokens.access_token);
     const refreshToken = JSON.stringify(tokens.refresh_token || "");
 
-    const html = `<!DOCTYPE html>
-<html>
-<head><title>Connecting WHOOP...</title></head>
-<body style="background:#000;color:#fff;font-family:monospace;display:flex;align-items:center;justify-content:center;height:100vh;">
-<div style="text-align:center;">
-  <p style="font-size:18px;letter-spacing:3px;">CONNECTING WHOOP...</p>
-  <p id="status" style="font-size:12px;color:#555;margin-top:8px;"></p>
-</div>
-<script>
-  (function() {
-    try {
-      var access = ${accessToken};
-      var refresh = ${refreshToken};
-      localStorage.setItem('whoop_access', access);
-      localStorage.setItem('whoop_refresh', refresh);
-      document.getElementById('status').textContent = 'Token stored. Redirecting...';
-      setTimeout(function() {
-        window.location.href = '/';
-      }, 500);
-    } catch(e) {
-      document.getElementById('status').textContent = 'Error: ' + e.message;
-      setTimeout(function() {
-        window.location.href = '/?error=storage_failed';
-      }, 2000);
-    }
-  })();
-</script>
-</body>
-</html>`;
-
-    res.setHeader("Content-Type", "text/html");
-    return res.status(200).send(html);
+    const encoded = Buffer.from(tokens.access_token).toString('base64');
+const encodedRefresh = Buffer.from(tokens.refresh_token || '').toString('base64');
+return res.redirect(302, `/?at=${encoded}&rt=${encodedRefresh}`);
 
   } catch (err) {
     return res.redirect(302, "/?error=exception&msg=" + encodeURIComponent(err.message));
