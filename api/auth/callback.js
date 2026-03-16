@@ -24,12 +24,14 @@ export default async function handler(req, res) {
     const tokens = await tokenRes.json();
     if (!tokens.access_token) return res.redirect(302, "/?error=no_token");
 
-    const opts = "Path=/; HttpOnly; Secure; SameSite=Lax";
-    res.setHeader("Set-Cookie", [
-      `whoop_access=${tokens.access_token}; ${opts}; Max-Age=3600`,
-      `whoop_refresh=${tokens.refresh_token || ""}; ${opts}; Max-Age=2592000`,
-    ]);
-    return res.redirect(302, "/?connected=true");
+    // Pass tokens back via URL params (stored in localStorage by the app)
+    const params = new URLSearchParams({
+      access_token: tokens.access_token,
+      refresh_token: tokens.refresh_token || "",
+      connected: "true",
+    });
+
+    return res.redirect(302, `/?${params.toString()}`);
   } catch (err) {
     return res.redirect(302, "/?error=exception");
   }
