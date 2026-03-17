@@ -220,18 +220,24 @@ const AIChat = ({ whoopData, currentWeek, recentActivities, onPlanChange }) => {
   const [input, setInput] = useState("");
   const [loading, setLoading] = useState(false);
   const [expanded, setExpanded] = useState(false);
+  const [attachment, setAttachment] = useState(null);
   const messagesEndRef = useRef(null);
   const textareaRef = useRef(null);
+  const fileInputRef = useRef(null);
 
   useEffect(() => {
     if (expanded) messagesEndRef.current?.scrollIntoView({ behavior:"smooth" });
   }, [messages, expanded]);
 
   const sendMessage = async () => {
-    if (!input.trim() || loading) return;
+    if ((!input.trim() && !attachment) || loading) return;
     const userMsg = input.trim();
+    const currentAttachment = attachment;
     setInput("");
-    setMessages(prev => [...prev, { role:"user", content:userMsg, planChange:null }]);
+    setAttachment(null);
+    if (fileInputRef.current) fileInputRef.current.value = "";
+    if (textareaRef.current) textareaRef.current.style.height = "auto";
+    setMessages(prev => [...prev, { role:"user", content:userMsg || `[${currentAttachment?.name}]`, planChange:null, attachment:currentAttachment }]);
     setLoading(true);
     try {
       const res = await fetch("/api/coach/chat", {
@@ -242,6 +248,7 @@ const AIChat = ({ whoopData, currentWeek, recentActivities, onPlanChange }) => {
           whoopData,
           currentWeek: { id: currentWeek?.id, label: currentWeek?.label, subtitle: currentWeek?.subtitle },
           recentActivities: recentActivities?.slice(0,5),
+          attachment: currentAttachment || null,
         }),
       });
       const data = await res.json();
@@ -298,7 +305,16 @@ const AIChat = ({ whoopData, currentWeek, recentActivities, onPlanChange }) => {
         {messages.map((m, i) => (
           <div key={i} style={{ display:"flex", flexDirection:"column", alignItems: m.role==="user" ? "flex-end" : "flex-start" }}>
             <div style={{ maxWidth:"85%", padding:"12px 16px", borderRadius: m.role==="user" ? "16px 16px 4px 16px" : "16px 16px 16px 4px", background: m.role==="user" ? C.green : C.card, color: m.role==="user" ? "#000" : C.text }}>
-              <div style={{ fontFamily:C.fs, fontSize:13, lineHeight:1.6 }}>{renderMarkdown(m.content)}</div>
+              {m.attachment?.media_type?.startsWith("image/") && (
+                <img src={`data:${m.attachment.media_type};base64,${m.attachment.data}`} alt={m.attachment.name} style={{ width:"100%", borderRadius:8, marginBottom: m.content ? 8 : 0, display:"block" }} />
+              )}
+              {m.attachment?.media_type === "application/pdf" && (
+                <div style={{ display:"flex", alignItems:"center", gap:6, marginBottom: m.content ? 8 : 0, background:"rgba(0,0,0,0.15)", borderRadius:8, padding:"6px 10px" }}>
+                  <span style={{ fontSize:14 }}>📄</span>
+                  <span style={{ fontFamily:C.fm, fontSize:9, letterSpacing:1 }}>{m.attachment.name}</span>
+                </div>
+              )}
+              {m.content && <div style={{ fontFamily:C.fs, fontSize:13, lineHeight:1.6 }}>{renderMarkdown(m.content)}</div>}
             </div>
             {m.planChange && !m.planChangeStatus && (
               <div style={{ maxWidth:"85%", marginTop:8, background:C.card2, borderRadius:12, padding:"12px 14px", border:`1px solid ${C.green}44` }}>
@@ -331,7 +347,23 @@ const AIChat = ({ whoopData, currentWeek, recentActivities, onPlanChange }) => {
           <button key={i} onClick={() => setInput(p)} style={{ flexShrink:0, padding:"6px 12px", background:C.card, border:`1px solid ${C.border}`, borderRadius:20, cursor:"pointer", fontFamily:C.fm, fontSize:8, color:C.muted, letterSpacing:1, whiteSpace:"nowrap" }}>{p}</button>
         ))}
       </div>
+      {attachment && (
+        <div style={{ padding:"0 20px 8px", display:"flex", alignItems:"center", gap:8, flexShrink:0 }}>
+          <div style={{ background:C.card2, border:`1px solid ${C.border}`, borderRadius:8, padding:"6px 10px", display:"flex", alignItems:"center", gap:8, flex:1, minWidth:0 }}>
+            <span style={{ fontSize:13 }}>{attachment.media_type.startsWith("image/") ? "🖼" : "📄"}</span>
+            <span style={{ fontFamily:C.fm, fontSize:9, color:C.muted, letterSpacing:1, flex:1, overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>{attachment.name}</span>
+            <button onClick={() => { setAttachment(null); if (fileInputRef.current) fileInputRef.current.value = ""; }} style={{ background:"none", border:"none", color:C.muted, cursor:"pointer", padding:0, fontSize:14, flexShrink:0, lineHeight:1 }}>×</button>
+          </div>
+        </div>
+      )}
       <div style={{ padding:"12px 20px 20px", display:"flex", gap:10, flexShrink:0, alignItems:"flex-end" }}>
+        <input ref={fileInputRef} type="file" accept="image/*,.pdf" style={{ display:"none" }} onChange={e => {
+          const file = e.target.files?.[0];
+          if (!file) return;
+          const reader = new FileReader();
+          reader.onload = () => setAttachment({ data: reader.result.split(",")[1], media_type: file.type, name: file.name });
+          reader.readAsDataURL(file);
+        }} />
         <textarea
           ref={textareaRef}
           value={input}
@@ -345,25 +377,8 @@ const AIChat = ({ whoopData, currentWeek, recentActivities, onPlanChange }) => {
           placeholder="Ask your coach anything..."
           style={{ flex:1, background:C.card, border:`1px solid ${C.border}`, borderRadius:12, padding:"12px 16px", color:C.text, fontFamily:C.fs, fontSize:14, outline:"none", resize:"none", overflow:"hidden", lineHeight:"1.5", maxHeight:120 }}
         />
-        <button
-          onClick={() => {
-            const el = textareaRef.current;
-            const pos = el ? el.selectionStart : input.length;
-            const next = input.slice(0, pos) + "\n" + input.slice(pos);
-            setInput(next);
-            requestAnimationFrame(() => {
-              if (el) {
-                el.style.height = "auto";
-                el.style.height = Math.min(el.scrollHeight, 120) + "px";
-                el.selectionStart = el.selectionEnd = pos + 1;
-                el.focus();
-              }
-            });
-          }}
-          style={{ width:36, height:36, background:C.card2, border:`1px solid ${C.border}`, borderRadius:10, cursor:"pointer", color:C.muted, fontSize:14, flexShrink:0, display:"flex", alignItems:"center", justifyContent:"center" }}
-          title="New line"
-        >↵</button>
-        <button onClick={sendMessage} disabled={loading || !input.trim()} style={{ width:48, height:48, background: input.trim() ? C.green : C.card, border:"none", borderRadius:12, cursor: input.trim() ? "pointer" : "default", color: input.trim() ? "#000" : C.muted, fontSize:18, flexShrink:0 }}>↑</button>
+        <button onClick={() => fileInputRef.current?.click()} style={{ width:36, height:36, background: attachment ? `${C.green}22` : C.card2, border:`1px solid ${attachment ? C.green+"44" : C.border}`, borderRadius:10, cursor:"pointer", color: attachment ? C.green : C.muted, fontSize:16, flexShrink:0, display:"flex", alignItems:"center", justifyContent:"center" }} title="Attach image or PDF">📎</button>
+        <button onClick={sendMessage} disabled={loading || (!input.trim() && !attachment)} style={{ width:48, height:48, background: (input.trim() || attachment) ? C.green : C.card, border:"none", borderRadius:12, cursor: (input.trim() || attachment) ? "pointer" : "default", color: (input.trim() || attachment) ? "#000" : C.muted, fontSize:18, flexShrink:0 }}>↑</button>
       </div>
     </div>
   );
