@@ -18,6 +18,8 @@ export default async function handler(req, res) {
         return res.status(400).json({ error: "modify_day requires week_id and day" });
       }
 
+      console.log("[plan/update] received:", JSON.stringify({ type, week_id, day, changes, description }));
+
       // Resolve week db id from week_id string
       const { data: weekRow, error: weekErr } = await supabase
         .from("training_weeks")
@@ -26,8 +28,11 @@ export default async function handler(req, res) {
         .single();
 
       if (weekErr || !weekRow) {
+        console.log("[plan/update] week not found:", week_id, weekErr?.message);
         return res.status(404).json({ error: `Week not found: ${week_id}` });
       }
+
+      console.log("[plan/update] resolved week db id:", weekRow.id);
 
       // Apply the field changes to the training_days row.
       // AI coach emits frontend keys (am/pm/note); map them to DB columns.
@@ -54,16 +59,25 @@ export default async function handler(req, res) {
       const mutableFields = ["am_session", "pm_session", "note", "is_race_day", "ai_modification_note", "ai_modified"];
       const hasChange = mutableFields.some((f) => f in updatePayload && f !== "ai_modified" && f !== "ai_modification_note");
       if (!hasChange) {
+        console.log("[plan/update] no valid fields in changes:", changes);
         return res.status(400).json({ error: "No valid fields to update" });
       }
 
-      const { error: updateErr } = await supabase
+      console.log("[plan/update] updating training_days where week_id =", weekRow.id, "day =", day, "payload:", JSON.stringify(updatePayload));
+
+      const { data: updated, error: updateErr, count } = await supabase
         .from("training_days")
         .update(updatePayload)
         .eq("week_id", weekRow.id)
-        .eq("day", day);
+        .eq("day", day)
+        .select();
 
-      if (updateErr) return res.status(500).json({ error: updateErr.message });
+      if (updateErr) {
+        console.log("[plan/update] supabase error:", updateErr.message);
+        return res.status(500).json({ error: updateErr.message });
+      }
+
+      console.log("[plan/update] rows updated:", updated?.length ?? count, JSON.stringify(updated));
 
       return res.status(200).json({ success: true, description });
     }

@@ -199,6 +199,20 @@ const TodayCard = ({ name, onTap }) => {
   );
 };
 
+const renderMarkdown = (text) => {
+  if (!text) return null;
+  const lines = text.split('\n');
+  return lines.map((line, i) => {
+    const parts = line.split(/(\*\*[^*]+\*\*)/g).map((part, j) => {
+      if (part.startsWith('**') && part.endsWith('**')) {
+        return <strong key={j}>{part.slice(2, -2)}</strong>;
+      }
+      return part;
+    });
+    return <span key={i}>{parts}{i < lines.length - 1 && <br />}</span>;
+  });
+};
+
 const AIChat = ({ whoopData, currentWeek, recentActivities, onPlanChange }) => {
   const [messages, setMessages] = useState([
     { role:"assistant", content:"Hey Rafael — I have your WHOOP data, training plan, and biomarkers loaded. What do you need?", planChange:null }
@@ -207,6 +221,7 @@ const AIChat = ({ whoopData, currentWeek, recentActivities, onPlanChange }) => {
   const [loading, setLoading] = useState(false);
   const [expanded, setExpanded] = useState(false);
   const messagesEndRef = useRef(null);
+  const textareaRef = useRef(null);
 
   useEffect(() => {
     if (expanded) messagesEndRef.current?.scrollIntoView({ behavior:"smooth" });
@@ -283,7 +298,7 @@ const AIChat = ({ whoopData, currentWeek, recentActivities, onPlanChange }) => {
         {messages.map((m, i) => (
           <div key={i} style={{ display:"flex", flexDirection:"column", alignItems: m.role==="user" ? "flex-end" : "flex-start" }}>
             <div style={{ maxWidth:"85%", padding:"12px 16px", borderRadius: m.role==="user" ? "16px 16px 4px 16px" : "16px 16px 16px 4px", background: m.role==="user" ? C.green : C.card, color: m.role==="user" ? "#000" : C.text }}>
-              <div style={{ fontFamily:C.fs, fontSize:13, lineHeight:1.6 }}>{m.content}</div>
+              <div style={{ fontFamily:C.fs, fontSize:13, lineHeight:1.6 }}>{renderMarkdown(m.content)}</div>
             </div>
             {m.planChange && !m.planChangeStatus && (
               <div style={{ maxWidth:"85%", marginTop:8, background:C.card2, borderRadius:12, padding:"12px 14px", border:`1px solid ${C.green}44` }}>
@@ -316,8 +331,20 @@ const AIChat = ({ whoopData, currentWeek, recentActivities, onPlanChange }) => {
           <button key={i} onClick={() => setInput(p)} style={{ flexShrink:0, padding:"6px 12px", background:C.card, border:`1px solid ${C.border}`, borderRadius:20, cursor:"pointer", fontFamily:C.fm, fontSize:8, color:C.muted, letterSpacing:1, whiteSpace:"nowrap" }}>{p}</button>
         ))}
       </div>
-      <div style={{ padding:"12px 20px 20px", display:"flex", gap:10, flexShrink:0 }}>
-        <input value={input} onChange={e => setInput(e.target.value)} onKeyDown={e => e.key === "Enter" && sendMessage()} placeholder="Ask your coach anything..." style={{ flex:1, background:C.card, border:`1px solid ${C.border}`, borderRadius:12, padding:"12px 16px", color:C.text, fontFamily:C.fs, fontSize:14, outline:"none" }} />
+      <div style={{ padding:"12px 20px 20px", display:"flex", gap:10, flexShrink:0, alignItems:"flex-end" }}>
+        <textarea
+          ref={textareaRef}
+          value={input}
+          rows={1}
+          onChange={e => {
+            setInput(e.target.value);
+            const el = textareaRef.current;
+            if (el) { el.style.height = "auto"; el.style.height = Math.min(el.scrollHeight, 120) + "px"; }
+          }}
+          onKeyDown={e => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); sendMessage(); } }}
+          placeholder="Ask your coach anything..."
+          style={{ flex:1, background:C.card, border:`1px solid ${C.border}`, borderRadius:12, padding:"12px 16px", color:C.text, fontFamily:C.fs, fontSize:14, outline:"none", resize:"none", overflow:"hidden", lineHeight:"1.5", maxHeight:120 }}
+        />
         <button onClick={sendMessage} disabled={loading || !input.trim()} style={{ width:48, height:48, background: input.trim() ? C.green : C.card, border:"none", borderRadius:12, cursor: input.trim() ? "pointer" : "default", color: input.trim() ? "#000" : C.muted, fontSize:18, flexShrink:0 }}>↑</button>
       </div>
     </div>
@@ -469,11 +496,16 @@ export default function App() {
 
   const handlePlanChange = async (planChange) => {
     try {
-      await fetch("/api/plan/update", {
+      const res = await fetch("/api/plan/update", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(planChange),
       });
+      if (!res.ok) {
+        const body = await res.json().catch(() => ({}));
+        console.error("Plan update failed:", res.status, body);
+        return;
+      }
       fetchPlan();
     } catch (e) {
       console.error("Plan update failed:", e);
