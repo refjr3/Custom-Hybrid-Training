@@ -137,17 +137,6 @@ const ALL_WEEKS = [
 ];
 
 // ---------------------------------------------------------------------------
-// Blocks — must be seeded before weeks (FK: training_weeks.block_id → training_blocks.id)
-// ---------------------------------------------------------------------------
-const BLOCKS = [
-  { id: "taper",  label: "MIAMI TAPER" },
-  { id: "phase1", label: "PHASE 1" },
-  { id: "phase2", label: "PHASE 2" },
-  { id: "phase3", label: "PHASE 3" },
-  { id: "phase4", label: "PHASE 4" },
-];
-
-// ---------------------------------------------------------------------------
 // Handler
 // ---------------------------------------------------------------------------
 export default async function handler(req, res) {
@@ -158,7 +147,24 @@ export default async function handler(req, res) {
   const log = [];
   let weekOk = 0, dayOk = 0, errors = [];
 
-  // Seed blocks first so the FK constraint is satisfied
+  // Generate stable UUIDs for each block and build slug→UUID map
+  const blockUuids = {
+    taper:  crypto.randomUUID(),
+    phase1: crypto.randomUUID(),
+    phase2: crypto.randomUUID(),
+    phase3: crypto.randomUUID(),
+    phase4: crypto.randomUUID(),
+  };
+
+  // Seed blocks first so the FK constraint (training_weeks.block_id) is satisfied
+  const BLOCKS = [
+    { id: blockUuids.taper,  label: "MIAMI TAPER" },
+    { id: blockUuids.phase1, label: "PHASE 1" },
+    { id: blockUuids.phase2, label: "PHASE 2" },
+    { id: blockUuids.phase3, label: "PHASE 3" },
+    { id: blockUuids.phase4, label: "PHASE 4" },
+  ];
+
   const { error: blocksErr } = await supabase
     .from("training_blocks")
     .upsert(BLOCKS, { onConflict: "id" });
@@ -170,6 +176,8 @@ export default async function handler(req, res) {
 
   for (const week of ALL_WEEKS) {
     const { days, ...weekRow } = week;
+    // Replace slug block_id with the actual UUID
+    weekRow.block_id = blockUuids[weekRow.block_id];
 
     const { data: weekData, error: weekErr } = await supabase
       .from("training_weeks")
