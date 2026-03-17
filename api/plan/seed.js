@@ -13,8 +13,8 @@ const supabase = createClient(
 // ---------------------------------------------------------------------------
 // Training data — mirrors hardcoded BLOCKS in src/App.jsx
 // ---------------------------------------------------------------------------
-const d = (day, date_label, am_session, pm_session, note, isRaceDay, isSunday) => ({
-  day,
+const d = (day_name, date_label, am_session, pm_session, note, isRaceDay, isSunday) => ({
+  day_name,
   date_label,
   am_session: am_session || null,
   pm_session: pm_session || null,
@@ -203,7 +203,7 @@ export default async function handler(req, res) {
 
     const { error: daysErr } = await supabase
       .from("training_days")
-      .upsert(dayRows, { onConflict: "week_id,day" });
+      .upsert(dayRows, { onConflict: "week_id,day_name" });
 
     if (daysErr) {
       const msg = `days for ${week.week_id}: ${daysErr.message}`;
