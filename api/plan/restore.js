@@ -30,7 +30,7 @@ export default async function handler(req, res) {
         ai_modification_note: null,
       })
       .eq("week_id", weekRow.id)
-      .eq("day", "WED")
+      .eq("day_name", "WED")
       .select();
 
     if (updateErr) {
