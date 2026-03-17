@@ -27,7 +27,7 @@ const taperWeeks = [
   {
     week_id: "tw1", block_id: "taper",
     label: "TAPER WK 1", dates: "Mar 15–21",
-    phase: "MIAMI TAPER", subtitle: "Moderate Volume · Stay Sharp", sort_order: 1,
+    phase: "MIAMI TAPER", subtitle: "Moderate Volume · Stay Sharp", week_order: 1,
     days: [
       d("MON","Mar 16","FOR TIME — Hyrox Full Runs Half Stations",null,"80% effort. Don't race it."),
       d("TUE","Mar 17","THRESHOLD — 10×2 Min",null,"Scale to 6×2. Maintain Z4 quality."),
@@ -41,7 +41,7 @@ const taperWeeks = [
   {
     week_id: "tw2", block_id: "taper",
     label: "TAPER WK 2", dates: "Mar 22–28",
-    phase: "MIAMI TAPER", subtitle: "Reduced Volume · Race Sharpness", sort_order: 2,
+    phase: "MIAMI TAPER", subtitle: "Reduced Volume · Race Sharpness", week_order: 2,
     days: [
       d("MON","Mar 23","EMOM 40 — Full Hyrox",null,"Controlled EMOM. Keep HR managed."),
       d("TUE","Mar 24","THRESHOLD — 10×2 Min",null,"Scale to 4×2 @ race pace only."),
@@ -55,7 +55,7 @@ const taperWeeks = [
   {
     week_id: "rw", block_id: "taper",
     label: "RACE WEEK", dates: "Mar 29–Apr 4",
-    phase: "MIAMI RACE", subtitle: "Minimal Load · Peak Freshness", sort_order: 3,
+    phase: "MIAMI RACE", subtitle: "Minimal Load · Peak Freshness", week_order: 3,
     days: [
       d("MON","Mar 30","ZONE 2 — Easy Aerobic",null,"15 min only. 3 strides. Walk away."),
       d("TUE","Mar 31","RECOVERY — Active Reset",null,"Full rest. Carb load begins."),
@@ -115,7 +115,7 @@ const makePhase = (num) => {
     dates: `${mo} ${7 + i * 7}–${13 + i * 7}`,
     phase: `PHASE ${num}`,
     subtitle: subs[i],
-    sort_order: i + 1,
+    week_order: i + 1,
     days: [
       d("MON",`${mo} ${7+i*7}`,  hMon[i], null, "Monday HYROX. Lap every station."),
       d("TUE",`${mo} ${8+i*7}`,  "THRESHOLD — 10×2 Min", null, "Z4 = 150–168 bpm on your Garmin."),
@@ -169,7 +169,7 @@ export default async function handler(req, res) {
     const dayRows = days.map((day, idx) => ({
       ...day,
       week_id: weekDbId,
-      sort_order: idx,
+      week_order: idx,
     }));
 
     const { error: daysErr } = await supabase
