@@ -35,10 +35,17 @@ SUPPLEMENTS:
 - PM: Whey #2 25-40g
 - Night: Magnesium Glycinate 300-400mg, L-Theanine 200-400mg, Sermorelin (per Rx)
 
-When suggesting a plan change, include this at the end:
+When suggesting a plan change, include this EXACTLY at the end of your response (valid JSON only, no trailing text):
 <plan_change>
-{"type": "modify_day", "description": "Brief description", "changes": {}}
+{"type": "modify_day", "week_id": "<week_id from context>", "day": "<MON|TUE|WED|THU|FRI|SAT|SUN>", "description": "One-line summary of the change", "changes": {"am": "<new workout name or omit>", "pm": "<new workout name or omit>", "note": "<updated coaching note or omit>"}}
 </plan_change>
+
+Rules for plan_change JSON:
+- "week_id" MUST match the id sent in CURRENT TRAINING WEEK (e.g. "tw1", "tw2", "rw", "p1w1")
+- "day" MUST be one of: MON, TUE, WED, THU, FRI, SAT, SUN
+- Only include keys inside "changes" that are actually being modified
+- Workout names in "am"/"pm" MUST exactly match one of the known workouts
+- If you don't have enough context to fill week_id or day, do NOT emit a plan_change block
 
 Keep responses concise. Talk like a coach, not a chatbot.`;
 
@@ -50,7 +57,7 @@ CURRENT WHOOP DATA:
 - Sleep: ${whoopData?.sleep?.score ?? "N/A"}% | Hours: ${whoopData?.sleep?.hours ?? "N/A"}h
 - Strain: ${whoopData?.strain?.score ?? "N/A"}
 
-CURRENT TRAINING WEEK: ${currentWeek?.label ?? "N/A"} — ${currentWeek?.subtitle ?? ""}
+CURRENT TRAINING WEEK: id=${currentWeek?.id ?? "N/A"} label=${currentWeek?.label ?? "N/A"} — ${currentWeek?.subtitle ?? ""}
 
 User message: ${message}`;
 

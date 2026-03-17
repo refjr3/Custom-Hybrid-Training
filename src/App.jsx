@@ -225,7 +225,7 @@ const AIChat = ({ whoopData, currentWeek, recentActivities, onPlanChange }) => {
         body: JSON.stringify({
           message: userMsg,
           whoopData,
-          currentWeek: { label: currentWeek?.label, subtitle: currentWeek?.subtitle },
+          currentWeek: { id: currentWeek?.id, label: currentWeek?.label, subtitle: currentWeek?.subtitle },
           recentActivities: recentActivities?.slice(0,5),
         }),
       });
@@ -413,6 +413,8 @@ export default function App() {
   const [whoopConnected, setWhoopConnected] = useState(false);
   const [recentActivities, setRecentActivities] = useState([]);
   const [biomarkers, setBiomarkers] = useState([]);
+  const [planBlocks, setPlanBlocks] = useState(BLOCKS);
+  const [planLoading, setPlanLoading] = useState(true);
 
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
@@ -421,6 +423,7 @@ export default function App() {
     }
     fetchWhoopData();
     fetchBiomarkers();
+    fetchPlan();
   }, []);
 
   const fetchWhoopData = async () => {
@@ -448,11 +451,36 @@ export default function App() {
     } catch (e) {}
   };
 
-  const handlePlanChange = (planChange) => {
-    console.log("Plan change accepted:", planChange);
+  const fetchPlan = async () => {
+    try {
+      const res = await fetch("/api/plan/days");
+      if (res.ok) {
+        const data = await res.json();
+        if (data.blocks && data.blocks.length > 0) {
+          setPlanBlocks(data.blocks);
+        }
+      }
+    } catch (e) {
+      // keep hardcoded fallback
+    } finally {
+      setPlanLoading(false);
+    }
   };
 
-  const block  = BLOCKS.find(b => b.id === blockId);
+  const handlePlanChange = async (planChange) => {
+    try {
+      await fetch("/api/plan/update", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(planChange),
+      });
+      fetchPlan();
+    } catch (e) {
+      console.error("Plan update failed:", e);
+    }
+  };
+
+  const block  = planBlocks.find(b => b.id === blockId) || planBlocks[0];
   const weeks  = block.weeks;
   const week   = weeks.find(w => w.id === weekId) || weeks[0];
   const dayData = selDay ? week.days.find(d => d.day === selDay) : null;
@@ -586,7 +614,7 @@ export default function App() {
           <div style={{ padding:"16px 20px 10px" }}>
             <div style={{ fontFamily:C.fm, fontSize:8, color:C.muted, letterSpacing:3, marginBottom:10 }}>TRAINING BLOCK</div>
             <div style={{ display:"flex", gap:6, overflowX:"auto", scrollbarWidth:"none" }}>
-              {BLOCKS.map(b => (
+              {planBlocks.map(b => (
                 <button key={b.id} onClick={() => { setBlockId(b.id); setWeekId(b.weeks[0].id); setSelDay(null); }} style={{ flexShrink:0, padding:"8px 14px", background: blockId===b.id ? C.text : C.card, color: blockId===b.id ? "#000" : C.muted, border:`1px solid ${blockId===b.id ? C.text : C.border}`, borderRadius:20, cursor:"pointer", fontFamily:C.ff, fontSize:11, letterSpacing:2 }}>{b.label}</button>
               ))}
             </div>
