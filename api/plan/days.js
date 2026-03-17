@@ -72,5 +72,13 @@ export default async function handler(req, res) {
       weeks: blockMap[id],
     }));
 
+  // TRACE: log every WED day object being returned
+  for (const block of blocks) {
+    for (const week of block.weeks) {
+      const wed = week.days.find(d => d.day === "WED");
+      if (wed) console.log("[plan/days] WED object week", week.id, JSON.stringify(wed));
+    }
+  }
+
   return res.status(200).json({ blocks });
 }
