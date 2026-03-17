@@ -13,14 +13,13 @@ const supabase = createClient(
 // ---------------------------------------------------------------------------
 // Training data — mirrors hardcoded BLOCKS in src/App.jsx
 // ---------------------------------------------------------------------------
-const d = (day_name, date_label, am_session, pm_session, note, isRaceDay, isSunday) => ({
+const d = (day_name, date_label, am_session, pm_session, note, isRaceDay) => ({
   day_name,
   date_label,
   am_session: am_session || null,
   pm_session: pm_session || null,
   note:        note        || null,
   is_race_day: !!isRaceDay,
-  is_sunday:   !!isSunday,
 });
 
 const taperWeeks = [
@@ -195,10 +194,9 @@ export default async function handler(req, res) {
     weekOk++;
     const weekDbId = weekData.id;
 
-    const dayRows = days.map((day, idx) => ({
+    const dayRows = days.map((day) => ({
       ...day,
       week_id: weekDbId,
-      week_order: idx,
     }));
 
     const { error: daysErr } = await supabase
