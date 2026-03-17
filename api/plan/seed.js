@@ -173,6 +173,17 @@ export default async function handler(req, res) {
   }
   log.push(`✓ seeded ${BLOCKS.length} training_blocks`);
 
+  // Wipe all existing days so we can use plain insert (no unique constraint on training_days)
+  const { error: deleteErr } = await supabase
+    .from("training_days")
+    .delete()
+    .not("id", "is", null);
+
+  if (deleteErr) {
+    return res.status(500).json({ error: `Failed to clear training_days: ${deleteErr.message}` });
+  }
+  log.push("✓ cleared training_days");
+
   for (const week of ALL_WEEKS) {
     const { days, ...weekRow } = week;
     // Replace slug block_id with the actual UUID
@@ -201,7 +212,7 @@ export default async function handler(req, res) {
 
     const { error: daysErr } = await supabase
       .from("training_days")
-      .upsert(dayRows, { onConflict: "week_id,day_name" });
+      .insert(dayRows);
 
     if (daysErr) {
       const msg = `days for ${week.week_id}: ${daysErr.message}`;
