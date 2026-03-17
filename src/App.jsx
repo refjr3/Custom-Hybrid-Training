@@ -385,6 +385,8 @@ const AIChat = ({ whoopData, currentWeek, recentActivities, onPlanChange }) => {
 };
 
 const SessionModal = ({ name, dayData, sess, weekId, onClose, onSessSwitch, sundayChoice, setSundayChoice }) => {
+  // TRACE: dump full dayData received by SessionModal
+  console.log("[SessionModal] dayData:", JSON.stringify(dayData));
   if (!name && !dayData?.isSunday && !dayData?.isRaceDay) return null;
   const w = name ? WL[name] : null;
   const accent = name ? getAccent(name) : C.muted;
@@ -412,6 +414,8 @@ const SessionModal = ({ name, dayData, sess, weekId, onClose, onSessSwitch, sund
             ))}
           </div>
         )}
+        {/* TRACE: log banner condition values */}
+        {console.log("[SessionModal] banner check — ai_modified:", dayData?.ai_modified, "ai_modification_note:", dayData?.ai_modification_note)}
         {dayData?.ai_modified && dayData?.ai_modification_note && (
           <div style={{ padding:"14px 20px", background:"#FF770011", borderBottom:`1px solid #FF770033` }}>
             <div style={{ fontFamily:C.fm, fontSize:7, color:"#FF7700", letterSpacing:3, marginBottom:5 }}>⚡ AI ADJUSTMENT</div>
