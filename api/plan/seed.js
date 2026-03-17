@@ -158,16 +158,16 @@ export default async function handler(req, res) {
 
   // Seed blocks first so the FK constraint (training_weeks.block_id) is satisfied
   const BLOCKS = [
-    { id: blockUuids.taper,  label: "MIAMI TAPER" },
-    { id: blockUuids.phase1, label: "PHASE 1" },
-    { id: blockUuids.phase2, label: "PHASE 2" },
-    { id: blockUuids.phase3, label: "PHASE 3" },
-    { id: blockUuids.phase4, label: "PHASE 4" },
+    { block_id: blockUuids.taper,  label: "MIAMI TAPER" },
+    { block_id: blockUuids.phase1, label: "PHASE 1" },
+    { block_id: blockUuids.phase2, label: "PHASE 2" },
+    { block_id: blockUuids.phase3, label: "PHASE 3" },
+    { block_id: blockUuids.phase4, label: "PHASE 4" },
   ];
 
   const { error: blocksErr } = await supabase
     .from("training_blocks")
-    .upsert(BLOCKS, { onConflict: "id" });
+    .upsert(BLOCKS, { onConflict: "block_id" });
 
   if (blocksErr) {
     return res.status(500).json({ error: `Failed to seed blocks: ${blocksErr.message}` });
