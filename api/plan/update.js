@@ -50,14 +50,9 @@ export default async function handler(req, res) {
 
       console.log("[plan/update] received:", JSON.stringify({ type, week_id, day: normalizedDay, changes, description }));
 
-      // Resolve week db id — try slug match first, then direct UUID match
+      // Resolve week db id by UUID primary key
       let weekRow = null;
       {
-        const { data, error } = await supabase
-          .from("training_weeks").select("id").eq("week_id", week_id).single();
-        if (!error && data) weekRow = data;
-      }
-      if (!weekRow) {
         const { data, error } = await supabase
           .from("training_weeks").select("id").eq("id", week_id).single();
         if (!error && data) weekRow = data;
