@@ -31,21 +31,17 @@ export default async function handler(req, res) {
     daysByWeek[day.week_id].push(day);
   }
 
-  // Build block structure matching the frontend BLOCKS format
-  const blockOrder = ["taper", "phase1", "phase2", "phase3", "phase4"];
-  const blockLabels = {
-    taper: "MIAMI TAPER",
-    phase1: "PHASE 1",
-    phase2: "PHASE 2",
-    phase3: "PHASE 3",
-    phase4: "PHASE 4",
-  };
-
+  // Build block structure dynamically from whatever block_id values exist in DB.
+  // Order is preserved from the training_weeks query (ordered by block_id, week_order).
   const blockMap = {};
+  const blockOrder = []; // insertion-ordered list of distinct block_ids
   for (const week of weeks) {
     const blockId = week.block_id;
-    if (!blockMap[blockId]) blockMap[blockId] = [];
-    blockMap[blockId].push({
+    if (!blockMap[blockId]) {
+      blockMap[blockId] = { label: week.phase || blockId, weeks: [] };
+      blockOrder.push(blockId);
+    }
+    blockMap[blockId].weeks.push({
       id: week.id,
       label: week.label,
       dates: week.dates,
@@ -65,13 +61,11 @@ export default async function handler(req, res) {
     });
   }
 
-  const blocks = blockOrder
-    .filter((id) => blockMap[id])
-    .map((id) => ({
-      id,
-      label: blockLabels[id],
-      weeks: blockMap[id],
-    }));
+  const blocks = blockOrder.map((id) => ({
+    id,
+    label: blockMap[id].label,
+    weeks: blockMap[id].weeks,
+  }));
 
   // TRACE: log every WED day object being returned
   for (const block of blocks) {
