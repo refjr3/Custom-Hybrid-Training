@@ -1,3 +1,10 @@
+import { createClient } from "@supabase/supabase-js";
+
+const supabase = createClient(
+  process.env.SUPABASE_URL,
+  process.env.SUPABASE_SERVICE_KEY
+);
+
 export default async function handler(req, res) {
   if (req.method !== "POST") return res.status(405).json({ error: "Method not allowed" });
 
@@ -47,11 +54,44 @@ Rules for plan_change JSON:
 - Workout names in "am"/"pm" MUST exactly match one of the known workouts
 - If you don't have enough context to fill week_id or day, do NOT emit a plan_change block
 
-Keep responses concise. Talk like a coach, not a chatbot.`;
+RESPONSE RULES:
+- Lead with the direct answer. No preamble.
+- Keep responses under 150 words unless a detailed plan is explicitly requested.
+- Use markdown: **bold** for key terms, blank lines between sections.
+- Never dump everything you know — answer only what was asked.
+- Talk like a coach: direct, confident, action-oriented. Short sentences.`;
 
   try {
-    const contextMessage = `
-CURRENT WHOOP DATA:
+    // Fetch last 10 messages (5 pairs) for conversation history
+    let historyMessages = [];
+    try {
+      const { data } = await supabase
+        .from("ai_messages")
+        .select("role, content")
+        .order("created_at", { ascending: false })
+        .limit(10);
+      if (data && data.length > 0) {
+        // Reverse to chronological order, ensure strict user/assistant alternation
+        const reversed = data.reverse();
+        const validated = [];
+        let expectedRole = "user";
+        for (const m of reversed) {
+          if (m.role === expectedRole) {
+            validated.push(m);
+            expectedRole = expectedRole === "user" ? "assistant" : "user";
+          }
+        }
+        // Drop trailing user message with no assistant reply
+        if (validated.length > 0 && validated[validated.length - 1].role === "user") {
+          validated.pop();
+        }
+        historyMessages = validated;
+      }
+    } catch (e) {
+      // ai_messages table may not exist yet — proceed without history
+    }
+
+    const contextMessage = `CURRENT WHOOP DATA:
 - Recovery: ${whoopData?.recovery?.score ?? "N/A"}% (${whoopData?.recovery?.score >= 67 ? "GREEN" : whoopData?.recovery?.score >= 34 ? "YELLOW" : "RED"})
 - HRV: ${whoopData?.recovery?.hrv ?? "N/A"}ms | RHR: ${whoopData?.recovery?.rhr ?? "N/A"}bpm
 - Sleep: ${whoopData?.sleep?.score ?? "N/A"}% | Hours: ${whoopData?.sleep?.hours ?? "N/A"}h
@@ -60,6 +100,11 @@ CURRENT WHOOP DATA:
 CURRENT TRAINING WEEK: id=${currentWeek?.id ?? "N/A"} label=${currentWeek?.label ?? "N/A"} — ${currentWeek?.subtitle ?? ""}
 
 User message: ${message}`;
+
+    const messages = [
+      ...historyMessages.map(m => ({ role: m.role, content: m.content })),
+      { role: "user", content: contextMessage },
+    ];
 
     const response = await fetch("https://api.anthropic.com/v1/messages", {
       method: "POST",
@@ -72,7 +117,7 @@ User message: ${message}`;
         model: "claude-sonnet-4-6",
         max_tokens: 1024,
         system: SYSTEM_PROMPT,
-        messages: [{ role: "user", content: contextMessage }],
+        messages,
       }),
     });
 
@@ -95,6 +140,12 @@ User message: ${message}`;
         cleanText = fullText;
       }
     }
+
+    // Persist messages (fire-and-forget — don't block the response)
+    supabase.from("ai_messages").insert([
+      { role: "user", content: message },
+      { role: "assistant", content: cleanText },
+    ]).then(() => {}).catch(() => {});
 
     return res.status(200).json({
       message: cleanText,
