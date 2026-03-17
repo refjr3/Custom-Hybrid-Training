@@ -174,16 +174,24 @@ export default async function handler(req, res) {
   }
   log.push(`✓ seeded ${BLOCKS.length} training_blocks`);
 
-  // Wipe all existing days so we can use plain insert (no unique constraint on training_days)
-  const { error: deleteErr } = await supabase
-    .from("training_days")
-    .delete()
-    .not("id", "is", null);
+  // Count rows before wiping so the response can show before/after
+  const countTable = async (name) => {
+    const { count } = await supabase.from(name).select("*", { count: "exact", head: true });
+    return count ?? 0;
+  };
+  const before = {
+    training_blocks: await countTable("training_blocks"),
+    training_weeks:  await countTable("training_weeks"),
+    training_days:   await countTable("training_days"),
+  };
+  log.push(`before: blocks=${before.training_blocks} weeks=${before.training_weeks} days=${before.training_days}`);
 
-  if (deleteErr) {
-    return res.status(500).json({ error: `Failed to clear training_days: ${deleteErr.message}` });
+  // Wipe in FK order: days → weeks → blocks
+  for (const table of ["training_days", "training_weeks", "training_blocks"]) {
+    const { error: delErr } = await supabase.from(table).delete().not("id", "is", null);
+    if (delErr) return res.status(500).json({ error: `Failed to clear ${table}: ${delErr.message}` });
+    log.push(`✓ cleared ${table}`);
   }
-  log.push("✓ cleared training_days");
 
   for (const week of ALL_WEEKS) {
     const { days, ...weekRow } = week;
@@ -193,7 +201,7 @@ export default async function handler(req, res) {
     const { data: weekData, error: weekErr } = await supabase
       .from("training_weeks")
       .upsert(weekRow, { onConflict: "week_id" })
-      .select("week_id")
+      .select("id")
       .single();
 
     if (weekErr) {
@@ -204,7 +212,7 @@ export default async function handler(req, res) {
     }
 
     weekOk++;
-    const weekDbId = weekData.week_id;
+    const weekDbId = weekData.id;
 
     const dayRows = days.map((day) => ({
       ...day,
@@ -225,10 +233,18 @@ export default async function handler(req, res) {
     }
   }
 
+  const after = {
+    training_blocks: await countTable("training_blocks"),
+    training_weeks:  await countTable("training_weeks"),
+    training_days:   await countTable("training_days"),
+  };
+  log.push(`after:  blocks=${after.training_blocks} weeks=${after.training_weeks} days=${after.training_days}`);
+
   const summary = {
     success: errors.length === 0,
     weeks_seeded: weekOk,
     days_seeded: dayOk,
+    counts: after,
     errors,
     log,
   };
