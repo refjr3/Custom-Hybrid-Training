@@ -114,7 +114,7 @@ export default async function handler(req, res) {
         .from("training_days")
         .update(updatePayload)
         .eq("week_id", weekRow.id)
-        .eq("day", normalizedDay)
+        .eq("day_name", normalizedDay)
         .select();
 
       if (updateErr) {
