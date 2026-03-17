@@ -93,7 +93,7 @@ export default async function handler(req, res) {
 
       console.log("[plan/update] rows updated:", updated?.length ?? count, JSON.stringify(updated));
 
-      return res.status(200).json({ success: true, description });
+      return res.status(200).json({ success: true, description, updated });
     }
 
     return res.status(400).json({ error: `Unknown plan change type: ${type}` });
