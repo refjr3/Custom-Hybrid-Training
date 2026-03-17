@@ -541,7 +541,7 @@ export default function App() {
         return;
       }
       console.log("[plan/update] client success:", res.status, JSON.stringify(body));
-      fetchPlan();
+      await fetchPlan();
     } catch (e) {
       console.error("[plan/update] client exception:", e);
     }
