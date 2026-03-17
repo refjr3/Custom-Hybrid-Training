@@ -44,14 +44,15 @@ SUPPLEMENTS:
 
 When suggesting a plan change, include this EXACTLY at the end of your response (valid JSON only, no trailing text):
 <plan_change>
-{"type": "modify_day", "week_id": "<week_id from context>", "day": "<MON|TUE|WED|THU|FRI|SAT|SUN>", "description": "One-line summary of the change", "changes": {"am": "<new workout name or omit>", "pm": "<new workout name or omit>", "note": "<updated coaching note or omit>"}}
+{"type": "modify_day", "week_id": "<week_id from context>", "day": "<MON|TUE|WED|THU|FRI|SAT|SUN>", "description": "One-line summary of the change", "changes": {"am_session": "<new AM workout or omit>", "pm_session": "<new PM workout or omit>", "note": "<updated coaching note or omit>"}}
 </plan_change>
 
 Rules for plan_change JSON:
-- "week_id" MUST match the id sent in CURRENT TRAINING WEEK (e.g. "tw1", "tw2", "rw", "p1w1")
-- "day" MUST be one of: MON, TUE, WED, THU, FRI, SAT, SUN
+- "week_id" MUST be copied exactly from the id field in CURRENT TRAINING WEEK context (e.g. "tw1", "tw2", "rw", "p1w1") — do NOT invent or paraphrase it
+- "day" MUST be a 3-letter uppercase abbreviation: MON, TUE, WED, THU, FRI, SAT, or SUN — never a full day name
+- "changes" MUST use ONLY these exact keys: am_session, pm_session, note — no other keys are valid
 - Only include keys inside "changes" that are actually being modified
-- Workout names in "am"/"pm" MUST exactly match one of the known workouts
+- Workout names in "am_session"/"pm_session" MUST exactly match one of the known workouts
 - If you don't have enough context to fill week_id or day, do NOT emit a plan_change block
 
 RESPONSE RULES:

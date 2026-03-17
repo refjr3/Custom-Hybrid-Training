@@ -18,27 +18,41 @@ export default async function handler(req, res) {
         return res.status(400).json({ error: "modify_day requires week_id and day" });
       }
 
-      console.log("[plan/update] received:", JSON.stringify({ type, week_id, day, changes, description }));
+      // Normalize day: "Wednesday" → "WED", "wed" → "WED", "WED" → "WED"
+      const DAY_MAP = {
+        monday:"MON", tuesday:"TUE", wednesday:"WED",
+        thursday:"THU", friday:"FRI", saturday:"SAT", sunday:"SUN",
+      };
+      const normalizedDay = DAY_MAP[day.toLowerCase()] || day.toUpperCase().slice(0, 3);
 
-      // Resolve week db id from week_id string
-      const { data: weekRow, error: weekErr } = await supabase
-        .from("training_weeks")
-        .select("id")
-        .eq("week_id", week_id)
-        .single();
+      console.log("[plan/update] received:", JSON.stringify({ type, week_id, day: normalizedDay, changes, description }));
 
-      if (weekErr || !weekRow) {
-        console.log("[plan/update] week not found:", week_id, weekErr?.message);
+      // Resolve week db id — try slug match first, then direct UUID match
+      let weekRow = null;
+      {
+        const { data, error } = await supabase
+          .from("training_weeks").select("id").eq("week_id", week_id).single();
+        if (!error && data) weekRow = data;
+      }
+      if (!weekRow) {
+        const { data, error } = await supabase
+          .from("training_weeks").select("id").eq("id", week_id).single();
+        if (!error && data) weekRow = data;
+      }
+      if (!weekRow) {
+        console.log("[plan/update] week not found for value:", week_id);
         return res.status(404).json({ error: `Week not found: ${week_id}` });
       }
 
       console.log("[plan/update] resolved week db id:", weekRow.id);
 
       // Apply the field changes to the training_days row.
-      // AI coach emits frontend keys (am/pm/note); map them to DB columns.
+      // Accept both the exact DB column names and short legacy aliases.
       const fieldMap = {
-        am:         "am_session",
-        pm:         "pm_session",
+        am_session: "am_session",    // exact DB column — what the AI now sends
+        pm_session: "pm_session",    // exact DB column — what the AI now sends
+        am:         "am_session",    // legacy short alias
+        pm:         "pm_session",    // legacy short alias
         note:       "note",
         note2a:     "note",          // legacy alias
         is_race_day:"is_race_day",
@@ -63,13 +77,13 @@ export default async function handler(req, res) {
         return res.status(400).json({ error: "No valid fields to update" });
       }
 
-      console.log("[plan/update] updating training_days where week_id =", weekRow.id, "day =", day, "payload:", JSON.stringify(updatePayload));
+      console.log("[plan/update] updating training_days where week_id =", weekRow.id, "day =", normalizedDay, "payload:", JSON.stringify(updatePayload));
 
       const { data: updated, error: updateErr, count } = await supabase
         .from("training_days")
         .update(updatePayload)
         .eq("week_id", weekRow.id)
-        .eq("day", day)
+        .eq("day", normalizedDay)
         .select();
 
       if (updateErr) {
