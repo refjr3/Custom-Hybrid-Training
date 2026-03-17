@@ -12,6 +12,29 @@ export default async function handler(req, res) {
 
   if (!type) return res.status(400).json({ error: "Missing type" });
 
+  // Valid workout names — must match WL keys in App.jsx exactly
+  const VALID_WORKOUT_KEYS = new Set([
+    "FOR TIME — Ultimate HYROX",
+    "FOR TIME — Hyrox Full Runs Half Stations",
+    "FOR TIME — Hyrox Full Send",
+    "AMRAP 40 — Hyrox Grind",
+    "AMRAP 60 — Ski Row Burpee",
+    "EMOM 60 — Hyrox Stations",
+    "EMOM 40 — Full Hyrox",
+    "INTERVAL — 6 Rounds Run Ski Wall Balls",
+    "STRENGTH A — Full Body Power",
+    "STRENGTH B — Full Body Pull",
+    "STRENGTH C — Full Body Hybrid",
+    "THRESHOLD — 10×2 Min",
+    "TEMPO — 20 Min Sustained",
+    "VO2 MAX — Short Intervals",
+    "ZONE 2 — Easy Aerobic",
+    "LONG RUN — Base Builder",
+    "SUNDAY — Mobility Protocol",
+    "SUNDAY — Plyo & Core",
+    "RECOVERY — Active Reset",
+  ]);
+
   try {
     if (type === "modify_day") {
       if (!week_id || !day) {
@@ -63,6 +86,14 @@ export default async function handler(req, res) {
       for (const [key, value] of Object.entries(changes || {})) {
         const col = fieldMap[key];
         if (col) updatePayload[col] = value;
+      }
+
+      // Reject any am_session/pm_session that isn't a known WL key
+      for (const field of ["am_session", "pm_session"]) {
+        if (field in updatePayload && updatePayload[field] !== null && !VALID_WORKOUT_KEYS.has(updatePayload[field])) {
+          console.log(`[plan/update] rejected invalid ${field}:`, updatePayload[field]);
+          return res.status(400).json({ error: `Invalid ${field} value. Must be an exact workout name from the known list.`, rejected: updatePayload[field] });
+        }
       }
 
       // ai_modification_note from top-level description if not in changes

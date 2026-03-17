@@ -58,6 +58,8 @@ export default async function handler(req, res) {
         note2a: d.note,
         isRaceDay: d.is_race_day,
         isSunday: d.is_sunday,
+        ai_modified: d.ai_modified || false,
+        ai_modification_note: d.ai_modification_note || null,
       })),
     });
   }
