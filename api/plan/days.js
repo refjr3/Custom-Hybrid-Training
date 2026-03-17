@@ -20,8 +20,7 @@ export default async function handler(req, res) {
   console.log("[plan/days] raw weeks from DB:", JSON.stringify((weeks || []).map(w => ({ id: w.id, block_id: w.block_id, label: w.label }))));
   const { data: days, error: daysErr } = await supabase
     .from("training_days")
-    .select("*")
-    .order("sort_order");
+    .select("*");
 
   if (daysErr) return res.status(500).json({ error: daysErr.message });
 
