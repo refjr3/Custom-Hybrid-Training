@@ -137,6 +137,17 @@ const ALL_WEEKS = [
 ];
 
 // ---------------------------------------------------------------------------
+// Blocks — must be seeded before weeks (FK: training_weeks.block_id → training_blocks.id)
+// ---------------------------------------------------------------------------
+const BLOCKS = [
+  { id: "taper",  label: "MIAMI TAPER" },
+  { id: "phase1", label: "PHASE 1" },
+  { id: "phase2", label: "PHASE 2" },
+  { id: "phase3", label: "PHASE 3" },
+  { id: "phase4", label: "PHASE 4" },
+];
+
+// ---------------------------------------------------------------------------
 // Handler
 // ---------------------------------------------------------------------------
 export default async function handler(req, res) {
@@ -146,6 +157,16 @@ export default async function handler(req, res) {
 
   const log = [];
   let weekOk = 0, dayOk = 0, errors = [];
+
+  // Seed blocks first so the FK constraint is satisfied
+  const { error: blocksErr } = await supabase
+    .from("training_blocks")
+    .upsert(BLOCKS, { onConflict: "id" });
+
+  if (blocksErr) {
+    return res.status(500).json({ error: `Failed to seed blocks: ${blocksErr.message}` });
+  }
+  log.push(`✓ seeded ${BLOCKS.length} training_blocks`);
 
   for (const week of ALL_WEEKS) {
     const { days, ...weekRow } = week;
