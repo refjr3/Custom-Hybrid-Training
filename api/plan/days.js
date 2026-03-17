@@ -12,7 +12,7 @@ export default async function handler(req, res) {
     .from("training_weeks")
     .select("*")
     .order("block_id")
-    .order("sort_order");
+    .order("week_order");
 
   if (weeksErr) return res.status(500).json({ error: weeksErr.message });
 
