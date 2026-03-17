@@ -192,7 +192,7 @@ export default async function handler(req, res) {
     const { data: weekData, error: weekErr } = await supabase
       .from("training_weeks")
       .upsert(weekRow, { onConflict: "week_id" })
-      .select("id")
+      .select("week_id")
       .single();
 
     if (weekErr) {
@@ -203,7 +203,7 @@ export default async function handler(req, res) {
     }
 
     weekOk++;
-    const weekDbId = weekData.id;
+    const weekDbId = weekData.week_id;
 
     const dayRows = days.map((day) => ({
       ...day,
