@@ -345,6 +345,24 @@ const AIChat = ({ whoopData, currentWeek, recentActivities, onPlanChange }) => {
           placeholder="Ask your coach anything..."
           style={{ flex:1, background:C.card, border:`1px solid ${C.border}`, borderRadius:12, padding:"12px 16px", color:C.text, fontFamily:C.fs, fontSize:14, outline:"none", resize:"none", overflow:"hidden", lineHeight:"1.5", maxHeight:120 }}
         />
+        <button
+          onClick={() => {
+            const el = textareaRef.current;
+            const pos = el ? el.selectionStart : input.length;
+            const next = input.slice(0, pos) + "\n" + input.slice(pos);
+            setInput(next);
+            requestAnimationFrame(() => {
+              if (el) {
+                el.style.height = "auto";
+                el.style.height = Math.min(el.scrollHeight, 120) + "px";
+                el.selectionStart = el.selectionEnd = pos + 1;
+                el.focus();
+              }
+            });
+          }}
+          style={{ width:36, height:36, background:C.card2, border:`1px solid ${C.border}`, borderRadius:10, cursor:"pointer", color:C.muted, fontSize:14, flexShrink:0, display:"flex", alignItems:"center", justifyContent:"center" }}
+          title="New line"
+        >↵</button>
         <button onClick={sendMessage} disabled={loading || !input.trim()} style={{ width:48, height:48, background: input.trim() ? C.green : C.card, border:"none", borderRadius:12, cursor: input.trim() ? "pointer" : "default", color: input.trim() ? "#000" : C.muted, fontSize:18, flexShrink:0 }}>↑</button>
       </div>
     </div>
