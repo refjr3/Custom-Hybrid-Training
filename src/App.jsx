@@ -412,6 +412,12 @@ const SessionModal = ({ name, dayData, sess, weekId, onClose, onSessSwitch, sund
             ))}
           </div>
         )}
+        {dayData?.ai_modified && dayData?.ai_modification_note && (
+          <div style={{ padding:"14px 20px", background:"#FF770011", borderBottom:`1px solid #FF770033` }}>
+            <div style={{ fontFamily:C.fm, fontSize:7, color:"#FF7700", letterSpacing:3, marginBottom:5 }}>⚡ AI ADJUSTMENT</div>
+            <div style={{ fontFamily:C.fs, fontSize:13, color:C.text, lineHeight:1.6 }}>{dayData.ai_modification_note}</div>
+          </div>
+        )}
         {dayData?.isSunday && (
           <div style={{ padding:"16px 20px", borderBottom:`1px solid ${C.border}` }}>
             <div style={{ fontFamily:C.fm, fontSize:8, color:C.muted, letterSpacing:3, marginBottom:12 }}>CHOOSE YOUR SESSION</div>
