@@ -8,8 +8,8 @@ const supabase = createClient(
 export default async function handler(req, res) {
   if (req.method !== "POST") return res.status(405).json({ error: "Method not allowed" });
 
-  const { message, whoopData, currentWeek, recentActivities } = req.body;
-  if (!message) return res.status(400).json({ error: "No message provided" });
+  const { message, whoopData, currentWeek, recentActivities, attachment } = req.body;
+  if (!message && !attachment) return res.status(400).json({ error: "No message or attachment provided" });
 
   const SYSTEM_PROMPT = `You are Rafael Fagundo's Elite Hybrid Performance Coach. You have complete knowledge of his training, health, and goals.
 
@@ -91,7 +91,7 @@ RESPONSE RULES:
       // ai_messages table may not exist yet — proceed without history
     }
 
-    const contextMessage = `CURRENT WHOOP DATA:
+    const contextText = `CURRENT WHOOP DATA:
 - Recovery: ${whoopData?.recovery?.score ?? "N/A"}% (${whoopData?.recovery?.score >= 67 ? "GREEN" : whoopData?.recovery?.score >= 34 ? "YELLOW" : "RED"})
 - HRV: ${whoopData?.recovery?.hrv ?? "N/A"}ms | RHR: ${whoopData?.recovery?.rhr ?? "N/A"}bpm
 - Sleep: ${whoopData?.sleep?.score ?? "N/A"}% | Hours: ${whoopData?.sleep?.hours ?? "N/A"}h
@@ -99,11 +99,33 @@ RESPONSE RULES:
 
 CURRENT TRAINING WEEK: id=${currentWeek?.id ?? "N/A"} label=${currentWeek?.label ?? "N/A"} — ${currentWeek?.subtitle ?? ""}
 
-User message: ${message}`;
+User message: ${message || "(see attached file)"}`;
+
+    // Build content for the current user message — include attachment if present
+    let userContent;
+    if (attachment?.data && attachment?.media_type) {
+      const isImage = attachment.media_type.startsWith("image/");
+      const isPdf = attachment.media_type === "application/pdf";
+      if (isImage) {
+        userContent = [
+          { type: "image", source: { type: "base64", media_type: attachment.media_type, data: attachment.data } },
+          { type: "text", text: contextText },
+        ];
+      } else if (isPdf) {
+        userContent = [
+          { type: "document", source: { type: "base64", media_type: "application/pdf", data: attachment.data } },
+          { type: "text", text: contextText },
+        ];
+      } else {
+        userContent = contextText;
+      }
+    } else {
+      userContent = contextText;
+    }
 
     const messages = [
       ...historyMessages.map(m => ({ role: m.role, content: m.content })),
-      { role: "user", content: contextMessage },
+      { role: "user", content: userContent },
     ];
 
     const response = await fetch("https://api.anthropic.com/v1/messages", {
@@ -115,7 +137,7 @@ User message: ${message}`;
       },
       body: JSON.stringify({
         model: "claude-sonnet-4-6",
-        max_tokens: 1024,
+        max_tokens: 2048,
         system: SYSTEM_PROMPT,
         messages,
       }),
@@ -143,7 +165,7 @@ User message: ${message}`;
 
     // Persist messages (fire-and-forget — don't block the response)
     supabase.from("ai_messages").insert([
-      { role: "user", content: message },
+      { role: "user", content: message || `[attachment: ${attachment?.name}]` },
       { role: "assistant", content: cleanText },
     ]).then(() => {}).catch(() => {});
 
