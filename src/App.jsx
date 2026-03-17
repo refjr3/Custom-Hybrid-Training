@@ -225,7 +225,7 @@ const AIChat = ({ whoopData, currentWeek, recentActivities, onPlanChange }) => {
         body: JSON.stringify({
           message: userMsg,
           whoopData,
-          currentWeek: { label: currentWeek?.label, subtitle: currentWeek?.subtitle },
+          currentWeek: { id: currentWeek?.id, label: currentWeek?.label, subtitle: currentWeek?.subtitle },
           recentActivities: recentActivities?.slice(0,5),
         }),
       });

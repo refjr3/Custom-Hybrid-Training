@@ -6,7 +6,8 @@
     "dev": "vite",
     "build": "vite build",
     "preview": "vite preview",
-    "migrate": "node scripts/migrate-training-plan.js"
+    "migrate": "node scripts/migrate-training-plan.js",
+    "seed": "node scripts/seed-plan.js"
   },
   "dependencies": {
   "react": "^18.2.0",

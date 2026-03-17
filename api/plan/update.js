@@ -29,16 +29,31 @@ export default async function handler(req, res) {
         return res.status(404).json({ error: `Week not found: ${week_id}` });
       }
 
-      // Apply the field changes to the training_days row
-      const allowedFields = ["am", "pm", "note2a", "is_race_day", "is_sunday"];
-      const updatePayload = {};
+      // Apply the field changes to the training_days row.
+      // AI coach emits frontend keys (am/pm/note); map them to DB columns.
+      const fieldMap = {
+        am:         "am_session",
+        pm:         "pm_session",
+        note:       "note",
+        note2a:     "note",          // legacy alias
+        is_race_day:"is_race_day",
+        is_sunday:  "is_sunday",
+        ai_modification_note: "ai_modification_note",
+      };
+      const updatePayload = { ai_modified: true };
       for (const [key, value] of Object.entries(changes || {})) {
-        if (allowedFields.includes(key)) {
-          updatePayload[key] = value;
-        }
+        const col = fieldMap[key];
+        if (col) updatePayload[col] = value;
       }
 
-      if (Object.keys(updatePayload).length === 0) {
+      // ai_modification_note from top-level description if not in changes
+      if (description && !updatePayload.ai_modification_note) {
+        updatePayload.ai_modification_note = description;
+      }
+
+      const mutableFields = ["am_session", "pm_session", "note", "is_race_day", "ai_modification_note", "ai_modified"];
+      const hasChange = mutableFields.some((f) => f in updatePayload && f !== "ai_modified" && f !== "ai_modification_note");
+      if (!hasChange) {
         return res.status(400).json({ error: "No valid fields to update" });
       }
 

@@ -53,9 +53,9 @@ export default async function handler(req, res) {
       days: (daysByWeek[week.id] || []).map((d) => ({
         day: d.day,
         date: d.date,
-        am: d.am,
-        pm: d.pm,
-        note2a: d.note2a,
+        am: d.am_session,
+        pm: d.pm_session,
+        note2a: d.note,
         isRaceDay: d.is_race_day,
         isSunday: d.is_sunday,
       })),
