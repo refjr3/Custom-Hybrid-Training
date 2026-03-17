@@ -385,8 +385,6 @@ const AIChat = ({ whoopData, currentWeek, recentActivities, onPlanChange }) => {
 };
 
 const SessionModal = ({ name, dayData, sess, weekId, onClose, onSessSwitch, sundayChoice, setSundayChoice }) => {
-  // TRACE: dump full dayData received by SessionModal
-  console.log("[SessionModal] dayData:", JSON.stringify(dayData));
   if (!name && !dayData?.isSunday && !dayData?.isRaceDay) return null;
   const w = name ? WL[name] : null;
   const accent = name ? getAccent(name) : C.muted;
@@ -414,8 +412,6 @@ const SessionModal = ({ name, dayData, sess, weekId, onClose, onSessSwitch, sund
             ))}
           </div>
         )}
-        {/* TRACE: log banner condition values */}
-        {console.log("[SessionModal] banner check — ai_modified:", dayData?.ai_modified, "ai_modification_note:", dayData?.ai_modification_note)}
         {dayData?.ai_modified && dayData?.ai_modification_note && (
           <div style={{ padding:"14px 20px", background:"#FF770011", borderBottom:`1px solid #FF770033` }}>
             <div style={{ fontFamily:C.fm, fontSize:7, color:"#FF7700", letterSpacing:3, marginBottom:5 }}>⚡ AI ADJUSTMENT</div>
@@ -466,6 +462,21 @@ const SessionModal = ({ name, dayData, sess, weekId, onClose, onSessSwitch, sund
             </>
           ) : null}
         </div>
+        {/* DEBUG PANEL */}
+        <div style={{ margin:"0 20px 28px", background:"#0a0a0a", border:"1px solid #333", borderRadius:10, padding:"12px 14px" }}>
+          <div style={{ fontFamily:C.fm, fontSize:7, color:"#FF7700", letterSpacing:3, marginBottom:8 }}>⚙ DEBUG · DAYDATA</div>
+          {[
+            ["week_id (prop)", weekId],
+            ["am (→ am_session)", dayData?.am],
+            ["ai_modified", String(dayData?.ai_modified)],
+            ["ai_modification_note", dayData?.ai_modification_note || "(null)"],
+          ].map(([label, val]) => (
+            <div key={label} style={{ display:"flex", gap:8, marginBottom:4, alignItems:"flex-start" }}>
+              <span style={{ fontFamily:C.fm, fontSize:7, color:"#555", letterSpacing:1, minWidth:160, flexShrink:0 }}>{label}</span>
+              <span style={{ fontFamily:C.fm, fontSize:7, color:"#ccc", wordBreak:"break-all" }}>{val ?? "(undefined)"}</span>
+            </div>
+          ))}
+        </div>
       </div>
     </div>
   );
@@ -485,6 +496,7 @@ export default function App() {
   const [biomarkers, setBiomarkers] = useState([]);
   const [planBlocks, setPlanBlocks] = useState(BLOCKS);
   const [planLoading, setPlanLoading] = useState(true);
+  const [lastUpdateResult, setLastUpdateResult] = useState(null);
 
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
@@ -538,7 +550,7 @@ export default function App() {
   };
 
   const handlePlanChange = async (planChange) => {
-    console.log("[plan/update] client sending:", JSON.stringify(planChange));
+    setLastUpdateResult({ status: "pending", sentPayload: planChange });
     try {
       const res = await fetch("/api/plan/update", {
         method: "POST",
@@ -547,13 +559,13 @@ export default function App() {
       });
       const body = await res.json().catch(() => ({}));
       if (!res.ok) {
-        console.error("[plan/update] client error:", res.status, JSON.stringify(body));
+        setLastUpdateResult({ status: "error", httpStatus: res.status, sentPayload: planChange, response: body });
         return;
       }
-      console.log("[plan/update] client success:", res.status, JSON.stringify(body));
+      setLastUpdateResult({ status: "ok", httpStatus: res.status, sentPayload: planChange, rowsUpdated: body.updated?.length ?? 0, response: body });
       await fetchPlan();
     } catch (e) {
-      console.error("[plan/update] client exception:", e);
+      setLastUpdateResult({ status: "exception", error: e.message, sentPayload: planChange });
     }
   };
 
@@ -781,6 +793,26 @@ export default function App() {
               </div>
             ))}
           </div>
+          {/* DEBUG PANEL — last /api/plan/update result */}
+          {lastUpdateResult && (
+            <div style={{ margin:"0 20px 24px", background:"#0a0a0a", border:`1px solid ${lastUpdateResult.status === "ok" ? "#00D4A022" : "#FF3C0044"}`, borderRadius:10, padding:"12px 14px" }}>
+              <div style={{ fontFamily:C.fm, fontSize:7, color:"#FF7700", letterSpacing:3, marginBottom:8 }}>⚙ DEBUG · LAST UPDATE RESULT</div>
+              {[
+                ["status", lastUpdateResult.status],
+                ["http", lastUpdateResult.httpStatus ?? "—"],
+                ["rows updated", lastUpdateResult.rowsUpdated ?? "—"],
+                ["sent week_id", lastUpdateResult.sentPayload?.week_id],
+                ["sent day", lastUpdateResult.sentPayload?.day],
+                ["sent changes", JSON.stringify(lastUpdateResult.sentPayload?.changes)],
+                ["server error", lastUpdateResult.response?.error ?? lastUpdateResult.error ?? "(none)"],
+              ].map(([label, val]) => (
+                <div key={label} style={{ display:"flex", gap:8, marginBottom:4, alignItems:"flex-start" }}>
+                  <span style={{ fontFamily:C.fm, fontSize:7, color:"#555", letterSpacing:1, minWidth:120, flexShrink:0 }}>{label}</span>
+                  <span style={{ fontFamily:C.fm, fontSize:7, color: label === "status" && lastUpdateResult.status === "ok" ? C.green : label === "rows updated" && lastUpdateResult.rowsUpdated === 0 ? C.red : "#ccc", wordBreak:"break-all" }}>{val ?? "(undefined)"}</span>
+                </div>
+              ))}
+            </div>
+          )}
         </div>
       )}
 
