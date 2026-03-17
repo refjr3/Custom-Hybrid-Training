@@ -469,11 +469,16 @@ export default function App() {
 
   const handlePlanChange = async (planChange) => {
     try {
-      await fetch("/api/plan/update", {
+      const res = await fetch("/api/plan/update", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(planChange),
       });
+      if (!res.ok) {
+        const body = await res.json().catch(() => ({}));
+        console.error("Plan update failed:", res.status, body);
+        return;
+      }
       fetchPlan();
     } catch (e) {
       console.error("Plan update failed:", e);
