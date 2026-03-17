@@ -16,6 +16,8 @@ export default async function handler(req, res) {
 
   if (weeksErr) return res.status(500).json({ error: weeksErr.message });
 
+  // TRACE: log raw week rows to expose actual id and block_id values
+  console.log("[plan/days] raw weeks from DB:", JSON.stringify((weeks || []).map(w => ({ id: w.id, block_id: w.block_id, label: w.label }))));
   const { data: days, error: daysErr } = await supabase
     .from("training_days")
     .select("*")

@@ -497,6 +497,7 @@ export default function App() {
   const [planBlocks, setPlanBlocks] = useState(BLOCKS);
   const [planLoading, setPlanLoading] = useState(true);
   const [lastUpdateResult, setLastUpdateResult] = useState(null);
+  const [planDebug, setPlanDebug] = useState(null);
 
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
@@ -536,14 +537,26 @@ export default function App() {
   const fetchPlan = async () => {
     try {
       const res = await fetch("/api/plan/days");
-      if (res.ok) {
-        const data = await res.json();
-        if (data.blocks && data.blocks.length > 0) {
-          setPlanBlocks(data.blocks);
-        }
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        setPlanDebug({ status: "http-error", httpStatus: res.status, error: data.error });
+        return;
+      }
+      const blockCount = data.blocks?.length ?? 0;
+      const firstWeek = data.blocks?.[0]?.weeks?.[0];
+      setPlanDebug({
+        status: "ok",
+        httpStatus: res.status,
+        blockCount,
+        firstWeekId: firstWeek?.id ?? "(none)",
+        firstWeekLabel: firstWeek?.label ?? "(none)",
+        usingFallback: blockCount === 0,
+      });
+      if (blockCount > 0) {
+        setPlanBlocks(data.blocks);
       }
     } catch (e) {
-      // keep hardcoded fallback
+      setPlanDebug({ status: "exception", error: e.message, usingFallback: true });
     } finally {
       setPlanLoading(false);
     }
@@ -793,6 +806,26 @@ export default function App() {
               </div>
             ))}
           </div>
+          {/* DEBUG PANEL — fetchPlan result */}
+          {planDebug && (
+            <div style={{ margin:"0 20px 12px", background:"#0a0a0a", border:`1px solid ${planDebug.usingFallback ? "#FF3C0044" : "#00D4A022"}`, borderRadius:10, padding:"12px 14px" }}>
+              <div style={{ fontFamily:C.fm, fontSize:7, color:"#FF7700", letterSpacing:3, marginBottom:8 }}>⚙ DEBUG · FETCH PLAN</div>
+              {[
+                ["status", planDebug.status],
+                ["http", planDebug.httpStatus ?? "—"],
+                ["blocks returned", planDebug.blockCount ?? "—"],
+                ["first week id", planDebug.firstWeekId],
+                ["first week label", planDebug.firstWeekLabel],
+                ["using fallback?", String(planDebug.usingFallback ?? false)],
+                ["error", planDebug.error ?? "(none)"],
+              ].map(([label, val]) => (
+                <div key={label} style={{ display:"flex", gap:8, marginBottom:4, alignItems:"flex-start" }}>
+                  <span style={{ fontFamily:C.fm, fontSize:7, color:"#555", letterSpacing:1, minWidth:140, flexShrink:0 }}>{label}</span>
+                  <span style={{ fontFamily:C.fm, fontSize:7, color: label === "using fallback?" && val === "true" ? C.red : label === "first week id" ? C.green : "#ccc", wordBreak:"break-all" }}>{val ?? "(undefined)"}</span>
+                </div>
+              ))}
+            </div>
+          )}
           {/* DEBUG PANEL — last /api/plan/update result */}
           {lastUpdateResult && (
             <div style={{ margin:"0 20px 24px", background:"#0a0a0a", border:`1px solid ${lastUpdateResult.status === "ok" ? "#00D4A022" : "#FF3C0044"}`, borderRadius:10, padding:"12px 14px" }}>
