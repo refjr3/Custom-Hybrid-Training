@@ -91,7 +91,14 @@ RESPONSE RULES:
       // ai_messages table may not exist yet — proceed without history
     }
 
-    const contextText = `CURRENT WHOOP DATA:
+    const now = new Date();
+    const dayNames = ["Sunday","Monday","Tuesday","Wednesday","Thursday","Friday","Saturday"];
+    const monthNames = ["January","February","March","April","May","June","July","August","September","October","November","December"];
+    const todayStr = `${dayNames[now.getDay()]}, ${monthNames[now.getMonth()]} ${now.getDate()} ${now.getFullYear()}`;
+
+    const contextText = `TODAY: ${todayStr}
+
+CURRENT WHOOP DATA:
 - Recovery: ${whoopData?.recovery?.score ?? "N/A"}% (${whoopData?.recovery?.score >= 67 ? "GREEN" : whoopData?.recovery?.score >= 34 ? "YELLOW" : "RED"})
 - HRV: ${whoopData?.recovery?.hrv ?? "N/A"}ms | RHR: ${whoopData?.recovery?.rhr ?? "N/A"}bpm
 - Sleep: ${whoopData?.sleep?.score ?? "N/A"}% | Hours: ${whoopData?.sleep?.hours ?? "N/A"}h
