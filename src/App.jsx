@@ -528,20 +528,22 @@ export default function App() {
   };
 
   const handlePlanChange = async (planChange) => {
+    console.log("[plan/update] client sending:", JSON.stringify(planChange));
     try {
       const res = await fetch("/api/plan/update", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(planChange),
       });
+      const body = await res.json().catch(() => ({}));
       if (!res.ok) {
-        const body = await res.json().catch(() => ({}));
-        console.error("Plan update failed:", res.status, body);
+        console.error("[plan/update] client error:", res.status, JSON.stringify(body));
         return;
       }
+      console.log("[plan/update] client success:", res.status, JSON.stringify(body));
       fetchPlan();
     } catch (e) {
-      console.error("Plan update failed:", e);
+      console.error("[plan/update] client exception:", e);
     }
   };
 
