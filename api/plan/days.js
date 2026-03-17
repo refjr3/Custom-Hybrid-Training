@@ -45,7 +45,7 @@ export default async function handler(req, res) {
     const blockId = week.block_id;
     if (!blockMap[blockId]) blockMap[blockId] = [];
     blockMap[blockId].push({
-      id: week.week_id,
+      id: week.id,
       label: week.label,
       dates: week.dates,
       phase: week.phase,

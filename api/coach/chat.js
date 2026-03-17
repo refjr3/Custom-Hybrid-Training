@@ -48,7 +48,7 @@ When suggesting a plan change, include this EXACTLY at the end of your response 
 </plan_change>
 
 Rules for plan_change JSON:
-- "week_id" MUST be copied exactly from the id field in CURRENT TRAINING WEEK context (e.g. "tw1", "tw2", "rw", "p1w1") — do NOT invent or paraphrase it
+- "week_id" MUST be copied exactly from the id field in CURRENT TRAINING WEEK context — it is a UUID like "a1b2c3d4-..." — do NOT invent or paraphrase it
 - "day" MUST be a 3-letter uppercase abbreviation: MON, TUE, WED, THU, FRI, SAT, or SUN — never a full day name
 - "changes" MUST use ONLY these exact keys: am_session, pm_session, note — no other keys are valid
 - CRITICAL — am_session and pm_session rules:
