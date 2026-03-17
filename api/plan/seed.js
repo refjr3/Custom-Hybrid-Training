@@ -13,9 +13,9 @@ const supabase = createClient(
 // ---------------------------------------------------------------------------
 // Training data — mirrors hardcoded BLOCKS in src/App.jsx
 // ---------------------------------------------------------------------------
-const d = (day, date, am_session, pm_session, note, isRaceDay, isSunday) => ({
+const d = (day, date_label, am_session, pm_session, note, isRaceDay, isSunday) => ({
   day,
-  date,
+  date_label,
   am_session: am_session || null,
   pm_session: pm_session || null,
   note:        note        || null,
