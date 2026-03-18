@@ -64,13 +64,10 @@ export default async function handler(req, res) {
       blockMap[blockId] = { label: week.phase || blockId, weeks: [] };
       blockOrder.push(blockId);
     }
-    blockMap[blockId].weeks.push({
-      id: week.id,
-      label: week.label,
-      dates: week.dates,
-      phase: week.phase,
-      subtitle: week.subtitle,
-      days: (daysByWeek[week.week_id] || []).map((d) => ({
+    const DAY_ORDER = { MON: 0, TUE: 1, WED: 2, THU: 3, FRI: 4, SAT: 5, SUN: 6 };
+    const weekDays = (daysByWeek[week.week_id] || [])
+      .sort((a, b) => (DAY_ORDER[a.day_name] ?? 99) - (DAY_ORDER[b.day_name] ?? 99))
+      .map((d) => ({
         day: d.day_name,
         date: d.date_label,
         am: d.am_session,
@@ -80,7 +77,14 @@ export default async function handler(req, res) {
         isSunday: d.is_sunday,
         ai_modified: d.ai_modified || false,
         ai_modification_note: d.ai_modification_note || null,
-      })),
+      }));
+    blockMap[blockId].weeks.push({
+      id: week.id,
+      label: week.label,
+      dates: week.dates,
+      phase: week.phase,
+      subtitle: week.subtitle,
+      days: weekDays,
     });
   }
 
