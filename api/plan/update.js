@@ -8,6 +8,14 @@ const supabase = createClient(
 export default async function handler(req, res) {
   if (req.method !== "POST") return res.status(405).json({ error: "Method not allowed" });
 
+  // Verify the user's JWT so updates are scoped to their own rows.
+  const token = req.headers.authorization?.replace("Bearer ", "");
+  if (!token) return res.status(401).json({ error: "Unauthorized" });
+
+  const { data: { user }, error: authErr } = await supabase.auth.getUser(token);
+  if (authErr || !user) return res.status(401).json({ error: "Invalid token" });
+  const userId = user.id;
+
   const { type, week_id, day, changes, description } = req.body;
 
   if (!type) return res.status(400).json({ error: "Missing type" });
@@ -117,6 +125,7 @@ export default async function handler(req, res) {
         .update(updatePayload)
         .eq("week_id", weekRow.week_id)
         .eq("day_name", normalizedDay)
+        .or(`user_id.eq.${userId},user_id.is.null`)
         .select();
 
       if (updateErr) {

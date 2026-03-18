@@ -554,7 +554,10 @@ export default function App() {
 
   const fetchPlan = async () => {
     try {
-      const res = await fetch("/api/plan/days");
+      const token = session?.access_token;
+      const res = await fetch("/api/plan/days", {
+        headers: token ? { "Authorization": `Bearer ${token}` } : {},
+      });
       const data = await res.json().catch(() => ({}));
       const hasDays = data.blocks?.some(b => b.weeks?.some(w => w.days?.length > 0));
       if (res.ok && hasDays) {
@@ -569,9 +572,13 @@ export default function App() {
 
   const handlePlanChange = async (planChange) => {
     try {
+      const token = session?.access_token;
       const res = await fetch("/api/plan/update", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: {
+          "Content-Type": "application/json",
+          ...(token ? { "Authorization": `Bearer ${token}` } : {}),
+        },
         body: JSON.stringify(planChange),
       });
       if (!res.ok) return;
