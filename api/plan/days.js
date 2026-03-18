@@ -20,7 +20,7 @@ export default async function handler(req, res) {
   const { data: weeks, error: weeksErr } = await supabase
     .from("training_weeks")
     .select("*")
-    .or(`user_id.eq.${userId},user_id.is.null`)
+    .eq("user_id", userId)
     .order("block_id")
     .order("week_order");
 
@@ -29,7 +29,7 @@ export default async function handler(req, res) {
   const { data: days, error: daysErr } = await supabase
     .from("training_days")
     .select("*")
-    .or(`user_id.eq.${userId},user_id.is.null`);
+    .eq("user_id", userId);
 
   if (daysErr) return res.status(500).json({ error: daysErr.message });
 
