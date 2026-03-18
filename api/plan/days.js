@@ -16,8 +16,6 @@ export default async function handler(req, res) {
 
   if (weeksErr) return res.status(500).json({ error: weeksErr.message });
 
-  // TRACE: log raw week rows to expose actual id and block_id values
-  console.log("[plan/days] raw weeks from DB:", JSON.stringify((weeks || []).map(w => ({ id: w.id, block_id: w.block_id, label: w.label }))));
   const { data: days, error: daysErr } = await supabase
     .from("training_days")
     .select("*");
@@ -31,10 +29,9 @@ export default async function handler(req, res) {
     daysByWeek[day.week_id].push(day);
   }
 
-  // Build block structure dynamically from whatever block_id values exist in DB.
-  // Order is preserved from the training_weeks query (ordered by block_id, week_order).
+  // Build block structure dynamically from whatever block_id values exist in DB
   const blockMap = {};
-  const blockOrder = []; // insertion-ordered list of distinct block_ids
+  const blockOrder = [];
   for (const week of weeks) {
     const blockId = week.block_id;
     if (!blockMap[blockId]) {
@@ -67,13 +64,13 @@ export default async function handler(req, res) {
     weeks: blockMap[id].weeks,
   }));
 
-  // TRACE: log every WED day object being returned
-  for (const block of blocks) {
-    for (const week of block.weeks) {
-      const wed = week.days.find(d => d.day === "WED");
-      if (wed) console.log("[plan/days] WED object week", week.id, JSON.stringify(wed));
-    }
-  }
+  // Sort blocks into the correct display order regardless of UUID ordering
+  const BLOCK_LABEL_ORDER = ["MIAMI TAPER", "PHASE 1", "PHASE 2", "PHASE 3", "PHASE 4"];
+  blocks.sort((a, b) => {
+    const ai = BLOCK_LABEL_ORDER.indexOf(a.label);
+    const bi = BLOCK_LABEL_ORDER.indexOf(b.label);
+    return (ai === -1 ? 99 : ai) - (bi === -1 ? 99 : bi);
+  });
 
   return res.status(200).json({ blocks });
 }
