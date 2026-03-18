@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 
 const C = {
   bg:"#000000", card:"#1a1a1a", card2:"#222222",
@@ -9,202 +9,325 @@ const C = {
   fs:"'Inter',-apple-system,sans-serif",
 };
 
-const input = {
+const inputStyle = {
   padding:"14px 16px", background:C.card, border:`1px solid ${C.border}`,
   borderRadius:10, color:C.text, fontFamily:C.fs, fontSize:15, outline:"none",
   width:"100%", boxSizing:"border-box",
 };
 
-const RACE_GOALS = [
-  { id:"hyrox",        label:"HYROX",            sub:"Functional fitness race" },
-  { id:"olympic_tri",  label:"OLYMPIC TRI",       sub:"1.5km swim / 40km bike / 10km run" },
-  { id:"half_ironman", label:"70.3 HALF IM",      sub:"1.9km / 90km / 21.1km" },
-  { id:"ironman",      label:"FULL IRONMAN",       sub:"3.8km / 180km / 42.2km" },
-  { id:"marathon",     label:"MARATHON",           sub:"26.2 miles" },
-  { id:"general",      label:"GENERAL FITNESS",    sub:"Health & performance" },
-];
+// ── Helpers ────────────────────────────────────────────────────────────────
 
-const SUPP_OPTIONS = [
-  { id:"beta_alanine", label:"Beta Alanine",           sub:"3.2–6.4g · Performance buffer" },
-  { id:"creatine",     label:"Creatine Monohydrate",   sub:"5g · Strength & power" },
-  { id:"whey",         label:"Whey Protein",            sub:"25–40g · Recovery & muscle" },
-  { id:"magnesium",    label:"Magnesium Glycinate",     sub:"300–400mg · Sleep & HRV" },
-  { id:"l_theanine",   label:"L-Theanine",              sub:"200–400mg · Calm sleep" },
-  { id:"sermorelin",   label:"Sermorelin (Rx)",         sub:"Per Rx · GH pulse pre-sleep" },
-];
+function computeAge(dob) {
+  if (!dob) return null;
+  const birth = new Date(dob);
+  const today = new Date();
+  let age = today.getFullYear() - birth.getFullYear();
+  const m = today.getMonth() - birth.getMonth();
+  if (m < 0 || (m === 0 && today.getDate() < birth.getDate())) age--;
+  return age > 0 ? age : null;
+}
 
 function calcZones(lthr) {
   if (!lthr || isNaN(lthr) || lthr < 80 || lthr > 220) return null;
   return {
-    z2_min:       Math.round(lthr * 0.68),
-    z2_max:       Math.round(lthr * 0.83),
-    thresh_min:   Math.round(lthr * 0.95),
-    thresh_max:   Math.round(lthr * 1.05),
+    z2_min:     Math.round(lthr * 0.68),
+    z2_max:     Math.round(lthr * 0.83),
+    thresh_min: Math.round(lthr * 0.95),
+    thresh_max: Math.round(lthr * 1.05),
   };
 }
 
-function NavRow({ onBack, onNext, nextLabel = "NEXT", nextDisabled = false, isLast = false }) {
+// ── Sub-components ─────────────────────────────────────────────────────────
+
+function StepHeader({ step, total, title, sub }) {
+  return (
+    <div style={{ marginBottom:20 }}>
+      <div style={{ fontFamily:C.fm, fontSize:9, color:C.muted, letterSpacing:4, marginBottom:12 }}>
+        STEP {step} OF {total}
+      </div>
+      <div style={{ fontFamily:C.ff, fontSize:50, color:C.text, lineHeight:0.95, marginBottom:10 }}>
+        {title}
+      </div>
+      {sub && <div style={{ fontFamily:C.fs, fontSize:13, color:C.muted, lineHeight:1.5 }}>{sub}</div>}
+    </div>
+  );
+}
+
+function NavRow({ onBack, onNext, nextLabel = "NEXT →", nextDisabled = false, isLast = false }) {
   return (
     <div style={{ display:"flex", gap:10, marginTop:8 }}>
       {onBack && (
-        <button
-          onClick={onBack}
-          style={{ padding:"14px 20px", background:C.card, border:`1px solid ${C.border}`, borderRadius:12, color:C.muted, fontFamily:C.ff, fontSize:16, letterSpacing:2, cursor:"pointer" }}
-        >BACK</button>
+        <button onClick={onBack} style={{ padding:"14px 20px", background:C.card, border:`1px solid ${C.border}`, borderRadius:12, color:C.muted, fontFamily:C.ff, fontSize:16, letterSpacing:2, cursor:"pointer" }}>BACK</button>
       )}
       <button
         onClick={onNext}
         disabled={nextDisabled}
-        style={{
-          flex:1, padding:"15px 0",
-          background: nextDisabled ? C.card2 : (isLast ? C.red : C.green),
-          color: nextDisabled ? C.muted : "#000",
-          border:"none", borderRadius:12,
-          cursor: nextDisabled ? "default" : "pointer",
-          fontFamily:C.ff, fontSize:18, letterSpacing:3,
-        }}
+        style={{ flex:1, padding:"15px 0", background: nextDisabled ? C.card2 : isLast ? C.red : C.green, color: nextDisabled ? C.muted : "#000", border:"none", borderRadius:12, cursor: nextDisabled ? "default" : "pointer", fontFamily:C.ff, fontSize:18, letterSpacing:3 }}
       >{nextLabel}</button>
     </div>
   );
 }
 
+function PillRow({ options, value, onChange, multi = false }) {
+  return (
+    <div style={{ display:"flex", gap:8, flexWrap:"wrap" }}>
+      {options.map(({ id, label, sub }) => {
+        const on = multi ? value.includes(id) : value === id;
+        return (
+          <button
+            key={id}
+            onClick={() => {
+              if (multi) {
+                onChange(prev => prev.includes(id) ? prev.filter(s => s !== id) : [...prev, id]);
+              } else {
+                onChange(id);
+              }
+            }}
+            style={{ padding:"12px 16px", background: on ? `${C.green}18` : C.card, border:`1px solid ${on ? C.green : C.border}`, borderRadius:12, cursor:"pointer", textAlign:"left", minWidth:sub ? 130 : 60 }}
+          >
+            <div style={{ fontFamily:C.ff, fontSize:15, color: on ? C.green : C.text, letterSpacing:1 }}>{label}</div>
+            {sub && <div style={{ fontFamily:C.fm, fontSize:8, color:C.muted, letterSpacing:1, marginTop:3 }}>{sub}</div>}
+          </button>
+        );
+      })}
+    </div>
+  );
+}
+
+// ── Constants ──────────────────────────────────────────────────────────────
+
+const SPORT_OPTIONS = [
+  { id:"hyrox",         label:"HYROX",          sub:"Functional fitness race" },
+  { id:"marathon",      label:"MARATHON",        sub:"26.2 miles" },
+  { id:"half_marathon", label:"HALF MARATHON",   sub:"13.1 miles" },
+  { id:"triathlon_703", label:"TRIATHLON 70.3",  sub:"1.9k / 90k / 21.1k" },
+  { id:"ironman",       label:"IRONMAN 140.6",   sub:"3.8k / 180k / 42.2k" },
+  { id:"strength",      label:"STRENGTH",        sub:"Lifting & power" },
+  { id:"hybrid",        label:"HYBRID",          sub:"Mixed fitness" },
+];
+
+const EXPERIENCE_OPTIONS = [
+  { id:"beginner",     label:"BEGINNER",     sub:"< 1 year structured training" },
+  { id:"intermediate", label:"INTERMEDIATE", sub:"1–3 years structured training" },
+  { id:"advanced",     label:"ADVANCED",     sub:"3+ years, competed before" },
+];
+
+const WEEKS_PER_BLOCK_OPTIONS = [
+  { id:4,  label:"4 WKS" },
+  { id:6,  label:"6 WKS" },
+  { id:8,  label:"8 WKS" },
+  { id:12, label:"12 WKS" },
+];
+
+const PHASES_OPTIONS = [
+  { id:2, label:"2" },
+  { id:3, label:"3" },
+  { id:4, label:"4" },
+  { id:6, label:"6" },
+];
+
+const DELOAD_OPTIONS = [
+  { id:"every_4th",    label:"EVERY 4TH WEEK",  sub:"Standard periodization" },
+  { id:"every_block",  label:"EVERY BLOCK",      sub:"Last week of each phase" },
+  { id:"manual",       label:"MANUAL",           sub:"Coach adjusts on HRV" },
+];
+
+const LOADING_MESSAGES = [
+  "Analyzing your race goal...",
+  "Structuring your training phases...",
+  "Building your weekly schedule...",
+  "Applying progressive overload...",
+  "Personalizing recovery weeks...",
+  "Finalizing your plan...",
+];
+
+// ── Main component ─────────────────────────────────────────────────────────
+
 export default function Onboarding({ supabase, session, onComplete }) {
-  const [step, setStep]           = useState(0);
-  const [saving, setSaving]       = useState(false);
-  const [error, setError]         = useState(null);
+  const [step, setStep]   = useState(0);
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState(null);
+  const [loadingMsg, setLoadingMsg] = useState(LOADING_MESSAGES[0]);
 
-  // Step 1 — Name
-  const [name, setName]           = useState("");
+  // Step 0 — Profile
+  const [name, setName]               = useState("");
+  const [sports, setSports]           = useState([]);
+  const [experienceLevel, setExpLevel] = useState(null);
+
+  // Step 1 — Goal
+  const [targetRaceName, setTargetRaceName] = useState("");
+  const [targetRaceDate, setTargetRaceDate] = useState("");
+  const [weeklyHours, setWeeklyHours]       = useState("");
+
   // Step 2 — Body
-  const [age, setAge]             = useState("");
+  const [dob, setDob]           = useState("");
   const [weightLbs, setWeightLbs] = useState("");
-  const [heightFt, setHeightFt]   = useState("");
-  const [heightIn, setHeightIn]   = useState("0");
-  const [sex, setSex]             = useState(null);
-  // Step 3 — Race goal
-  const [raceGoal, setRaceGoal]   = useState(null);
-  // Step 4 — HR zones
-  const [lthr, setLthr]           = useState("");
-  // Step 5 — Supplements
-  const [supplements, setSupplements] = useState([]);
+  const [heightFt, setHeightFt] = useState("");
+  const [heightIn, setHeightIn] = useState("0");
+  const [sex, setSex]           = useState(null);
+  const [lthr, setLthr]         = useState("");
+  const [lthrUnknown, setLthrUnknown] = useState(false);
 
-  const TOTAL = 5;
-  const next = () => setStep(s => Math.min(s + 1, TOTAL - 1));
-  const back = () => setStep(s => Math.max(s - 1, 0));
+  // Step 4 — Plan structure
+  const [weeksPerBlock, setWeeksPerBlock] = useState(null);
+  const [phases, setPhases]               = useState(null);
+  const [deloadPref, setDeloadPref]       = useState(null);
 
-  const toggleSupp = (id) =>
-    setSupplements(prev => prev.includes(id) ? prev.filter(s => s !== id) : [...prev, id]);
+  const TOTAL_STEPS = 5; // progress bar covers steps 0–4; step 5 is the loading screen
 
-  const save = async () => {
+  const next = () => { setError(null); setStep(s => s + 1); };
+  const back = () => { setError(null); setStep(s => s - 1); };
+
+  // Derived values
+  const computedAge  = computeAge(dob);
+  const effectiveLthr = lthrUnknown
+    ? (computedAge ? 180 - computedAge : null)
+    : (lthr ? parseInt(lthr, 10) : null);
+  const zones = calcZones(effectiveLthr);
+
+  // Cycle loading messages while generating
+  useEffect(() => {
+    if (step !== 5) return;
+    let i = 0;
+    const timer = setInterval(() => {
+      i = (i + 1) % LOADING_MESSAGES.length;
+      setLoadingMsg(LOADING_MESSAGES[i]);
+    }, 2200);
+    return () => clearInterval(timer);
+  }, [step]);
+
+  // ── Plan save + generation ────────────────────────────────────────────────
+
+  const handleBuildPlan = async () => {
     setSaving(true);
     setError(null);
-    try {
-      const lthrVal   = lthr ? parseInt(lthr, 10) : null;
-      const zones     = calcZones(lthrVal);
-      const htIn      = heightFt ? parseInt(heightFt, 10) * 12 + parseInt(heightIn || 0, 10) : null;
+    setStep(5);
 
-      const { data, error: dbErr } = await supabase
+    try {
+      const htIn    = heightFt ? parseInt(heightFt, 10) * 12 + parseInt(heightIn || 0, 10) : null;
+      const lthrVal = effectiveLthr;
+      const zonesCalc = calcZones(lthrVal);
+
+      // 1. Save profile
+      const { data: profileData, error: profileErr } = await supabase
         .from("user_profiles")
         .upsert({
-          user_id:    session.user.id,
-          name:       name.trim(),
-          age:        age       ? parseInt(age, 10)         : null,
-          weight_lbs: weightLbs ? parseFloat(weightLbs)     : null,
-          height_in:  htIn,
+          user_id:               session.user.id,
+          name:                  name.trim(),
+          sports,
+          experience_level:      experienceLevel,
+          target_race_name:      targetRaceName.trim() || null,
+          target_race_date:      targetRaceDate || null,
+          weekly_training_hours: weeklyHours ? parseFloat(weeklyHours) : null,
+          dob:                   dob || null,
+          weight_lbs:            weightLbs ? parseFloat(weightLbs) : null,
+          height_in:             htIn,
           sex,
-          race_goal:  raceGoal,
-          lthr:       lthrVal,
-          z2_min:     zones?.z2_min   ?? null,
-          z2_max:     zones?.z2_max   ?? null,
-          supplements,
+          lthr:                  lthrVal,
+          z2_min:                zonesCalc?.z2_min   ?? null,
+          z2_max:                zonesCalc?.z2_max   ?? null,
+          race_goal:             sports[0] || null,   // backward compat for existing coach references
+          weeks_per_block:       weeksPerBlock,
+          phases,
+          deload_preference:     deloadPref,
         }, { onConflict: "user_id" })
         .select()
         .single();
 
-      if (dbErr) throw dbErr;
-      onComplete(data);
+      if (profileErr) throw profileErr;
+
+      // 2. Generate plan
+      const genRes = await fetch("/api/plan/generate", {
+        method: "POST",
+        headers: {
+          "Content-Type":  "application/json",
+          "Authorization": `Bearer ${session.access_token}`,
+        },
+        body: JSON.stringify({ profile: profileData }),
+      });
+      const genData = await genRes.json();
+      if (!genRes.ok) throw new Error(genData.error || "Plan generation failed");
+
+      // 3. Transition to main app
+      onComplete(profileData);
     } catch (e) {
       setError(e.message);
       setSaving(false);
     }
   };
 
-  const zones = calcZones(parseInt(lthr, 10));
+  // ── Step renderers ────────────────────────────────────────────────────────
 
   const renderStep = () => {
     switch (step) {
-      // ── Step 0: Name ───────────────────────────────────────────────────────
+
+      // ── Step 0: Profile ───────────────────────────────────────────────────
       case 0:
         return (
           <div style={{ display:"flex", flexDirection:"column", gap:24 }}>
-            <div>
-              <div style={{ fontFamily:C.fm, fontSize:9, color:C.muted, letterSpacing:4, marginBottom:12 }}>STEP 1 OF {TOTAL}</div>
-              <div style={{ fontFamily:C.ff, fontSize:52, color:C.text, lineHeight:0.95, marginBottom:10 }}>WHAT'S<br/>YOUR NAME?</div>
-              <div style={{ fontFamily:C.fs, fontSize:13, color:C.muted }}>We'll personalize your dashboard.</div>
-            </div>
-            <input
-              autoFocus
-              type="text"
-              value={name}
-              onChange={e => setName(e.target.value)}
-              onKeyDown={e => e.key === "Enter" && name.trim() && next()}
-              placeholder="First name"
-              style={{ ...input, fontFamily:C.ff, fontSize:32, letterSpacing:2, padding:"16px 18px" }}
-            />
-            <NavRow onNext={next} nextDisabled={!name.trim()} />
-          </div>
-        );
+            <StepHeader step={1} total={TOTAL_STEPS} title={"LET'S\nBUILD\nYOUR OS."} sub="We'll personalize everything to you." />
 
-      // ── Step 1: Body ────────────────────────────────────────────────────────
-      case 1:
-        return (
-          <div style={{ display:"flex", flexDirection:"column", gap:20 }}>
             <div>
-              <div style={{ fontFamily:C.fm, fontSize:9, color:C.muted, letterSpacing:4, marginBottom:12 }}>STEP 2 OF {TOTAL}</div>
-              <div style={{ fontFamily:C.ff, fontSize:52, color:C.text, lineHeight:0.95, marginBottom:10 }}>YOUR<br/>BODY</div>
-              <div style={{ fontFamily:C.fs, fontSize:13, color:C.muted }}>Used to calculate training zones and nutrition targets. All optional.</div>
+              <div style={{ fontFamily:C.fm, fontSize:8, color:C.muted, letterSpacing:3, marginBottom:6 }}>YOUR NAME</div>
+              <input
+                autoFocus
+                type="text"
+                value={name}
+                onChange={e => setName(e.target.value)}
+                onKeyDown={e => e.key === "Enter" && name.trim() && next()}
+                placeholder="First name"
+                style={{ ...inputStyle, fontFamily:C.ff, fontSize:32, letterSpacing:2, padding:"16px 18px" }}
+              />
             </div>
 
             <div>
-              <div style={{ fontFamily:C.fm, fontSize:8, color:C.muted, letterSpacing:3, marginBottom:6 }}>AGE</div>
-              <input type="number" value={age} onChange={e => setAge(e.target.value)} placeholder="32" min="16" max="99" style={input} />
+              <div style={{ fontFamily:C.fm, fontSize:8, color:C.muted, letterSpacing:3, marginBottom:10 }}>SPORTS (SELECT ALL THAT APPLY)</div>
+              <PillRow options={SPORT_OPTIONS} value={sports} onChange={setSports} multi />
             </div>
 
             <div>
-              <div style={{ fontFamily:C.fm, fontSize:8, color:C.muted, letterSpacing:3, marginBottom:6 }}>WEIGHT (LBS)</div>
-              <input type="number" value={weightLbs} onChange={e => setWeightLbs(e.target.value)} placeholder="185" style={input} />
-            </div>
-
-            <div>
-              <div style={{ fontFamily:C.fm, fontSize:8, color:C.muted, letterSpacing:3, marginBottom:6 }}>HEIGHT</div>
-              <div style={{ display:"flex", gap:8 }}>
-                <div style={{ flex:1, position:"relative" }}>
-                  <input type="number" value={heightFt} onChange={e => setHeightFt(e.target.value)} placeholder="5" min="4" max="7" style={{ ...input, paddingRight:30 }} />
-                  <span style={{ position:"absolute", right:12, top:"50%", transform:"translateY(-50%)", fontFamily:C.fm, fontSize:10, color:C.muted }}>ft</span>
-                </div>
-                <div style={{ flex:1, position:"relative" }}>
-                  <input type="number" value={heightIn} onChange={e => setHeightIn(e.target.value)} placeholder="10" min="0" max="11" style={{ ...input, paddingRight:30 }} />
-                  <span style={{ position:"absolute", right:12, top:"50%", transform:"translateY(-50%)", fontFamily:C.fm, fontSize:10, color:C.muted }}>in</span>
-                </div>
+              <div style={{ fontFamily:C.fm, fontSize:8, color:C.muted, letterSpacing:3, marginBottom:10 }}>EXPERIENCE LEVEL</div>
+              <div style={{ display:"flex", flexDirection:"column", gap:8 }}>
+                {EXPERIENCE_OPTIONS.map(({ id, label, sub }) => {
+                  const on = experienceLevel === id;
+                  return (
+                    <button key={id} onClick={() => setExpLevel(id)} style={{ display:"flex", alignItems:"center", justifyContent:"space-between", padding:"14px 18px", background: on ? `${C.green}15` : C.card, border:`1px solid ${on ? C.green : C.border}`, borderRadius:12, cursor:"pointer", textAlign:"left" }}>
+                      <div>
+                        <div style={{ fontFamily:C.ff, fontSize:17, color: on ? C.green : C.text, letterSpacing:2 }}>{label}</div>
+                        <div style={{ fontFamily:C.fm, fontSize:8, color:C.muted, letterSpacing:1, marginTop:3 }}>{sub}</div>
+                      </div>
+                      {on && <span style={{ color:C.green, fontSize:18 }}>✓</span>}
+                    </button>
+                  );
+                })}
               </div>
             </div>
 
+            <NavRow onNext={next} nextDisabled={!name.trim() || sports.length === 0 || !experienceLevel} />
+          </div>
+        );
+
+      // ── Step 1: Goal ──────────────────────────────────────────────────────
+      case 1:
+        return (
+          <div style={{ display:"flex", flexDirection:"column", gap:20 }}>
+            <StepHeader step={2} total={TOTAL_STEPS} title={"YOUR\nGOAL."} sub="What are you working toward?" />
+
             <div>
-              <div style={{ fontFamily:C.fm, fontSize:8, color:C.muted, letterSpacing:3, marginBottom:6 }}>SEX</div>
-              <div style={{ display:"flex", gap:8 }}>
-                {[["M","MALE"],["F","FEMALE"],["X","OTHER"]].map(([val, label]) => (
-                  <button
-                    key={val}
-                    onClick={() => setSex(val)}
-                    style={{
-                      flex:1, padding:"12px 0",
-                      background: sex===val ? C.green : C.card,
-                      color: sex===val ? "#000" : C.muted,
-                      border:`1px solid ${sex===val ? C.green : C.border}`,
-                      borderRadius:10, cursor:"pointer", fontFamily:C.ff, fontSize:14, letterSpacing:2,
-                    }}
-                  >{label}</button>
-                ))}
+              <div style={{ fontFamily:C.fm, fontSize:8, color:C.muted, letterSpacing:3, marginBottom:6 }}>TARGET RACE NAME</div>
+              <input type="text" value={targetRaceName} onChange={e => setTargetRaceName(e.target.value)} placeholder="e.g. HYROX London 2026" style={inputStyle} />
+            </div>
+
+            <div>
+              <div style={{ fontFamily:C.fm, fontSize:8, color:C.muted, letterSpacing:3, marginBottom:6 }}>RACE DATE</div>
+              <input type="date" value={targetRaceDate} onChange={e => setTargetRaceDate(e.target.value)} style={{ ...inputStyle, colorScheme:"dark" }} />
+            </div>
+
+            <div>
+              <div style={{ fontFamily:C.fm, fontSize:8, color:C.muted, letterSpacing:3, marginBottom:6 }}>CURRENT WEEKLY TRAINING HOURS</div>
+              <div style={{ position:"relative" }}>
+                <input type="number" value={weeklyHours} onChange={e => setWeeklyHours(e.target.value)} placeholder="8" min="1" max="40" style={{ ...inputStyle, paddingRight:40 }} />
+                <span style={{ position:"absolute", right:14, top:"50%", transform:"translateY(-50%)", fontFamily:C.fm, fontSize:10, color:C.muted }}>hrs</span>
               </div>
             </div>
 
@@ -212,79 +335,70 @@ export default function Onboarding({ supabase, session, onComplete }) {
           </div>
         );
 
-      // ── Step 2: Race Goal ───────────────────────────────────────────────────
+      // ── Step 2: Body ──────────────────────────────────────────────────────
       case 2:
         return (
           <div style={{ display:"flex", flexDirection:"column", gap:20 }}>
-            <div>
-              <div style={{ fontFamily:C.fm, fontSize:9, color:C.muted, letterSpacing:4, marginBottom:12 }}>STEP 3 OF {TOTAL}</div>
-              <div style={{ fontFamily:C.ff, fontSize:52, color:C.text, lineHeight:0.95, marginBottom:10 }}>RACE<br/>GOAL</div>
-              <div style={{ fontFamily:C.fs, fontSize:13, color:C.muted }}>What are you training toward?</div>
-            </div>
+            <StepHeader step={3} total={TOTAL_STEPS} title={"BODY\nMETRICS."} sub="Used to calibrate zones and nutrition targets. All optional." />
 
-            <div style={{ display:"flex", flexDirection:"column", gap:8 }}>
-              {RACE_GOALS.map(({ id, label, sub }) => {
-                const on = raceGoal === id;
-                return (
-                  <button
-                    key={id}
-                    onClick={() => setRaceGoal(id)}
-                    style={{
-                      display:"flex", alignItems:"center", justifyContent:"space-between",
-                      padding:"16px 18px",
-                      background: on ? `${C.green}15` : C.card,
-                      border:`1px solid ${on ? C.green : C.border}`,
-                      borderRadius:12, cursor:"pointer", textAlign:"left",
-                    }}
-                  >
-                    <div>
-                      <div style={{ fontFamily:C.ff, fontSize:18, color: on ? C.green : C.text, letterSpacing:2 }}>{label}</div>
-                      <div style={{ fontFamily:C.fm, fontSize:8, color:C.muted, letterSpacing:1, marginTop:3 }}>{sub}</div>
-                    </div>
-                    {on && <span style={{ color:C.green, fontSize:18 }}>✓</span>}
-                  </button>
-                );
-              })}
-            </div>
-
-            <NavRow onBack={back} onNext={next} nextDisabled={!raceGoal} />
-          </div>
-        );
-
-      // ── Step 3: HR Zones ────────────────────────────────────────────────────
-      case 3:
-        return (
-          <div style={{ display:"flex", flexDirection:"column", gap:20 }}>
-            <div>
-              <div style={{ fontFamily:C.fm, fontSize:9, color:C.muted, letterSpacing:4, marginBottom:12 }}>STEP 4 OF {TOTAL}</div>
-              <div style={{ fontFamily:C.ff, fontSize:52, color:C.text, lineHeight:0.95, marginBottom:10 }}>HR<br/>ZONES</div>
-              <div style={{ fontFamily:C.fs, fontSize:13, color:C.muted }}>
-                Enter your Lactate Threshold Heart Rate (LTHR) to auto-calculate zones.
-                Leave blank to use app defaults — you can update this later.
+            <div style={{ display:"flex", gap:8 }}>
+              <div style={{ flex:2 }}>
+                <div style={{ fontFamily:C.fm, fontSize:8, color:C.muted, letterSpacing:3, marginBottom:6 }}>DATE OF BIRTH</div>
+                <input type="date" value={dob} onChange={e => setDob(e.target.value)} max={new Date().toISOString().split("T")[0]} style={{ ...inputStyle, colorScheme:"dark" }} />
+              </div>
+              <div style={{ flex:1 }}>
+                <div style={{ fontFamily:C.fm, fontSize:8, color:C.muted, letterSpacing:3, marginBottom:6 }}>SEX</div>
+                <div style={{ display:"flex", flexDirection:"column", gap:6 }}>
+                  {[["M","M"],["F","F"],["X","X"]].map(([val, label]) => (
+                    <button key={val} onClick={() => setSex(val)} style={{ padding:"12px 0", background: sex===val ? C.green : C.card, color: sex===val ? "#000" : C.muted, border:`1px solid ${sex===val ? C.green : C.border}`, borderRadius:10, cursor:"pointer", fontFamily:C.ff, fontSize:14, letterSpacing:2 }}>{label}</button>
+                  ))}
+                </div>
               </div>
             </div>
 
             <div>
-              <div style={{ fontFamily:C.fm, fontSize:8, color:C.muted, letterSpacing:3, marginBottom:6 }}>LTHR (BPM)</div>
-              <input
-                type="number"
-                value={lthr}
-                onChange={e => setLthr(e.target.value)}
-                placeholder="163  (leave blank to skip)"
-                min="80" max="220"
-                style={{ ...input, fontFamily:C.ff, fontSize:28, letterSpacing:2, padding:"16px 18px" }}
-              />
+              <div style={{ fontFamily:C.fm, fontSize:8, color:C.muted, letterSpacing:3, marginBottom:6 }}>WEIGHT (LBS)</div>
+              <input type="number" value={weightLbs} onChange={e => setWeightLbs(e.target.value)} placeholder="185" style={inputStyle} />
             </div>
 
-            {zones ? (
+            <div>
+              <div style={{ fontFamily:C.fm, fontSize:8, color:C.muted, letterSpacing:3, marginBottom:6 }}>HEIGHT</div>
+              <div style={{ display:"flex", gap:8 }}>
+                <div style={{ flex:1, position:"relative" }}>
+                  <input type="number" value={heightFt} onChange={e => setHeightFt(e.target.value)} placeholder="5" min="4" max="7" style={{ ...inputStyle, paddingRight:30 }} />
+                  <span style={{ position:"absolute", right:12, top:"50%", transform:"translateY(-50%)", fontFamily:C.fm, fontSize:10, color:C.muted }}>ft</span>
+                </div>
+                <div style={{ flex:1, position:"relative" }}>
+                  <input type="number" value={heightIn} onChange={e => setHeightIn(e.target.value)} placeholder="10" min="0" max="11" style={{ ...inputStyle, paddingRight:30 }} />
+                  <span style={{ position:"absolute", right:12, top:"50%", transform:"translateY(-50%)", fontFamily:C.fm, fontSize:10, color:C.muted }}>in</span>
+                </div>
+              </div>
+            </div>
+
+            <div>
+              <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:6 }}>
+                <div style={{ fontFamily:C.fm, fontSize:8, color:C.muted, letterSpacing:3 }}>LTHR (BPM)</div>
+                <button onClick={() => setLthrUnknown(v => !v)} style={{ padding:"4px 10px", background: lthrUnknown ? `${C.yellow}22` : C.card2, border:`1px solid ${lthrUnknown ? C.yellow+"66" : C.border}`, borderRadius:8, cursor:"pointer", fontFamily:C.fm, fontSize:8, color: lthrUnknown ? C.yellow : C.muted, letterSpacing:1 }}>
+                  {lthrUnknown ? "✓ I DON'T KNOW" : "I DON'T KNOW"}
+                </button>
+              </div>
+              {lthrUnknown ? (
+                <div style={{ padding:"14px 16px", background:`${C.yellow}10`, border:`1px solid ${C.yellow}33`, borderRadius:10, fontFamily:C.fs, fontSize:14, color:C.text }}>
+                  {computedAge
+                    ? <>Estimated LTHR: <strong>{180 - computedAge} bpm</strong> <span style={{ fontFamily:C.fm, fontSize:9, color:C.muted }}>(180 − age {computedAge})</span></>
+                    : <span style={{ color:C.muted }}>Enter your date of birth above to estimate.</span>}
+                </div>
+              ) : (
+                <input type="number" value={lthr} onChange={e => setLthr(e.target.value)} placeholder="163  (leave blank to skip)" min="80" max="220" style={{ ...inputStyle, fontFamily:C.ff, fontSize:28, letterSpacing:2, padding:"16px 18px" }} />
+              )}
+            </div>
+
+            {zones && !lthrUnknown && (
               <div style={{ display:"flex", flexDirection:"column", gap:6 }}>
                 <div style={{ fontFamily:C.fm, fontSize:8, color:C.muted, letterSpacing:3, marginBottom:4 }}>CALCULATED ZONES</div>
                 {[
-                  { label:"Z1  WARM UP",   range:`< ${zones.z2_min} bpm`,                         color:C.light },
                   { label:"Z2  EASY",      range:`${zones.z2_min}–${zones.z2_max} bpm`,           color:C.green },
-                  { label:"Z3  AEROBIC",   range:`${zones.z2_max+1}–${zones.thresh_min-1} bpm`,   color:"#FFB800" },
                   { label:"Z4  THRESHOLD", range:`${zones.thresh_min}–${zones.thresh_max} bpm`,   color:"#FF7700" },
-                  { label:"Z5  MAXIMUM",   range:`> ${zones.thresh_max} bpm`,                     color:C.red },
                 ].map(({ label, range, color }) => (
                   <div key={label} style={{ display:"flex", justifyContent:"space-between", alignItems:"center", padding:"10px 14px", background:C.card, borderRadius:8, borderLeft:`3px solid ${color}` }}>
                     <span style={{ fontFamily:C.ff, fontSize:13, color, letterSpacing:2 }}>{label}</span>
@@ -292,66 +406,126 @@ export default function Onboarding({ supabase, session, onComplete }) {
                   </div>
                 ))}
               </div>
-            ) : lthr && (
-              <div style={{ fontFamily:C.fm, fontSize:9, color:"#FFB800", letterSpacing:1, padding:"8px 12px", background:"#FFB80010", borderRadius:8 }}>
-                Enter a value between 80–220 bpm
-              </div>
             )}
 
             <NavRow onBack={back} onNext={next} />
           </div>
         );
 
-      // ── Step 4: Supplements ─────────────────────────────────────────────────
-      case 4:
+      // ── Step 3: Wearables ─────────────────────────────────────────────────
+      case 3:
         return (
           <div style={{ display:"flex", flexDirection:"column", gap:20 }}>
+            <StepHeader step={4} total={TOTAL_STEPS} title={"WEARABLES."} sub="Connect your devices for live recovery data. You can skip any and connect later." />
+
+            {[
+              { id:"whoop",  label:"WHOOP",  sub:"Recovery · HRV · Sleep", available:true },
+              { id:"garmin", label:"GARMIN", sub:"Activities · Power · Pace", available:false },
+              { id:"oura",   label:"OURA",   sub:"Ring · Sleep · Readiness", available:false },
+            ].map(({ id, label, sub, available }) => (
+              <div key={id} style={{ display:"flex", alignItems:"center", justifyContent:"space-between", padding:"16px 18px", background:C.card, border:`1px solid ${C.border}`, borderRadius:14 }}>
+                <div>
+                  <div style={{ fontFamily:C.ff, fontSize:18, color:C.text, letterSpacing:2 }}>{label}</div>
+                  <div style={{ fontFamily:C.fm, fontSize:8, color:C.muted, letterSpacing:1, marginTop:3 }}>{sub}</div>
+                </div>
+                {available ? (
+                  <button
+                    onClick={() => window.open("/api/auth/login", "_blank")}
+                    style={{ padding:"10px 16px", background:C.green, color:"#000", border:"none", borderRadius:10, cursor:"pointer", fontFamily:C.ff, fontSize:13, letterSpacing:2 }}
+                  >CONNECT ↗</button>
+                ) : (
+                  <div style={{ padding:"8px 12px", background:C.card2, border:`1px solid ${C.border}`, borderRadius:10, fontFamily:C.fm, fontSize:8, color:C.light, letterSpacing:2 }}>SOON</div>
+                )}
+              </div>
+            ))}
+
+            <NavRow onBack={back} onNext={next} nextLabel="SKIP / CONTINUE →" />
+          </div>
+        );
+
+      // ── Step 4: Plan structure ─────────────────────────────────────────────
+      case 4:
+        return (
+          <div style={{ display:"flex", flexDirection:"column", gap:24 }}>
+            <StepHeader step={5} total={TOTAL_STEPS} title={"PLAN\nSTRUCTURE."} sub="Your coach will use this to shape your training blocks." />
+
             <div>
-              <div style={{ fontFamily:C.fm, fontSize:9, color:C.muted, letterSpacing:4, marginBottom:12 }}>STEP 5 OF {TOTAL}</div>
-              <div style={{ fontFamily:C.ff, fontSize:52, color:C.text, lineHeight:0.95, marginBottom:10 }}>YOUR<br/>STACK</div>
-              <div style={{ fontFamily:C.fs, fontSize:13, color:C.muted }}>
-                Select what you currently use. We'll show your personalized protocol. Skip anything you don't take.
+              <div style={{ fontFamily:C.fm, fontSize:8, color:C.muted, letterSpacing:3, marginBottom:10 }}>WEEKS PER BLOCK</div>
+              <div style={{ display:"flex", gap:8 }}>
+                {WEEKS_PER_BLOCK_OPTIONS.map(({ id, label }) => {
+                  const on = weeksPerBlock === id;
+                  return (
+                    <button key={id} onClick={() => setWeeksPerBlock(id)} style={{ flex:1, padding:"13px 0", background: on ? C.green : C.card, color: on ? "#000" : C.muted, border:`1px solid ${on ? C.green : C.border}`, borderRadius:10, cursor:"pointer", fontFamily:C.ff, fontSize:15, letterSpacing:1 }}>{label}</button>
+                  );
+                })}
               </div>
             </div>
 
-            <div style={{ display:"flex", flexDirection:"column", gap:8 }}>
-              {SUPP_OPTIONS.map(({ id, label, sub }) => {
-                const on = supplements.includes(id);
-                return (
-                  <button
-                    key={id}
-                    onClick={() => toggleSupp(id)}
-                    style={{
-                      display:"flex", alignItems:"center", gap:14, padding:"14px 16px",
-                      background: on ? `${C.green}10` : C.card,
-                      border:`1px solid ${on ? C.green+"55" : C.border}`,
-                      borderRadius:12, cursor:"pointer", textAlign:"left",
-                    }}
-                  >
-                    <div style={{
-                      width:22, height:22, borderRadius:6, flexShrink:0,
-                      background: on ? C.green : C.card2,
-                      border:`2px solid ${on ? C.green : C.border}`,
-                      display:"flex", alignItems:"center", justifyContent:"center",
-                    }}>
-                      {on && <span style={{ color:"#000", fontSize:13, fontWeight:900, lineHeight:1 }}>✓</span>}
-                    </div>
-                    <div>
-                      <div style={{ fontFamily:C.ff, fontSize:15, color: on ? C.text : C.muted, letterSpacing:1 }}>{label}</div>
-                      <div style={{ fontFamily:C.fm, fontSize:8, color:C.muted, letterSpacing:1, marginTop:2 }}>{sub}</div>
-                    </div>
-                  </button>
-                );
-              })}
+            <div>
+              <div style={{ fontFamily:C.fm, fontSize:8, color:C.muted, letterSpacing:3, marginBottom:10 }}>PHASES (TRAINING BLOCKS)</div>
+              <div style={{ display:"flex", gap:8 }}>
+                {PHASES_OPTIONS.map(({ id, label }) => {
+                  const on = phases === id;
+                  return (
+                    <button key={id} onClick={() => setPhases(id)} style={{ flex:1, padding:"13px 0", background: on ? C.green : C.card, color: on ? "#000" : C.muted, border:`1px solid ${on ? C.green : C.border}`, borderRadius:10, cursor:"pointer", fontFamily:C.ff, fontSize:18, letterSpacing:1 }}>{label}</button>
+                  );
+                })}
+              </div>
+              {phases && weeksPerBlock && (
+                <div style={{ fontFamily:C.fm, fontSize:9, color:C.muted, letterSpacing:1, marginTop:8 }}>
+                  {phases * weeksPerBlock} total weeks · {phases} phases × {weeksPerBlock} weeks each
+                </div>
+              )}
             </div>
 
-            {error && (
-              <div style={{ fontFamily:C.fm, fontSize:9, color:C.red, letterSpacing:1, padding:"10px 12px", background:`${C.red}15`, borderRadius:8, lineHeight:1.5 }}>
-                {error}
+            <div>
+              <div style={{ fontFamily:C.fm, fontSize:8, color:C.muted, letterSpacing:3, marginBottom:10 }}>DELOAD PREFERENCE</div>
+              <div style={{ display:"flex", flexDirection:"column", gap:8 }}>
+                {DELOAD_OPTIONS.map(({ id, label, sub }) => {
+                  const on = deloadPref === id;
+                  return (
+                    <button key={id} onClick={() => setDeloadPref(id)} style={{ display:"flex", alignItems:"center", justifyContent:"space-between", padding:"14px 18px", background: on ? `${C.green}15` : C.card, border:`1px solid ${on ? C.green : C.border}`, borderRadius:12, cursor:"pointer", textAlign:"left" }}>
+                      <div>
+                        <div style={{ fontFamily:C.ff, fontSize:16, color: on ? C.green : C.text, letterSpacing:2 }}>{label}</div>
+                        <div style={{ fontFamily:C.fm, fontSize:8, color:C.muted, letterSpacing:1, marginTop:3 }}>{sub}</div>
+                      </div>
+                      {on && <span style={{ color:C.green, fontSize:18 }}>✓</span>}
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+
+            <NavRow onBack={back} onNext={handleBuildPlan} nextLabel="BUILD MY PLAN →" nextDisabled={!weeksPerBlock || !phases || !deloadPref} isLast />
+          </div>
+        );
+
+      // ── Step 5: Generating ────────────────────────────────────────────────
+      case 5:
+        return (
+          <div style={{ display:"flex", flexDirection:"column", alignItems:"center", justifyContent:"center", minHeight:"70vh", gap:32 }}>
+            <div style={{ textAlign:"center" }}>
+              <div style={{ fontFamily:C.ff, fontSize:72, color:C.green, lineHeight:1, letterSpacing:4 }}>TRIAD<span style={{ color:C.red }}>.</span></div>
+              <div style={{ fontFamily:C.fm, fontSize:9, color:C.muted, letterSpacing:4, marginTop:6 }}>HYBRID PERFORMANCE OS</div>
+            </div>
+
+            {error ? (
+              <div style={{ width:"100%", display:"flex", flexDirection:"column", gap:12, textAlign:"center" }}>
+                <div style={{ fontFamily:C.fm, fontSize:9, color:C.red, letterSpacing:1, padding:"12px 16px", background:`${C.red}15`, borderRadius:10, lineHeight:1.6 }}>{error}</div>
+                <button onClick={() => { setError(null); setSaving(true); handleBuildPlan(); }} style={{ padding:"14px", background:C.red, color:"#fff", border:"none", borderRadius:12, cursor:"pointer", fontFamily:C.ff, fontSize:16, letterSpacing:3 }}>TRY AGAIN</button>
+              </div>
+            ) : (
+              <div style={{ textAlign:"center" }}>
+                <div style={{ fontFamily:C.fm, fontSize:11, color:C.muted, letterSpacing:2, marginBottom:8 }}>YOUR COACH IS BUILDING YOUR PLAN</div>
+                <div style={{ fontFamily:C.fs, fontSize:14, color:C.text, lineHeight:1.6, transition:"opacity 0.4s" }}>{loadingMsg}</div>
+                <div style={{ marginTop:24, display:"flex", gap:6, justifyContent:"center" }}>
+                  {[0,1,2].map(i => (
+                    <div key={i} style={{ width:6, height:6, borderRadius:"50%", background:C.green, opacity: saving ? 1 : 0.3, animation:`pulse ${1 + i * 0.3}s ease-in-out infinite alternate` }} />
+                  ))}
+                </div>
+                <style>{`@keyframes pulse { from { opacity:0.2; transform:scale(0.8); } to { opacity:1; transform:scale(1.2); } }`}</style>
               </div>
             )}
-
-            <NavRow onBack={back} onNext={save} nextLabel={saving ? "SAVING..." : "LET'S GO →"} nextDisabled={saving} isLast />
           </div>
         );
 
@@ -360,23 +534,20 @@ export default function Onboarding({ supabase, session, onComplete }) {
     }
   };
 
+  // ── Layout ─────────────────────────────────────────────────────────────────
+
   return (
     <div style={{ minHeight:"100vh", background:C.bg }}>
       <div style={{ maxWidth:480, margin:"0 auto", padding:"28px 24px 60px" }}>
 
-        {/* Progress bar */}
-        <div style={{ display:"flex", gap:4, marginBottom:36 }}>
-          {Array.from({ length: TOTAL }).map((_, i) => (
-            <div
-              key={i}
-              style={{
-                flex:1, height:3, borderRadius:4,
-                background: i <= step ? C.green : C.card2,
-                transition:"background 0.3s",
-              }}
-            />
-          ))}
-        </div>
+        {/* Progress bar — hidden on loading screen */}
+        {step < 5 && (
+          <div style={{ display:"flex", gap:4, marginBottom:36 }}>
+            {Array.from({ length: TOTAL_STEPS }).map((_, i) => (
+              <div key={i} style={{ flex:1, height:3, borderRadius:4, background: i <= step ? C.green : C.card2, transition:"background 0.3s" }} />
+            ))}
+          </div>
+        )}
 
         {renderStep()}
       </div>
