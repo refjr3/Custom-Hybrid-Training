@@ -92,14 +92,16 @@ export default async function handler(req, res) {
       // Apply the field changes to the training_days row.
       // Accept both the exact DB column names and short legacy aliases.
       const fieldMap = {
-        am_session: "am_session",    // exact DB column — what the AI now sends
-        pm_session: "pm_session",    // exact DB column — what the AI now sends
-        am:         "am_session",    // legacy short alias
-        pm:         "pm_session",    // legacy short alias
-        note:       "note",
-        note2a:     "note",          // legacy alias
-        is_race_day:"is_race_day",
-        is_sunday:  "is_sunday",
+        am_session:        "am_session",         // exact DB column — must be a known WL key
+        pm_session:        "pm_session",         // exact DB column — must be a known WL key
+        am:                "am_session",         // legacy short alias
+        pm:                "pm_session",         // legacy short alias
+        am_session_custom: "am_session_custom",  // freeform markdown — AI custom workout
+        pm_session_custom: "pm_session_custom",  // freeform markdown — AI custom workout
+        note:              "note",
+        note2a:            "note",               // legacy alias
+        is_race_day:       "is_race_day",
+        is_sunday:         "is_sunday",
         ai_modification_note: "ai_modification_note",
       };
       const updatePayload = { ai_modified: true };
@@ -108,7 +110,8 @@ export default async function handler(req, res) {
         if (col) updatePayload[col] = value;
       }
 
-      // Reject any am_session/pm_session that isn't a known WL key
+      // Reject any am_session/pm_session that isn't a known WL key.
+      // am_session_custom / pm_session_custom are freeform text — skip validation.
       for (const field of ["am_session", "pm_session"]) {
         if (field in updatePayload && updatePayload[field] !== null && !VALID_WORKOUT_KEYS.has(updatePayload[field])) {
           console.log(`[plan/update] rejected invalid ${field}:`, updatePayload[field]);
@@ -123,7 +126,7 @@ export default async function handler(req, res) {
 
       // Fix #2: treat note and ai_modification_note as valid standalone changes —
       // the AI frequently sends note-only modifications without touching am/pm_session.
-      const mutableFields = ["am_session", "pm_session", "note", "is_race_day", "ai_modification_note"];
+      const mutableFields = ["am_session", "pm_session", "am_session_custom", "pm_session_custom", "note", "is_race_day", "ai_modification_note"];
       const hasChange = mutableFields.some((f) => f in updatePayload);
       if (!hasChange) {
         console.log("[plan/update] no valid fields in changes:", changes);

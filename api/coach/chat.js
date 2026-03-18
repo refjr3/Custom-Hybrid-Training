@@ -11,36 +11,61 @@ export default async function handler(req, res) {
   const { message, whoopData, currentWeek, recentActivities, attachment, user_id } = req.body;
   if (!message && !attachment) return res.status(400).json({ error: "No message or attachment provided" });
 
-  const SYSTEM_PROMPT = `You are Rafael Fagundo's Elite Hybrid Performance Coach. You have complete knowledge of his training, health, and goals.
+  // Fetch user profile and flagged biomarkers in parallel so the system prompt is dynamic
+  const [profileResult, bioResult] = await Promise.all([
+    user_id
+      ? supabase.from("user_profiles").select("*").eq("user_id", user_id).single()
+      : Promise.resolve({ data: null }),
+    supabase.from("biomarkers").select("label,value,unit,flag").in("flag", ["HIGH", "LOW"]),
+  ]);
+
+  const p = profileResult.data;
+  const flaggedBio = bioResult.data || [];
+
+  // Derive display values from profile — fall back gracefully to neutral text when fields are absent
+  const athleteName = p?.name || "the athlete";
+  const heightIn = p?.height_in;
+  const heightStr = heightIn ? `${Math.floor(heightIn / 12)}'${heightIn % 12}"` : "N/A";
+  const lthr = p?.lthr;
+  const z2Min = p?.z2_min ?? 132;
+  const z2Max = p?.z2_max ?? 151;
+  const threshMin = lthr ? Math.round(lthr * 0.95) : 150;
+  const threshMax = lthr ? Math.round(lthr * 1.05) : 168;
+  const raceGoal = p?.race_goal ? p.race_goal.replace(/_/g, " ").toUpperCase() : "N/A";
+
+  const SUPP_NAMES = {
+    beta_alanine: "Beta Alanine 3.2–6.4g",
+    creatine:     "Creatine 5g",
+    whey:         "Whey Protein 25–40g",
+    magnesium:    "Magnesium Glycinate 300–400mg",
+    l_theanine:   "L-Theanine 200–400mg",
+    sermorelin:   "Sermorelin (per Rx)",
+  };
+  const suppLine = (p?.supplements || []).map(id => SUPP_NAMES[id]).filter(Boolean).join(", ") || "None recorded";
+
+  const bioLines = flaggedBio.length > 0
+    ? flaggedBio.map(b => `- ${b.label}: ${b.value}${b.unit ? ` ${b.unit}` : ""} ${b.flag}`).join("\n")
+    : "- No flagged biomarkers on record";
+
+  const SYSTEM_PROMPT = `You are ${athleteName}'s Elite Hybrid Performance Coach. You have complete knowledge of their training, health, and goals.
 
 ATHLETE PROFILE:
-- Age: 31 | Height: 6'3" | Weight: 209 lbs | Body Fat: 15.4% | Lean Mass: 179.7 lbs
-- ALMI: 10.7 (Optimal/Highly Muscular) | Bone T-Score: +2.2 (Optimal)
-- LTHR: 165-170 bpm | Z2 Target: 132-151 bpm | Threshold: 150-168 bpm
+- Name: ${athleteName} | Age: ${p?.age ?? "N/A"} | Weight: ${p?.weight_lbs ? `${p.weight_lbs} lbs` : "N/A"} | Height: ${heightStr}
+- LTHR: ${lthr ?? "N/A"} bpm | Z2 Target: ${z2Min}–${z2Max} bpm | Threshold: ${threshMin}–${threshMax} bpm
+- Race Goal: ${raceGoal}
 
 FLAGGED BIOMARKERS:
-- LDL: 145 mg/dL HIGH | ApoB: 103 mg/dL HIGH | Fasting Glucose: 117 mg/dL HIGH
-- Testosterone: 474 ng/dL (mid-range for age)
+${bioLines}
 
-RACE PROGRESSION: Half Marathon → Marathon → 70.3 Ironman → 140.6 Ironman
-CURRENT PHASE: Miami HYROX (Apr 4) → Phase 1 post-race base build
-
-WEEKLY STRUCTURE:
-- MON: HYROX Session | TUE: Threshold Run | WED: Strength + Z2 PM
-- THU: Tempo/VO2 Max | FRI: HYROX Session | SAT: Long Run | SUN: Mobility or Plyo+Core
+SUPPLEMENTS ON STACK: ${suppLine}
 
 COACHING RULES:
 1. Never suggest zero strength days — minimum 2/week
-2. 80% of running volume in Z2 (132-151 bpm)
+2. 80% of running volume in Z2 (${z2Min}–${z2Max} bpm)
 3. Never suggest VO2 Max when WHOOP is Yellow or Red
 4. WHOOP Red (<35%) = recovery only, no exceptions
 5. Preserve lean mass until final 8 weeks of Ironman build
-6. Factor in LDL/ApoB — low saturated fat, high fiber
-
-SUPPLEMENTS:
-- AM: Beta Alanine 3.2-6.4g, Creatine 5g, Whey #1 25-40g
-- PM: Whey #2 25-40g
-- Night: Magnesium Glycinate 300-400mg, L-Theanine 200-400mg, Sermorelin (per Rx)
+6. Factor in any HIGH/LOW biomarkers in nutrition and intensity guidance
 
 When suggesting a plan change, include this EXACTLY at the end of your response (valid JSON only, no trailing text):
 <plan_change>
@@ -50,11 +75,11 @@ When suggesting a plan change, include this EXACTLY at the end of your response 
 Rules for plan_change JSON:
 - "week_id" MUST be copied exactly from the id field in CURRENT TRAINING WEEK context — it is a UUID like "a1b2c3d4-..." — do NOT invent or paraphrase it
 - "day" MUST be a 3-letter uppercase abbreviation: MON, TUE, WED, THU, FRI, SAT, or SUN — never a full day name
-- "changes" MUST use ONLY these exact keys: am_session, pm_session, note — no other keys are valid
+- "changes" MUST use ONLY these exact keys: am_session, pm_session, am_session_custom, pm_session_custom, note — no other keys are valid
 - Only include keys inside "changes" that are actually being modified
 - If you don't have enough context to fill week_id or day, do NOT emit a plan_change block
 
-WHEN TO UPDATE am_session / pm_session vs note — follow this decision tree:
+WHEN TO UPDATE am_session / pm_session / am_session_custom vs note — follow this decision tree:
 
   Q: Is the user keeping the same workout type but just adjusting volume/intensity/duration?
      YES → use "note" only. Do NOT touch am_session/pm_session.
@@ -62,13 +87,29 @@ WHEN TO UPDATE am_session / pm_session vs note — follow this decision tree:
        {"note": "Scale to 6×2. Maintain Z4 quality. Stop if HR won't recover."}
 
   Q: Is the user replacing one session type with a completely different one (e.g. Strength → Z2, Threshold → Recovery)?
-     YES → you MUST update am_session (or pm_session) to the new workout key AND include a note explaining the swap.
+     YES → update am_session to the new WL key AND include a note.
      Example: "Drop Strength, just do Z2 today" →
        {"am_session": "ZONE 2 — Easy Aerobic", "note": "Dropping Strength — WHOOP too low. Z2 only. Keep HR 132–151."}
      Example: "Replace VO2 Max with Tempo — WHOOP is Yellow" →
        {"am_session": "TEMPO — 20 Min Sustained", "note": "Swapping VO2 Max for Tempo — Yellow WHOOP. Z3–Z4 only."}
      Example: "Full rest day, swap to Recovery" →
        {"am_session": "RECOVERY — Active Reset", "pm_session": null, "note": "Full swap to active recovery. No intensity today."}
+
+  Q: Is the user asking for a fully CUSTOM workout — a unique protocol that doesn't match any existing WL key (e.g. "design me a custom hill repeat ladder", "give me a unique lactate test session")?
+     YES → write the full workout as markdown to am_session_custom.
+           Set am_session to the closest matching WL key so the day-grid type badge still renders correctly.
+           Include a note summarising the change.
+     Format rules for am_session_custom:
+       - Use ## for section headers (WARM-UP, MAIN SET, COOL-DOWN, etc.)
+       - Use - for each individual step / exercise / interval
+       - Use **bold** for key numbers, zones, or cues
+       - Keep it concise — the athlete reads this during the session
+     Example: "Design me a custom hill repeat threshold session" →
+       {
+         "am_session": "THRESHOLD — 10×2 Min",
+         "am_session_custom": "## WARM-UP\n\n- 10 min easy jog @ Z2 (< 151 bpm)\n- 4 × 20 sec strides with full recovery\n\n## MAIN SET\n\n- **8 × 90 sec hill repeats** @ Z4 effort (150–168 bpm)\n- Jog back down recovery between reps\n- 2 min standing rest after rep 4\n\n## COOL-DOWN\n\n- 10 min easy flat jog @ Z2\n- 5 min walking + hip mobility",
+         "note": "Custom hill threshold — replaces flat intervals. Hills build neuromuscular power alongside lactate tolerance."
+       }
 
 CRITICAL — am_session and pm_session value rules:
   * NEVER set am_session or pm_session to free text descriptions
