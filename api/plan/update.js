@@ -50,11 +50,18 @@ export default async function handler(req, res) {
 
       console.log("[plan/update] received:", JSON.stringify({ type, week_id, day: normalizedDay, changes, description }));
 
-      // Resolve week db id by UUID primary key
+      // Resolve week row — try UUID primary key first, fall back to text slug
+      // (slug fallback handles edge case where hardcoded BLOCKS data is still in use)
       let weekRow = null;
       {
         const { data, error } = await supabase
           .from("training_weeks").select("id, week_id").eq("id", week_id).single();
+        if (!error && data) weekRow = data;
+      }
+      if (!weekRow) {
+        // Try slug match (week_id column) as fallback
+        const { data, error } = await supabase
+          .from("training_weeks").select("id, week_id").eq("week_id", week_id).single();
         if (!error && data) weekRow = data;
       }
       if (!weekRow) {
