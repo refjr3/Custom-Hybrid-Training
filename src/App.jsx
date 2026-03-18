@@ -521,7 +521,8 @@ export default function App() {
     try {
       const res = await fetch("/api/plan/days");
       const data = await res.json().catch(() => ({}));
-      if (res.ok && (data.blocks?.length ?? 0) > 0) {
+      const hasDays = data.blocks?.some(b => b.weeks?.some(w => w.days?.length > 0));
+      if (res.ok && hasDays) {
         setPlanBlocks(data.blocks);
       }
     } catch (e) {

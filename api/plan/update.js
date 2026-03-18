@@ -54,7 +54,7 @@ export default async function handler(req, res) {
       let weekRow = null;
       {
         const { data, error } = await supabase
-          .from("training_weeks").select("id").eq("id", week_id).single();
+          .from("training_weeks").select("id, week_id").eq("id", week_id).single();
         if (!error && data) weekRow = data;
       }
       if (!weekRow) {
@@ -62,7 +62,7 @@ export default async function handler(req, res) {
         return res.status(404).json({ error: `Week not found: ${week_id}` });
       }
 
-      console.log("[plan/update] resolved week db id:", weekRow.id);
+      console.log("[plan/update] week:", weekRow.id, "slug:", weekRow.week_id);
 
       // Apply the field changes to the training_days row.
       // Accept both the exact DB column names and short legacy aliases.
@@ -103,12 +103,12 @@ export default async function handler(req, res) {
         return res.status(400).json({ error: "No valid fields to update" });
       }
 
-      console.log("[plan/update] updating training_days where week_id =", weekRow.id, "day =", normalizedDay, "payload:", JSON.stringify(updatePayload));
+      console.log("[plan/update] updating training_days where week_id =", weekRow.week_id, "day =", normalizedDay, "payload:", JSON.stringify(updatePayload));
 
       const { data: updated, error: updateErr, count } = await supabase
         .from("training_days")
         .update(updatePayload)
-        .eq("week_id", weekRow.id)
+        .eq("week_id", weekRow.week_id)
         .eq("day_name", normalizedDay)
         .select();
 
