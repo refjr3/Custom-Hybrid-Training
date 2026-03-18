@@ -167,19 +167,60 @@ export default async function handler(req, res) {
   if (authErr || !user) return res.status(401).json({ error: "Invalid token" });
   const userId = user.id;
 
-  // Idempotency: if this user already has a plan, don't overwrite it
-  const { count } = await supabase
-    .from("training_weeks")
-    .select("id", { count: "exact", head: true })
-    .eq("user_id", userId);
+  // ── Check generation_status and decide whether to proceed ─────────────────
+  const { data: profileRow, error: profileErr } = await supabase
+    .from("user_profiles")
+    .select("generation_status")
+    .eq("user_id", userId)
+    .single();
 
-  if (count > 0) {
-    console.log("[plan/generate] plan already exists for", userId, "— skipping");
-    return res.status(200).json({ success: true, message: "Plan already exists", weeks_created: 0 });
+  if (profileErr && profileErr.code !== "PGRST116") {
+    // PGRST116 = no rows — profile may not exist yet, allow through
+    console.error("[plan/generate] profile fetch error:", profileErr.message);
+    return res.status(500).json({ error: "Failed to read user profile", details: profileErr.message });
+  }
+
+  const genStatus = profileRow?.generation_status ?? "pending";
+
+  if (genStatus === "complete") {
+    // Completed plan exists — honour idempotency, don't regenerate
+    const { count } = await supabase
+      .from("training_weeks")
+      .select("id", { count: "exact", head: true })
+      .eq("user_id", userId);
+
+    if (count > 0) {
+      console.log("[plan/generate] plan already complete for", userId, "— skipping");
+      return res.status(200).json({ success: true, message: "Plan already exists", weeks_created: 0 });
+    }
+    // Status says complete but rows are gone — fall through and regenerate
+  }
+
+  if (genStatus === "in_progress" || genStatus === "failed") {
+    // Previous attempt was interrupted or failed — clear partial data and retry
+    console.log(`[plan/generate] status=${genStatus} for ${userId} — clearing partial data and retrying`);
+
+    const [{ error: delDaysErr }, { error: delWeeksErr }, { error: delBlocksErr }] = await Promise.all([
+      supabase.from("training_days").delete().eq("user_id", userId),
+      supabase.from("training_weeks").delete().eq("user_id", userId),
+      supabase.from("training_blocks").delete().eq("user_id", userId),
+    ]);
+
+    if (delDaysErr || delWeeksErr || delBlocksErr) {
+      const msg = (delDaysErr || delWeeksErr || delBlocksErr).message;
+      console.error("[plan/generate] cleanup error:", msg);
+      return res.status(500).json({ error: "Failed to clear partial plan data", details: msg });
+    }
   }
 
   const profile = req.body?.profile;
   if (!profile) return res.status(400).json({ error: "profile is required in request body" });
+
+  // Mark generation as in_progress
+  await supabase
+    .from("user_profiles")
+    .update({ generation_status: "in_progress" })
+    .eq("user_id", userId);
 
   const planStart = nextMonday();
 
@@ -212,15 +253,38 @@ export default async function handler(req, res) {
       plan = JSON.parse(rawText);
     } catch (parseErr) {
       console.error("[plan/generate] JSON parse error. Raw (first 300):", rawText.slice(0, 300));
+      await supabase
+        .from("user_profiles")
+        .update({ generation_status: "failed" })
+        .eq("user_id", userId);
       return res.status(500).json({ error: "Could not parse generated plan", details: parseErr.message });
     }
 
-    // ── Insert training_weeks + training_days ─────────────────────────────
+    // ── Insert training_blocks → training_weeks → training_days ──────────
     const blocks = Array.isArray(plan.blocks) ? plan.blocks : [];
     let globalWeekIndex = 0;
     let weeksCreated = 0;
 
     for (const block of blocks) {
+      // 1. Insert training_block row first
+      const { error: blockErr } = await supabase
+        .from("training_blocks")
+        .insert({
+          user_id:  userId,
+          block_id: block.block_id,
+          phase:    block.phase  || block.block_id,
+          label:    block.label  || block.block_id,
+        });
+
+      if (blockErr) {
+        console.error("[plan/generate] block insert error:", blockErr.message);
+        await supabase
+          .from("user_profiles")
+          .update({ generation_status: "failed" })
+          .eq("user_id", userId);
+        return res.status(500).json({ error: "Failed to insert training block", details: blockErr.message });
+      }
+
       const weeksList = Array.isArray(block.weeks) ? block.weeks : [];
 
       for (let wi = 0; wi < weeksList.length; wi++) {
@@ -229,7 +293,7 @@ export default async function handler(req, res) {
         const weekStart = addDays(planStart, globalWeekIndex * 7);
         const weekEnd   = addDays(weekStart, 6);
 
-        // Insert training_week row
+        // 2. Insert training_week row, referencing the block_id slug
         const { error: weekErr } = await supabase
           .from("training_weeks")
           .insert({
@@ -245,10 +309,14 @@ export default async function handler(req, res) {
 
         if (weekErr) {
           console.error("[plan/generate] week insert error:", weekErr.message);
+          await supabase
+            .from("user_profiles")
+            .update({ generation_status: "failed" })
+            .eq("user_id", userId);
           return res.status(500).json({ error: "Failed to insert training week", details: weekErr.message });
         }
 
-        // Build day rows — validate session keys, compute date labels
+        // 3. Build and insert day rows
         const days = Array.isArray(week.days) ? week.days : [];
         const daysToInsert = days.map(day => {
           const dayOffset = DAY_IDX[day.day_name] ?? 0;
@@ -273,6 +341,10 @@ export default async function handler(req, res) {
 
           if (daysErr) {
             console.error("[plan/generate] days insert error:", daysErr.message);
+            await supabase
+              .from("user_profiles")
+              .update({ generation_status: "failed" })
+              .eq("user_id", userId);
             return res.status(500).json({ error: "Failed to insert training days", details: daysErr.message });
           }
         }
@@ -282,11 +354,21 @@ export default async function handler(req, res) {
       }
     }
 
+    // Mark generation as complete
+    await supabase
+      .from("user_profiles")
+      .update({ generation_status: "complete" })
+      .eq("user_id", userId);
+
     console.log(`[plan/generate] created ${weeksCreated} weeks for user ${userId}`);
     return res.status(200).json({ success: true, weeks_created: weeksCreated });
 
   } catch (err) {
     console.error("[plan/generate] error:", err.message);
+    await supabase
+      .from("user_profiles")
+      .update({ generation_status: "failed" })
+      .eq("user_id", userId);
     return res.status(500).json({ error: "Plan generation failed", details: err.message });
   }
 }
