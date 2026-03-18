@@ -524,7 +524,7 @@ export default function App() {
     if (params.get("connected") === "true") window.history.replaceState({}, "", "/");
     fetchWhoopData();
     fetchBiomarkers();
-    fetchPlan();
+    fetchPlan(session?.access_token);
   }, [profile]);
 
   const fetchWhoopData = async () => {
@@ -552,9 +552,10 @@ export default function App() {
     } catch (e) {}
   };
 
-  const fetchPlan = async () => {
+  // Fix #5: accept token as a parameter so callers always pass the live token —
+  // avoids stale-closure reads of session?.access_token captured at definition time.
+  const fetchPlan = async (token) => {
     try {
-      const token = session?.access_token;
       console.log("[fetchPlan] token present:", !!token, "| token prefix:", token?.slice(0,20));
       const res = await fetch("/api/plan/days", {
         headers: token ? { "Authorization": `Bearer ${token}` } : {},
@@ -575,15 +576,15 @@ export default function App() {
       }
     } catch (e) {
       console.log("[fetchPlan] caught error:", e.message);
-      // silently fall back to hardcoded BLOCKS
     } finally {
       setPlanLoading(false);
     }
   };
 
   const handlePlanChange = async (planChange) => {
+    // Fix #5: read live session token at call time, pass explicitly to fetchPlan.
+    const token = session?.access_token;
     try {
-      const token = session?.access_token;
       console.log("[handlePlanChange] sending:", JSON.stringify(planChange));
       console.log("[handlePlanChange] token present:", !!token, "| token prefix:", token?.slice(0,20));
       const res = await fetch("/api/plan/update", {
@@ -596,16 +597,17 @@ export default function App() {
       });
       const body = await res.json().catch(() => ({}));
       console.log("[handlePlanChange] update status:", res.status, "| body:", JSON.stringify(body));
+      // Fix #1: always call fetchPlan so the UI refreshes even after a failed update,
+      // and so we can see the current DB state in the console.
       if (!res.ok) {
-        console.log("[handlePlanChange] update FAILED — skipping fetchPlan");
-        return;
+        console.log("[handlePlanChange] update FAILED — still calling fetchPlan to confirm DB state");
+      } else {
+        console.log("[handlePlanChange] update OK — calling fetchPlan");
       }
-      console.log("[handlePlanChange] update OK — calling fetchPlan");
-      await fetchPlan();
+      await fetchPlan(token);
       console.log("[handlePlanChange] fetchPlan complete");
     } catch (e) {
       console.log("[handlePlanChange] caught error:", e.message);
-      // silently ignore — coach UI already shows accepted state
     }
   };
 
