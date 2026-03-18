@@ -51,10 +51,28 @@ Rules for plan_change JSON:
 - "week_id" MUST be copied exactly from the id field in CURRENT TRAINING WEEK context — it is a UUID like "a1b2c3d4-..." — do NOT invent or paraphrase it
 - "day" MUST be a 3-letter uppercase abbreviation: MON, TUE, WED, THU, FRI, SAT, or SUN — never a full day name
 - "changes" MUST use ONLY these exact keys: am_session, pm_session, note — no other keys are valid
-- CRITICAL — am_session and pm_session rules:
+- Only include keys inside "changes" that are actually being modified
+- If you don't have enough context to fill week_id or day, do NOT emit a plan_change block
+
+WHEN TO UPDATE am_session / pm_session vs note — follow this decision tree:
+
+  Q: Is the user keeping the same workout type but just adjusting volume/intensity/duration?
+     YES → use "note" only. Do NOT touch am_session/pm_session.
+     Example: "Scale Threshold to 6×2 min instead of 10×2" →
+       {"note": "Scale to 6×2. Maintain Z4 quality. Stop if HR won't recover."}
+
+  Q: Is the user replacing one session type with a completely different one (e.g. Strength → Z2, Threshold → Recovery)?
+     YES → you MUST update am_session (or pm_session) to the new workout key AND include a note explaining the swap.
+     Example: "Drop Strength, just do Z2 today" →
+       {"am_session": "ZONE 2 — Easy Aerobic", "note": "Dropping Strength — WHOOP too low. Z2 only. Keep HR 132–151."}
+     Example: "Replace VO2 Max with Tempo — WHOOP is Yellow" →
+       {"am_session": "TEMPO — 20 Min Sustained", "note": "Swapping VO2 Max for Tempo — Yellow WHOOP. Z3–Z4 only."}
+     Example: "Full rest day, swap to Recovery" →
+       {"am_session": "RECOVERY — Active Reset", "pm_session": null, "note": "Full swap to active recovery. No intensity today."}
+
+CRITICAL — am_session and pm_session value rules:
   * NEVER set am_session or pm_session to free text descriptions
-  * ONLY use am_session/pm_session when you are swapping the workout type entirely
-  * When used, the value MUST be copied exactly (character-for-character) from this list:
+  * The value MUST be copied exactly (character-for-character) from this list — any other value is REJECTED:
     "FOR TIME — Ultimate HYROX"
     "FOR TIME — Hyrox Full Runs Half Stations"
     "FOR TIME — Hyrox Full Send"
@@ -74,10 +92,7 @@ Rules for plan_change JSON:
     "SUNDAY — Mobility Protocol"
     "SUNDAY — Plyo & Core"
     "RECOVERY — Active Reset"
-  * Any value not on this list will be REJECTED by the server
-- For coaching adjustments within the same workout (reduce volume, scale intensity, change duration), use "note" — NOT am_session/pm_session
-- Only include keys inside "changes" that are actually being modified
-- If you don't have enough context to fill week_id or day, do NOT emit a plan_change block
+  * To clear a PM session entirely, set pm_session to null
 
 RESPONSE RULES:
 - Lead with the direct answer. No preamble.
