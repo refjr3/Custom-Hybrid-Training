@@ -21,9 +21,14 @@ export default async function handler(req, res) {
 
   const p = profileResult.data;
   const flaggedBio = bioResult.data || [];
-
-  // Derive display values from profile — fall back gracefully to neutral text when fields are absent
   const athleteName = p?.name || "the athlete";
+
+  // Compute age from dob (dob replaced the age integer column in migration 005)
+  const dob = p?.dob;
+  const ageYears = dob
+    ? Math.floor((Date.now() - new Date(dob).getTime()) / (365.25 * 24 * 60 * 60 * 1000))
+    : null;
+
   const heightIn = p?.height_in;
   const heightStr = heightIn ? `${Math.floor(heightIn / 12)}'${heightIn % 12}"` : "N/A";
   const lthr = p?.lthr;
@@ -31,7 +36,16 @@ export default async function handler(req, res) {
   const z2Max = p?.z2_max ?? 151;
   const threshMin = lthr ? Math.round(lthr * 0.95) : 150;
   const threshMax = lthr ? Math.round(lthr * 1.05) : 168;
-  const raceGoal = p?.race_goal ? p.race_goal.replace(/_/g, " ").toUpperCase() : "N/A";
+
+  // Race goal: prefer new target_race_name, fall back to legacy race_goal slug
+  const raceGoal = p?.target_race_name
+    ? `${p.target_race_name}${p.target_race_date ? ` (${p.target_race_date})` : ""}`
+    : p?.race_goal ? p.race_goal.replace(/_/g, " ").toUpperCase() : "N/A";
+
+  // Sports: prefer new sports[], fall back to legacy race_goal
+  const sportsDisplay = p?.sports?.length > 0
+    ? p.sports.join(", ").toUpperCase()
+    : p?.race_goal ? p.race_goal.replace(/_/g, " ").toUpperCase() : "N/A";
 
   const SUPP_NAMES = {
     beta_alanine: "Beta Alanine 3.2–6.4g",
@@ -50,7 +64,8 @@ export default async function handler(req, res) {
   const SYSTEM_PROMPT = `You are ${athleteName}'s Elite Hybrid Performance Coach. You have complete knowledge of their training, health, and goals.
 
 ATHLETE PROFILE:
-- Name: ${athleteName} | Age: ${p?.age ?? "N/A"} | Weight: ${p?.weight_lbs ? `${p.weight_lbs} lbs` : "N/A"} | Height: ${heightStr}
+- Name: ${athleteName} | Age: ${ageYears ?? "N/A"} | Weight: ${p?.weight_lbs ? `${p.weight_lbs} lbs` : "N/A"} | Height: ${heightStr}
+- Sports: ${sportsDisplay}${p?.experience_level ? ` | Level: ${p.experience_level}` : ""}${p?.weekly_training_hours ? ` | Volume: ${p.weekly_training_hours}h/wk` : ""}
 - LTHR: ${lthr ?? "N/A"} bpm | Z2 Target: ${z2Min}–${z2Max} bpm | Threshold: ${threshMin}–${threshMax} bpm
 - Race Goal: ${raceGoal}
 
