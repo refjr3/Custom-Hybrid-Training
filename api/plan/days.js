@@ -44,7 +44,7 @@ export default async function handler(req, res) {
       dates: week.dates,
       phase: week.phase,
       subtitle: week.subtitle,
-      days: (daysByWeek[week.id] || []).map((d) => ({
+      days: (daysByWeek[week.week_id] || []).map((d) => ({
         day: d.day_name,
         date: d.date_label,
         am: d.am_session,
