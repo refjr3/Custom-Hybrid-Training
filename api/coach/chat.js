@@ -11,36 +11,61 @@ export default async function handler(req, res) {
   const { message, whoopData, currentWeek, recentActivities, attachment, user_id } = req.body;
   if (!message && !attachment) return res.status(400).json({ error: "No message or attachment provided" });
 
-  const SYSTEM_PROMPT = `You are Rafael Fagundo's Elite Hybrid Performance Coach. You have complete knowledge of his training, health, and goals.
+  // Fetch user profile and flagged biomarkers in parallel so the system prompt is dynamic
+  const [profileResult, bioResult] = await Promise.all([
+    user_id
+      ? supabase.from("user_profiles").select("*").eq("user_id", user_id).single()
+      : Promise.resolve({ data: null }),
+    supabase.from("biomarkers").select("label,value,unit,flag").in("flag", ["HIGH", "LOW"]),
+  ]);
+
+  const p = profileResult.data;
+  const flaggedBio = bioResult.data || [];
+
+  // Derive display values from profile — fall back gracefully to neutral text when fields are absent
+  const athleteName = p?.name || "the athlete";
+  const heightIn = p?.height_in;
+  const heightStr = heightIn ? `${Math.floor(heightIn / 12)}'${heightIn % 12}"` : "N/A";
+  const lthr = p?.lthr;
+  const z2Min = p?.z2_min ?? 132;
+  const z2Max = p?.z2_max ?? 151;
+  const threshMin = lthr ? Math.round(lthr * 0.95) : 150;
+  const threshMax = lthr ? Math.round(lthr * 1.05) : 168;
+  const raceGoal = p?.race_goal ? p.race_goal.replace(/_/g, " ").toUpperCase() : "N/A";
+
+  const SUPP_NAMES = {
+    beta_alanine: "Beta Alanine 3.2–6.4g",
+    creatine:     "Creatine 5g",
+    whey:         "Whey Protein 25–40g",
+    magnesium:    "Magnesium Glycinate 300–400mg",
+    l_theanine:   "L-Theanine 200–400mg",
+    sermorelin:   "Sermorelin (per Rx)",
+  };
+  const suppLine = (p?.supplements || []).map(id => SUPP_NAMES[id]).filter(Boolean).join(", ") || "None recorded";
+
+  const bioLines = flaggedBio.length > 0
+    ? flaggedBio.map(b => `- ${b.label}: ${b.value}${b.unit ? ` ${b.unit}` : ""} ${b.flag}`).join("\n")
+    : "- No flagged biomarkers on record";
+
+  const SYSTEM_PROMPT = `You are ${athleteName}'s Elite Hybrid Performance Coach. You have complete knowledge of their training, health, and goals.
 
 ATHLETE PROFILE:
-- Age: 31 | Height: 6'3" | Weight: 209 lbs | Body Fat: 15.4% | Lean Mass: 179.7 lbs
-- ALMI: 10.7 (Optimal/Highly Muscular) | Bone T-Score: +2.2 (Optimal)
-- LTHR: 165-170 bpm | Z2 Target: 132-151 bpm | Threshold: 150-168 bpm
+- Name: ${athleteName} | Age: ${p?.age ?? "N/A"} | Weight: ${p?.weight_lbs ? `${p.weight_lbs} lbs` : "N/A"} | Height: ${heightStr}
+- LTHR: ${lthr ?? "N/A"} bpm | Z2 Target: ${z2Min}–${z2Max} bpm | Threshold: ${threshMin}–${threshMax} bpm
+- Race Goal: ${raceGoal}
 
 FLAGGED BIOMARKERS:
-- LDL: 145 mg/dL HIGH | ApoB: 103 mg/dL HIGH | Fasting Glucose: 117 mg/dL HIGH
-- Testosterone: 474 ng/dL (mid-range for age)
+${bioLines}
 
-RACE PROGRESSION: Half Marathon → Marathon → 70.3 Ironman → 140.6 Ironman
-CURRENT PHASE: Miami HYROX (Apr 4) → Phase 1 post-race base build
-
-WEEKLY STRUCTURE:
-- MON: HYROX Session | TUE: Threshold Run | WED: Strength + Z2 PM
-- THU: Tempo/VO2 Max | FRI: HYROX Session | SAT: Long Run | SUN: Mobility or Plyo+Core
+SUPPLEMENTS ON STACK: ${suppLine}
 
 COACHING RULES:
 1. Never suggest zero strength days — minimum 2/week
-2. 80% of running volume in Z2 (132-151 bpm)
+2. 80% of running volume in Z2 (${z2Min}–${z2Max} bpm)
 3. Never suggest VO2 Max when WHOOP is Yellow or Red
 4. WHOOP Red (<35%) = recovery only, no exceptions
 5. Preserve lean mass until final 8 weeks of Ironman build
-6. Factor in LDL/ApoB — low saturated fat, high fiber
-
-SUPPLEMENTS:
-- AM: Beta Alanine 3.2-6.4g, Creatine 5g, Whey #1 25-40g
-- PM: Whey #2 25-40g
-- Night: Magnesium Glycinate 300-400mg, L-Theanine 200-400mg, Sermorelin (per Rx)
+6. Factor in any HIGH/LOW biomarkers in nutrition and intensity guidance
 
 When suggesting a plan change, include this EXACTLY at the end of your response (valid JSON only, no trailing text):
 <plan_change>
