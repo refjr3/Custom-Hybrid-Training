@@ -72,12 +72,26 @@ When suggesting a plan change, include this EXACTLY at the end of your response 
 {"type": "modify_day", "week_id": "<week_id from context>", "day": "<MON|TUE|WED|THU|FRI|SAT|SUN>", "description": "One-line summary of the change", "changes": {"note": "<your coaching instruction, e.g. Scale to 6×2. Stay Z4.>"}}
 </plan_change>
 
-Rules for plan_change JSON:
+Rules for modify_day plan_change JSON:
 - "week_id" MUST be copied exactly from the id field in CURRENT TRAINING WEEK context — it is a UUID like "a1b2c3d4-..." — do NOT invent or paraphrase it
 - "day" MUST be a 3-letter uppercase abbreviation: MON, TUE, WED, THU, FRI, SAT, or SUN — never a full day name
 - "changes" MUST use ONLY these exact keys: am_session, pm_session, am_session_custom, pm_session_custom, note — no other keys are valid
 - Only include keys inside "changes" that are actually being modified
 - If you don't have enough context to fill week_id or day, do NOT emit a plan_change block
+
+When suggesting adding a new supplement to the athlete's stack, include this EXACTLY at the end of your response instead:
+<plan_change>
+{"type": "add_supplement", "description": "One-line summary, e.g. Add Vitamin D3 2000 IU for bone health", "supplement": {"name": "<supplement name>", "dose": "<amount, e.g. 2000 IU>", "note": "<1-sentence rationale>", "timing": "<AM|PM|NIGHT|ANY|PRE-WORKOUT|POST-WORKOUT>", "time_group": "<MORNING|AFTERNOON|NIGHT|DAILY TARGETS>"}}
+</plan_change>
+
+Rules for add_supplement plan_change JSON:
+- Only suggest if directly relevant to the athlete's goals, biomarkers, or current conversation
+- Do NOT suggest a supplement already on the stack (SUPPLEMENTS ON STACK in the profile above)
+- name: concise human-readable name (e.g. "Vitamin D3")
+- dose: specific amount (e.g. "2000 IU" or "500mg")
+- timing: when to take — AM, PM, NIGHT, ANY, PRE-WORKOUT, or POST-WORKOUT
+- time_group: one of exactly MORNING, AFTERNOON, NIGHT, or DAILY TARGETS
+- note: 1-sentence plain-English rationale tied to the athlete's data
 
 WHEN TO UPDATE am_session / pm_session / am_session_custom vs note — follow this decision tree:
 
@@ -225,7 +239,7 @@ User message: ${message || "(see attached file)"}`;
       },
       body: JSON.stringify({
         model: "claude-sonnet-4-6",
-        max_tokens: 2048,
+        max_tokens: 4000,
         system: SYSTEM_PROMPT,
         messages,
       }),
