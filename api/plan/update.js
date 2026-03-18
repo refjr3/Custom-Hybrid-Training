@@ -63,13 +63,12 @@ export default async function handler(req, res) {
       let weekRow = null;
       {
         const { data, error } = await supabase
-          .from("training_weeks").select("id, week_id").eq("id", week_id).single();
+          .from("training_weeks").select("id, week_id").eq("id", week_id).eq("user_id", userId).single();
         if (!error && data) weekRow = data;
       }
       if (!weekRow) {
-        // Try slug match (week_id column) as fallback
         const { data, error } = await supabase
-          .from("training_weeks").select("id, week_id").eq("week_id", week_id).single();
+          .from("training_weeks").select("id, week_id").eq("week_id", week_id).eq("user_id", userId).single();
         if (!error && data) weekRow = data;
       }
       if (!weekRow) {
@@ -125,7 +124,7 @@ export default async function handler(req, res) {
         .update(updatePayload)
         .eq("week_id", weekRow.week_id)
         .eq("day_name", normalizedDay)
-        .or(`user_id.eq.${userId},user_id.is.null`)
+        .eq("user_id", userId)
         .select();
 
       if (updateErr) {
