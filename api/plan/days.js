@@ -8,9 +8,19 @@ const supabase = createClient(
 export default async function handler(req, res) {
   if (req.method !== "GET") return res.status(405).json({ error: "Method not allowed" });
 
+  // Verify the user's JWT and scope data to their user_id.
+  // Rows with user_id IS NULL are legacy/shared data visible to any authenticated user.
+  const token = req.headers.authorization?.replace("Bearer ", "");
+  if (!token) return res.status(401).json({ error: "Unauthorized" });
+
+  const { data: { user }, error: authErr } = await supabase.auth.getUser(token);
+  if (authErr || !user) return res.status(401).json({ error: "Invalid token" });
+  const userId = user.id;
+
   const { data: weeks, error: weeksErr } = await supabase
     .from("training_weeks")
     .select("*")
+    .or(`user_id.eq.${userId},user_id.is.null`)
     .order("block_id")
     .order("week_order");
 
@@ -18,7 +28,8 @@ export default async function handler(req, res) {
 
   const { data: days, error: daysErr } = await supabase
     .from("training_days")
-    .select("*");
+    .select("*")
+    .or(`user_id.eq.${userId},user_id.is.null`);
 
   if (daysErr) return res.status(500).json({ error: daysErr.message });
 

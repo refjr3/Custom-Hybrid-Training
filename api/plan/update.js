@@ -8,6 +8,14 @@ const supabase = createClient(
 export default async function handler(req, res) {
   if (req.method !== "POST") return res.status(405).json({ error: "Method not allowed" });
 
+  // Verify the user's JWT so updates are scoped to their own rows.
+  const token = req.headers.authorization?.replace("Bearer ", "");
+  if (!token) return res.status(401).json({ error: "Unauthorized" });
+
+  const { data: { user }, error: authErr } = await supabase.auth.getUser(token);
+  if (authErr || !user) return res.status(401).json({ error: "Invalid token" });
+  const userId = user.id;
+
   const { type, week_id, day, changes, description } = req.body;
 
   if (!type) return res.status(400).json({ error: "Missing type" });
@@ -50,11 +58,18 @@ export default async function handler(req, res) {
 
       console.log("[plan/update] received:", JSON.stringify({ type, week_id, day: normalizedDay, changes, description }));
 
-      // Resolve week db id by UUID primary key
+      // Resolve week row — try UUID primary key first, fall back to text slug
+      // (slug fallback handles edge case where hardcoded BLOCKS data is still in use)
       let weekRow = null;
       {
         const { data, error } = await supabase
-          .from("training_weeks").select("id").eq("id", week_id).single();
+          .from("training_weeks").select("id, week_id").eq("id", week_id).single();
+        if (!error && data) weekRow = data;
+      }
+      if (!weekRow) {
+        // Try slug match (week_id column) as fallback
+        const { data, error } = await supabase
+          .from("training_weeks").select("id, week_id").eq("week_id", week_id).single();
         if (!error && data) weekRow = data;
       }
       if (!weekRow) {
@@ -62,7 +77,7 @@ export default async function handler(req, res) {
         return res.status(404).json({ error: `Week not found: ${week_id}` });
       }
 
-      console.log("[plan/update] resolved week db id:", weekRow.id);
+      console.log("[plan/update] week:", weekRow.id, "slug:", weekRow.week_id);
 
       // Apply the field changes to the training_days row.
       // Accept both the exact DB column names and short legacy aliases.
@@ -103,13 +118,14 @@ export default async function handler(req, res) {
         return res.status(400).json({ error: "No valid fields to update" });
       }
 
-      console.log("[plan/update] updating training_days where week_id =", weekRow.id, "day =", normalizedDay, "payload:", JSON.stringify(updatePayload));
+      console.log("[plan/update] updating training_days where week_id =", weekRow.week_id, "day =", normalizedDay, "payload:", JSON.stringify(updatePayload));
 
       const { data: updated, error: updateErr, count } = await supabase
         .from("training_days")
         .update(updatePayload)
-        .eq("week_id", weekRow.id)
+        .eq("week_id", weekRow.week_id)
         .eq("day_name", normalizedDay)
+        .or(`user_id.eq.${userId},user_id.is.null`)
         .select();
 
       if (updateErr) {

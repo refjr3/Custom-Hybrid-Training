@@ -144,6 +144,9 @@ export default async function handler(req, res) {
     return res.status(401).json({ error: "Unauthorized" });
   }
 
+  // Optional: scope seeded rows to a specific user (pass ?user_id=<uuid>)
+  const userId = req.query.user_id || null;
+
   const log = [];
   let weekOk = 0, dayOk = 0, errors = [];
 
@@ -157,11 +160,11 @@ export default async function handler(req, res) {
   };
 
   const BLOCKS = [
-    { block_id: blockUuids.taper,  label: "MIAMI TAPER" },
-    { block_id: blockUuids.phase1, label: "PHASE 1" },
-    { block_id: blockUuids.phase2, label: "PHASE 2" },
-    { block_id: blockUuids.phase3, label: "PHASE 3" },
-    { block_id: blockUuids.phase4, label: "PHASE 4" },
+    { block_id: blockUuids.taper,  label: "MIAMI TAPER", user_id: userId },
+    { block_id: blockUuids.phase1, label: "PHASE 1",     user_id: userId },
+    { block_id: blockUuids.phase2, label: "PHASE 2",     user_id: userId },
+    { block_id: blockUuids.phase3, label: "PHASE 3",     user_id: userId },
+    { block_id: blockUuids.phase4, label: "PHASE 4",     user_id: userId },
   ];
 
   // Count rows before wiping so the response can show before/after
@@ -198,6 +201,8 @@ export default async function handler(req, res) {
     // Replace slug block_id with the actual UUID
     weekRow.block_id = blockUuids[weekRow.block_id];
 
+    weekRow.user_id = userId;
+
     const { data: weekData, error: weekErr } = await supabase
       .from("training_weeks")
       .upsert(weekRow, { onConflict: "week_id" })
@@ -217,6 +222,7 @@ export default async function handler(req, res) {
     const dayRows = days.map((day) => ({
       ...day,
       week_id: weekDbId,
+      user_id: userId,
     }));
 
     const { error: daysErr } = await supabase
@@ -242,6 +248,7 @@ export default async function handler(req, res) {
 
   const summary = {
     success: errors.length === 0,
+    user_id: userId,
     weeks_seeded: weekOk,
     days_seeded: dayOk,
     counts: after,

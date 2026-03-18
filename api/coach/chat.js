@@ -8,7 +8,7 @@ const supabase = createClient(
 export default async function handler(req, res) {
   if (req.method !== "POST") return res.status(405).json({ error: "Method not allowed" });
 
-  const { message, whoopData, currentWeek, recentActivities, attachment } = req.body;
+  const { message, whoopData, currentWeek, recentActivities, attachment, user_id } = req.body;
   if (!message && !attachment) return res.status(400).json({ error: "No message or attachment provided" });
 
   const SYSTEM_PROMPT = `You are Rafael Fagundo's Elite Hybrid Performance Coach. You have complete knowledge of his training, health, and goals.
@@ -196,9 +196,10 @@ User message: ${message || "(see attached file)"}`;
     }
 
     // Persist messages (fire-and-forget — don't block the response)
+    const msgBase = user_id ? { user_id } : {};
     supabase.from("ai_messages").insert([
-      { role: "user", content: message || `[attachment: ${attachment?.name}]` },
-      { role: "assistant", content: cleanText },
+      { ...msgBase, role: "user", content: message || `[attachment: ${attachment?.name}]` },
+      { ...msgBase, role: "assistant", content: cleanText },
     ]).then(() => {}).catch(() => {});
 
     return res.status(200).json({

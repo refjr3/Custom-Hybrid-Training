@@ -7,6 +7,7 @@ const supabase = createClient(
 
 export default async function handler(req, res) {
   const garminToken = req.headers.authorization?.replace("Bearer ", "");
+  const userId = req.body?.user_id || req.query?.user_id || null;
 
   if (!garminToken) {
     return res.status(401).json({ error: "No Garmin token" });
@@ -45,6 +46,7 @@ export default async function handler(req, res) {
       aerobic_effect: a.aerobicTrainingEffect || 0,
       anaerobic_effect: a.anaerobicTrainingEffect || 0,
       raw_data: a,
+      ...(userId ? { user_id: userId } : {}),
     }));
 
     if (transformed.length > 0) {
