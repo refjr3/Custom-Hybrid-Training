@@ -58,8 +58,19 @@ export default async function handler(req, res) {
 
       console.log("[plan/update] received:", JSON.stringify({ type, week_id, day: normalizedDay, changes, description }));
 
-      // Resolve week row — try UUID primary key first, fall back to text slug
-      // (slug fallback handles edge case where hardcoded BLOCKS data is still in use)
+      // Fix #3: probe without user_id filter first so we can distinguish
+      // "week doesn't exist at all" from "week exists but under a different user_id".
+      {
+        const { data: probe } = await supabase
+          .from("training_weeks").select("id, week_id, user_id").eq("id", week_id);
+        const { data: probe2 } = await supabase
+          .from("training_weeks").select("id, week_id, user_id").eq("week_id", week_id);
+        console.log("[plan/update] week probe (no user filter) by id:", JSON.stringify(probe));
+        console.log("[plan/update] week probe (no user filter) by slug:", JSON.stringify(probe2));
+      }
+
+      // Resolve week row — try UUID primary key first, fall back to text slug,
+      // both scoped to the authenticated user.
       let weekRow = null;
       {
         const { data, error } = await supabase
@@ -72,7 +83,7 @@ export default async function handler(req, res) {
         if (!error && data) weekRow = data;
       }
       if (!weekRow) {
-        console.log("[plan/update] week not found for value:", week_id);
+        console.log("[plan/update] week not found for userId:", userId, "week_id value:", week_id);
         return res.status(404).json({ error: `Week not found: ${week_id}` });
       }
 
@@ -110,8 +121,10 @@ export default async function handler(req, res) {
         updatePayload.ai_modification_note = description;
       }
 
-      const mutableFields = ["am_session", "pm_session", "note", "is_race_day", "ai_modification_note", "ai_modified"];
-      const hasChange = mutableFields.some((f) => f in updatePayload && f !== "ai_modified" && f !== "ai_modification_note");
+      // Fix #2: treat note and ai_modification_note as valid standalone changes —
+      // the AI frequently sends note-only modifications without touching am/pm_session.
+      const mutableFields = ["am_session", "pm_session", "note", "is_race_day", "ai_modification_note"];
+      const hasChange = mutableFields.some((f) => f in updatePayload);
       if (!hasChange) {
         console.log("[plan/update] no valid fields in changes:", changes);
         return res.status(400).json({ error: "No valid fields to update" });

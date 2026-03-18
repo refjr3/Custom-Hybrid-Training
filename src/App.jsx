@@ -524,7 +524,7 @@ export default function App() {
     if (params.get("connected") === "true") window.history.replaceState({}, "", "/");
     fetchWhoopData();
     fetchBiomarkers();
-    fetchPlan();
+    fetchPlan(session?.access_token);
   }, [profile]);
 
   const fetchWhoopData = async () => {
@@ -552,27 +552,41 @@ export default function App() {
     } catch (e) {}
   };
 
-  const fetchPlan = async () => {
+  // Fix #5: accept token as a parameter so callers always pass the live token —
+  // avoids stale-closure reads of session?.access_token captured at definition time.
+  const fetchPlan = async (token) => {
     try {
-      const token = session?.access_token;
+      console.log("[fetchPlan] token present:", !!token, "| token prefix:", token?.slice(0,20));
       const res = await fetch("/api/plan/days", {
         headers: token ? { "Authorization": `Bearer ${token}` } : {},
       });
+      console.log("[fetchPlan] status:", res.status);
       const data = await res.json().catch(() => ({}));
+      console.log("[fetchPlan] response:", JSON.stringify({
+        blocks: data.blocks?.length,
+        firstBlock: data.blocks?.[0]?.label,
+        firstBlockWeeks: data.blocks?.[0]?.weeks?.length,
+        firstWeekDays: data.blocks?.[0]?.weeks?.[0]?.days?.length,
+        error: data.error,
+      }));
       const hasDays = data.blocks?.some(b => b.weeks?.some(w => w.days?.length > 0));
+      console.log("[fetchPlan] hasDays:", hasDays, "| res.ok:", res.ok, "| will update state:", res.ok && hasDays);
       if (res.ok && hasDays) {
         setPlanBlocks(data.blocks);
       }
     } catch (e) {
-      // silently fall back to hardcoded BLOCKS
+      console.log("[fetchPlan] caught error:", e.message);
     } finally {
       setPlanLoading(false);
     }
   };
 
   const handlePlanChange = async (planChange) => {
+    // Fix #5: read live session token at call time, pass explicitly to fetchPlan.
+    const token = session?.access_token;
     try {
-      const token = session?.access_token;
+      console.log("[handlePlanChange] sending:", JSON.stringify(planChange));
+      console.log("[handlePlanChange] token present:", !!token, "| token prefix:", token?.slice(0,20));
       const res = await fetch("/api/plan/update", {
         method: "POST",
         headers: {
@@ -581,10 +595,19 @@ export default function App() {
         },
         body: JSON.stringify(planChange),
       });
-      if (!res.ok) return;
-      await fetchPlan();
+      const body = await res.json().catch(() => ({}));
+      console.log("[handlePlanChange] update status:", res.status, "| body:", JSON.stringify(body));
+      // Fix #1: always call fetchPlan so the UI refreshes even after a failed update,
+      // and so we can see the current DB state in the console.
+      if (!res.ok) {
+        console.log("[handlePlanChange] update FAILED — still calling fetchPlan to confirm DB state");
+      } else {
+        console.log("[handlePlanChange] update OK — calling fetchPlan");
+      }
+      await fetchPlan(token);
+      console.log("[handlePlanChange] fetchPlan complete");
     } catch (e) {
-      // silently ignore — coach UI already shows accepted state
+      console.log("[handlePlanChange] caught error:", e.message);
     }
   };
 
