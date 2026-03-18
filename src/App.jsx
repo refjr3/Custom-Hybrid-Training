@@ -584,9 +584,25 @@ export default function App() {
   };
 
   const handlePlanChange = async (planChange) => {
-    // Fix #5: read live session token at call time, pass explicitly to fetchPlan.
     const token = session?.access_token;
     try {
+      if (planChange.type === "add_supplement") {
+        console.log("[handlePlanChange] add_supplement:", JSON.stringify(planChange));
+        const res = await fetch("/api/supplements/update", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            ...(token ? { "Authorization": `Bearer ${token}` } : {}),
+          },
+          body: JSON.stringify(planChange),
+        });
+        const body = await res.json().catch(() => ({}));
+        console.log("[handlePlanChange] supplement update status:", res.status, "| body:", JSON.stringify(body));
+        if (res.ok) await fetchSupplements();
+        return;
+      }
+
+      // modify_day — existing plan update logic
       console.log("[handlePlanChange] sending:", JSON.stringify(planChange));
       console.log("[handlePlanChange] token present:", !!token, "| token prefix:", token?.slice(0,20));
       const res = await fetch("/api/plan/update", {
@@ -599,8 +615,6 @@ export default function App() {
       });
       const body = await res.json().catch(() => ({}));
       console.log("[handlePlanChange] update status:", res.status, "| body:", JSON.stringify(body));
-      // Fix #1: always call fetchPlan so the UI refreshes even after a failed update,
-      // and so we can see the current DB state in the console.
       if (!res.ok) {
         console.log("[handlePlanChange] update FAILED — still calling fetchPlan to confirm DB state");
       } else {
