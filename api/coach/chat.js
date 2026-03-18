@@ -75,11 +75,11 @@ When suggesting a plan change, include this EXACTLY at the end of your response 
 Rules for plan_change JSON:
 - "week_id" MUST be copied exactly from the id field in CURRENT TRAINING WEEK context — it is a UUID like "a1b2c3d4-..." — do NOT invent or paraphrase it
 - "day" MUST be a 3-letter uppercase abbreviation: MON, TUE, WED, THU, FRI, SAT, or SUN — never a full day name
-- "changes" MUST use ONLY these exact keys: am_session, pm_session, note — no other keys are valid
+- "changes" MUST use ONLY these exact keys: am_session, pm_session, am_session_custom, pm_session_custom, note — no other keys are valid
 - Only include keys inside "changes" that are actually being modified
 - If you don't have enough context to fill week_id or day, do NOT emit a plan_change block
 
-WHEN TO UPDATE am_session / pm_session vs note — follow this decision tree:
+WHEN TO UPDATE am_session / pm_session / am_session_custom vs note — follow this decision tree:
 
   Q: Is the user keeping the same workout type but just adjusting volume/intensity/duration?
      YES → use "note" only. Do NOT touch am_session/pm_session.
@@ -87,13 +87,29 @@ WHEN TO UPDATE am_session / pm_session vs note — follow this decision tree:
        {"note": "Scale to 6×2. Maintain Z4 quality. Stop if HR won't recover."}
 
   Q: Is the user replacing one session type with a completely different one (e.g. Strength → Z2, Threshold → Recovery)?
-     YES → you MUST update am_session (or pm_session) to the new workout key AND include a note explaining the swap.
+     YES → update am_session to the new WL key AND include a note.
      Example: "Drop Strength, just do Z2 today" →
        {"am_session": "ZONE 2 — Easy Aerobic", "note": "Dropping Strength — WHOOP too low. Z2 only. Keep HR 132–151."}
      Example: "Replace VO2 Max with Tempo — WHOOP is Yellow" →
        {"am_session": "TEMPO — 20 Min Sustained", "note": "Swapping VO2 Max for Tempo — Yellow WHOOP. Z3–Z4 only."}
      Example: "Full rest day, swap to Recovery" →
        {"am_session": "RECOVERY — Active Reset", "pm_session": null, "note": "Full swap to active recovery. No intensity today."}
+
+  Q: Is the user asking for a fully CUSTOM workout — a unique protocol that doesn't match any existing WL key (e.g. "design me a custom hill repeat ladder", "give me a unique lactate test session")?
+     YES → write the full workout as markdown to am_session_custom.
+           Set am_session to the closest matching WL key so the day-grid type badge still renders correctly.
+           Include a note summarising the change.
+     Format rules for am_session_custom:
+       - Use ## for section headers (WARM-UP, MAIN SET, COOL-DOWN, etc.)
+       - Use - for each individual step / exercise / interval
+       - Use **bold** for key numbers, zones, or cues
+       - Keep it concise — the athlete reads this during the session
+     Example: "Design me a custom hill repeat threshold session" →
+       {
+         "am_session": "THRESHOLD — 10×2 Min",
+         "am_session_custom": "## WARM-UP\n\n- 10 min easy jog @ Z2 (< 151 bpm)\n- 4 × 20 sec strides with full recovery\n\n## MAIN SET\n\n- **8 × 90 sec hill repeats** @ Z4 effort (150–168 bpm)\n- Jog back down recovery between reps\n- 2 min standing rest after rep 4\n\n## COOL-DOWN\n\n- 10 min easy flat jog @ Z2\n- 5 min walking + hip mobility",
+         "note": "Custom hill threshold — replaces flat intervals. Hills build neuromuscular power alongside lactate tolerance."
+       }
 
 CRITICAL — am_session and pm_session value rules:
   * NEVER set am_session or pm_session to free text descriptions

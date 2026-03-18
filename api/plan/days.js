@@ -72,6 +72,8 @@ export default async function handler(req, res) {
         date: d.date_label,
         am: d.am_session,
         pm: d.pm_session,
+        am_session_custom: d.am_session_custom || null,
+        pm_session_custom: d.pm_session_custom || null,
         note2a: d.note,
         isRaceDay: d.is_race_day,
         isSunday: d.is_sunday,

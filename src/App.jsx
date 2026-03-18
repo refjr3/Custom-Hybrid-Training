@@ -313,10 +313,64 @@ const AIChat = ({ whoopData, currentWeek, recentActivities, onPlanChange, userNa
   );
 };
 
+// Render a custom AI-generated session written in simple markdown.
+// Supports: ## headers, - / * bullets, **bold**, blank-line separators.
+const renderCustomSession = (md, accent) => {
+  if (!md) return null;
+  const lines = md.split("\n");
+  const out = [];
+  let i = 0;
+  while (i < lines.length) {
+    const line = lines[i];
+    // Section header
+    if (line.startsWith("## ")) {
+      out.push(
+        <div key={i} style={{ fontFamily:C.fm, fontSize:8, color:accent, letterSpacing:3, padding:"14px 0 4px", marginTop:4 }}>
+          {line.slice(3).toUpperCase()}
+        </div>
+      );
+    // Bullet item — gather consecutive bullets into a block
+    } else if (line.match(/^[-*] /)) {
+      const text = line.slice(2);
+      const inlineParts = text.split(/(\*\*[^*]+\*\*)/g).map((p, j) =>
+        p.startsWith("**") && p.endsWith("**")
+          ? <strong key={j} style={{ color:C.text }}>{p.slice(2,-2)}</strong>
+          : p
+      );
+      out.push(
+        <div key={i} style={{ display:"flex", gap:14, padding:"11px 16px", background:C.card, borderRadius:12, borderLeft:`3px solid ${accent}`, marginBottom:6 }}>
+          <span style={{ fontFamily:C.ff, fontSize:11, color:C.light, minWidth:20, marginTop:1 }}>{String(out.filter(x=>x).length).padStart(2,"0")}</span>
+          <span style={{ fontFamily:C.fs, fontSize:14, color:C.text, lineHeight:1.5 }}>{inlineParts}</span>
+        </div>
+      );
+    // Empty line — small spacer
+    } else if (line.trim() === "") {
+      out.push(<div key={i} style={{ height:6 }} />);
+    // Plain text paragraph with inline bold support
+    } else {
+      const inlineParts = line.split(/(\*\*[^*]+\*\*)/g).map((p, j) =>
+        p.startsWith("**") && p.endsWith("**")
+          ? <strong key={j}>{p.slice(2,-2)}</strong>
+          : p
+      );
+      out.push(
+        <div key={i} style={{ fontFamily:C.fs, fontSize:13, color:C.muted, lineHeight:1.7, marginBottom:4 }}>
+          {inlineParts}
+        </div>
+      );
+    }
+    i++;
+  }
+  return <div style={{ display:"flex", flexDirection:"column", gap:0 }}>{out}</div>;
+};
+
 const SessionModal = ({ name, dayData, sess, weekId, onClose, onSessSwitch, sundayChoice, setSundayChoice }) => {
   if (!name && !dayData?.isSunday && !dayData?.isRaceDay) return null;
   const w = name ? WL[name] : null;
   const accent = name ? getAccent(name) : C.muted;
+  // Custom AI-generated content takes priority over WL steps when ai_modified is true
+  const customContent = sess === "am" ? dayData?.am_session_custom : dayData?.pm_session_custom;
+  const showCustom = !!(customContent && dayData?.ai_modified);
   return (
     <div style={{ position:"fixed", inset:0, zIndex:200, background:"rgba(0,0,0,0.97)", overflowY:"auto" }}>
       <div style={{ maxWidth:480, margin:"0 auto", minHeight:"100vh", display:"flex", flexDirection:"column" }}>
@@ -369,6 +423,16 @@ const SessionModal = ({ name, dayData, sess, weekId, onClose, onSessSwitch, sund
                 </div>
               ))}
             </div>
+          ) : showCustom ? (
+            <>
+              {renderCustomSession(customContent, accent)}
+              {dayData?.note2a && (
+                <div style={{ background:C.card, borderRadius:12, padding:"14px 16px", borderLeft:`3px solid ${C.border}`, marginTop:16 }}>
+                  <div style={{ fontFamily:C.fm, fontSize:8, color:C.red, letterSpacing:3, marginBottom:6 }}>COACH NOTE</div>
+                  <div style={{ fontFamily:C.fs, fontSize:13, color:C.muted, lineHeight:1.8 }}>{dayData.note2a}</div>
+                </div>
+              )}
+            </>
           ) : w ? (
             <>
               <div style={{ display:"flex", flexDirection:"column", gap:6, marginBottom:20 }}>
