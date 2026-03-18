@@ -16,6 +16,7 @@ export default async function handler(req, res) {
   const { data: { user }, error: authErr } = await supabase.auth.getUser(token);
   if (authErr || !user) return res.status(401).json({ error: "Invalid token" });
   const userId = user.id;
+  console.log("[plan/days] userId:", userId);
 
   const { data: weeks, error: weeksErr } = await supabase
     .from("training_weeks")
@@ -24,6 +25,7 @@ export default async function handler(req, res) {
     .order("block_id")
     .order("week_order");
 
+  console.log("[plan/days] weeks count:", weeks?.length, "| weeksErr:", weeksErr?.message);
   if (weeksErr) return res.status(500).json({ error: weeksErr.message });
 
   const { data: days, error: daysErr } = await supabase
@@ -31,6 +33,7 @@ export default async function handler(req, res) {
     .select("*")
     .eq("user_id", userId);
 
+  console.log("[plan/days] days count:", days?.length, "| daysErr:", daysErr?.message);
   if (daysErr) return res.status(500).json({ error: daysErr.message });
 
   // Group days by week database id

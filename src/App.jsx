@@ -555,15 +555,26 @@ export default function App() {
   const fetchPlan = async () => {
     try {
       const token = session?.access_token;
+      console.log("[fetchPlan] token present:", !!token, "| token prefix:", token?.slice(0,20));
       const res = await fetch("/api/plan/days", {
         headers: token ? { "Authorization": `Bearer ${token}` } : {},
       });
+      console.log("[fetchPlan] status:", res.status);
       const data = await res.json().catch(() => ({}));
+      console.log("[fetchPlan] response:", JSON.stringify({
+        blocks: data.blocks?.length,
+        firstBlock: data.blocks?.[0]?.label,
+        firstBlockWeeks: data.blocks?.[0]?.weeks?.length,
+        firstWeekDays: data.blocks?.[0]?.weeks?.[0]?.days?.length,
+        error: data.error,
+      }));
       const hasDays = data.blocks?.some(b => b.weeks?.some(w => w.days?.length > 0));
+      console.log("[fetchPlan] hasDays:", hasDays, "| res.ok:", res.ok, "| will update state:", res.ok && hasDays);
       if (res.ok && hasDays) {
         setPlanBlocks(data.blocks);
       }
     } catch (e) {
+      console.log("[fetchPlan] caught error:", e.message);
       // silently fall back to hardcoded BLOCKS
     } finally {
       setPlanLoading(false);
@@ -573,6 +584,8 @@ export default function App() {
   const handlePlanChange = async (planChange) => {
     try {
       const token = session?.access_token;
+      console.log("[handlePlanChange] sending:", JSON.stringify(planChange));
+      console.log("[handlePlanChange] token present:", !!token, "| token prefix:", token?.slice(0,20));
       const res = await fetch("/api/plan/update", {
         method: "POST",
         headers: {
@@ -581,9 +594,17 @@ export default function App() {
         },
         body: JSON.stringify(planChange),
       });
-      if (!res.ok) return;
+      const body = await res.json().catch(() => ({}));
+      console.log("[handlePlanChange] update status:", res.status, "| body:", JSON.stringify(body));
+      if (!res.ok) {
+        console.log("[handlePlanChange] update FAILED — skipping fetchPlan");
+        return;
+      }
+      console.log("[handlePlanChange] update OK — calling fetchPlan");
       await fetchPlan();
+      console.log("[handlePlanChange] fetchPlan complete");
     } catch (e) {
+      console.log("[handlePlanChange] caught error:", e.message);
       // silently ignore — coach UI already shows accepted state
     }
   };
