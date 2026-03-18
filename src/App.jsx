@@ -1,5 +1,7 @@
 import { useState, useEffect, useRef } from "react";
 import { createClient } from "@supabase/supabase-js";
+import AuthScreen from "./AuthScreen";
+import Onboarding from "./Onboarding";
 
 const supabase = createClient(
   import.meta.env.VITE_SUPABASE_URL,
@@ -482,15 +484,48 @@ export default function App() {
   const [planBlocks, setPlanBlocks] = useState(BLOCKS);
   const [planLoading, setPlanLoading] = useState(true);
 
+  // ── Auth state ──────────────────────────────────────────────────────────────
+  const [session, setSession]       = useState(null);
+  const [profile, setProfile]       = useState(null);
+  const [authLoading, setAuthLoading] = useState(true);
+
+  // Initialise auth on mount; listen for session changes
   useEffect(() => {
+    supabase.auth.getSession().then(({ data: { session } }) => {
+      setSession(session);
+      if (session) {
+        supabase
+          .from("user_profiles").select("*").eq("user_id", session.user.id).single()
+          .then(({ data }) => { setProfile(data || null); setAuthLoading(false); });
+      } else {
+        setAuthLoading(false);
+      }
+    });
+
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
+      setSession(session);
+      if (session) {
+        supabase
+          .from("user_profiles").select("*").eq("user_id", session.user.id).single()
+          .then(({ data }) => { setProfile(data || null); setAuthLoading(false); });
+      } else {
+        setProfile(null);
+        setAuthLoading(false);
+      }
+    });
+
+    return () => subscription.unsubscribe();
+  }, []);
+
+  // Data fetches — only run once the user is authenticated and has a profile
+  useEffect(() => {
+    if (!profile) return;
     const params = new URLSearchParams(window.location.search);
-    if (params.get("connected") === "true") {
-      window.history.replaceState({}, "", "/");
-    }
+    if (params.get("connected") === "true") window.history.replaceState({}, "", "/");
     fetchWhoopData();
     fetchBiomarkers();
     fetchPlan();
-  }, []);
+  }, [profile]);
 
   const fetchWhoopData = async () => {
     try {
@@ -545,6 +580,17 @@ export default function App() {
       // silently ignore — coach UI already shows accepted state
     }
   };
+
+  // ── Auth routing — must come after all hooks ───────────────────────────────
+  if (authLoading) {
+    return (
+      <div style={{ display:"flex", alignItems:"center", justifyContent:"center", minHeight:"100vh", background:"#000" }}>
+        <div style={{ fontFamily:"'Bebas Neue','Arial Black',sans-serif", fontSize:22, color:"#555", letterSpacing:6 }}>LOADING...</div>
+      </div>
+    );
+  }
+  if (!session) return <AuthScreen supabase={supabase} />;
+  if (!profile) return <Onboarding supabase={supabase} session={session} onComplete={setProfile} />;
 
   const block  = planBlocks.find(b => b.id === blockId) || planBlocks[0];
   const weeks  = block.weeks;
