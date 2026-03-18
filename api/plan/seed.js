@@ -156,7 +156,6 @@ export default async function handler(req, res) {
     phase4: crypto.randomUUID(),
   };
 
-  // Seed blocks first so the FK constraint (training_weeks.block_id) is satisfied
   const BLOCKS = [
     { block_id: blockUuids.taper,  label: "MIAMI TAPER" },
     { block_id: blockUuids.phase1, label: "PHASE 1" },
@@ -164,15 +163,6 @@ export default async function handler(req, res) {
     { block_id: blockUuids.phase3, label: "PHASE 3" },
     { block_id: blockUuids.phase4, label: "PHASE 4" },
   ];
-
-  const { error: blocksErr } = await supabase
-    .from("training_blocks")
-    .upsert(BLOCKS, { onConflict: "block_id" });
-
-  if (blocksErr) {
-    return res.status(500).json({ error: `Failed to seed blocks: ${blocksErr.message}` });
-  }
-  log.push(`✓ seeded ${BLOCKS.length} training_blocks`);
 
   // Count rows before wiping so the response can show before/after
   const countTable = async (name) => {
@@ -192,6 +182,16 @@ export default async function handler(req, res) {
     if (delErr) return res.status(500).json({ error: `Failed to clear ${table}: ${delErr.message}` });
     log.push(`✓ cleared ${table}`);
   }
+
+  // Seed blocks AFTER wipe so FK constraint is satisfied for the week inserts below
+  const { error: blocksErr } = await supabase
+    .from("training_blocks")
+    .insert(BLOCKS);
+
+  if (blocksErr) {
+    return res.status(500).json({ error: `Failed to seed blocks: ${blocksErr.message}` });
+  }
+  log.push(`✓ seeded ${BLOCKS.length} training_blocks`);
 
   for (const week of ALL_WEEKS) {
     const { days, ...weekRow } = week;

@@ -462,21 +462,6 @@ const SessionModal = ({ name, dayData, sess, weekId, onClose, onSessSwitch, sund
             </>
           ) : null}
         </div>
-        {/* DEBUG PANEL */}
-        <div style={{ margin:"0 20px 28px", background:"#0a0a0a", border:"1px solid #333", borderRadius:10, padding:"12px 14px" }}>
-          <div style={{ fontFamily:C.fm, fontSize:7, color:"#FF7700", letterSpacing:3, marginBottom:8 }}>⚙ DEBUG · DAYDATA</div>
-          {[
-            ["week_id (prop)", weekId],
-            ["am (→ am_session)", dayData?.am],
-            ["ai_modified", String(dayData?.ai_modified)],
-            ["ai_modification_note", dayData?.ai_modification_note || "(null)"],
-          ].map(([label, val]) => (
-            <div key={label} style={{ display:"flex", gap:8, marginBottom:4, alignItems:"flex-start" }}>
-              <span style={{ fontFamily:C.fm, fontSize:7, color:"#555", letterSpacing:1, minWidth:160, flexShrink:0 }}>{label}</span>
-              <span style={{ fontFamily:C.fm, fontSize:7, color:"#ccc", wordBreak:"break-all" }}>{val ?? "(undefined)"}</span>
-            </div>
-          ))}
-        </div>
       </div>
     </div>
   );
@@ -496,8 +481,6 @@ export default function App() {
   const [biomarkers, setBiomarkers] = useState([]);
   const [planBlocks, setPlanBlocks] = useState(BLOCKS);
   const [planLoading, setPlanLoading] = useState(true);
-  const [lastUpdateResult, setLastUpdateResult] = useState(null);
-  const [planDebug, setPlanDebug] = useState(null);
 
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
@@ -538,47 +521,27 @@ export default function App() {
     try {
       const res = await fetch("/api/plan/days");
       const data = await res.json().catch(() => ({}));
-      if (!res.ok) {
-        setPlanDebug({ status: "http-error", httpStatus: res.status, error: data.error });
-        return;
-      }
-      const blockCount = data.blocks?.length ?? 0;
-      const firstWeek = data.blocks?.[0]?.weeks?.[0];
-      setPlanDebug({
-        status: "ok",
-        httpStatus: res.status,
-        blockCount,
-        firstWeekId: firstWeek?.id ?? "(none)",
-        firstWeekLabel: firstWeek?.label ?? "(none)",
-        usingFallback: blockCount === 0,
-      });
-      if (blockCount > 0) {
+      if (res.ok && (data.blocks?.length ?? 0) > 0) {
         setPlanBlocks(data.blocks);
       }
     } catch (e) {
-      setPlanDebug({ status: "exception", error: e.message, usingFallback: true });
+      // silently fall back to hardcoded BLOCKS
     } finally {
       setPlanLoading(false);
     }
   };
 
   const handlePlanChange = async (planChange) => {
-    setLastUpdateResult({ status: "pending", sentPayload: planChange });
     try {
       const res = await fetch("/api/plan/update", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(planChange),
       });
-      const body = await res.json().catch(() => ({}));
-      if (!res.ok) {
-        setLastUpdateResult({ status: "error", httpStatus: res.status, sentPayload: planChange, response: body });
-        return;
-      }
-      setLastUpdateResult({ status: "ok", httpStatus: res.status, sentPayload: planChange, rowsUpdated: body.updated?.length ?? 0, response: body });
+      if (!res.ok) return;
       await fetchPlan();
     } catch (e) {
-      setLastUpdateResult({ status: "exception", error: e.message, sentPayload: planChange });
+      // silently ignore — coach UI already shows accepted state
     }
   };
 
@@ -806,46 +769,6 @@ export default function App() {
               </div>
             ))}
           </div>
-          {/* DEBUG PANEL — fetchPlan result */}
-          {planDebug && (
-            <div style={{ margin:"0 20px 12px", background:"#0a0a0a", border:`1px solid ${planDebug.usingFallback ? "#FF3C0044" : "#00D4A022"}`, borderRadius:10, padding:"12px 14px" }}>
-              <div style={{ fontFamily:C.fm, fontSize:7, color:"#FF7700", letterSpacing:3, marginBottom:8 }}>⚙ DEBUG · FETCH PLAN</div>
-              {[
-                ["status", planDebug.status],
-                ["http", planDebug.httpStatus ?? "—"],
-                ["blocks returned", planDebug.blockCount ?? "—"],
-                ["first week id", planDebug.firstWeekId],
-                ["first week label", planDebug.firstWeekLabel],
-                ["using fallback?", String(planDebug.usingFallback ?? false)],
-                ["error", planDebug.error ?? "(none)"],
-              ].map(([label, val]) => (
-                <div key={label} style={{ display:"flex", gap:8, marginBottom:4, alignItems:"flex-start" }}>
-                  <span style={{ fontFamily:C.fm, fontSize:7, color:"#555", letterSpacing:1, minWidth:140, flexShrink:0 }}>{label}</span>
-                  <span style={{ fontFamily:C.fm, fontSize:7, color: label === "using fallback?" && val === "true" ? C.red : label === "first week id" ? C.green : "#ccc", wordBreak:"break-all" }}>{val ?? "(undefined)"}</span>
-                </div>
-              ))}
-            </div>
-          )}
-          {/* DEBUG PANEL — last /api/plan/update result */}
-          {lastUpdateResult && (
-            <div style={{ margin:"0 20px 24px", background:"#0a0a0a", border:`1px solid ${lastUpdateResult.status === "ok" ? "#00D4A022" : "#FF3C0044"}`, borderRadius:10, padding:"12px 14px" }}>
-              <div style={{ fontFamily:C.fm, fontSize:7, color:"#FF7700", letterSpacing:3, marginBottom:8 }}>⚙ DEBUG · LAST UPDATE RESULT</div>
-              {[
-                ["status", lastUpdateResult.status],
-                ["http", lastUpdateResult.httpStatus ?? "—"],
-                ["rows updated", lastUpdateResult.rowsUpdated ?? "—"],
-                ["sent week_id", lastUpdateResult.sentPayload?.week_id],
-                ["sent day", lastUpdateResult.sentPayload?.day],
-                ["sent changes", JSON.stringify(lastUpdateResult.sentPayload?.changes)],
-                ["server error", lastUpdateResult.response?.error ?? lastUpdateResult.error ?? "(none)"],
-              ].map(([label, val]) => (
-                <div key={label} style={{ display:"flex", gap:8, marginBottom:4, alignItems:"flex-start" }}>
-                  <span style={{ fontFamily:C.fm, fontSize:7, color:"#555", letterSpacing:1, minWidth:120, flexShrink:0 }}>{label}</span>
-                  <span style={{ fontFamily:C.fm, fontSize:7, color: label === "status" && lastUpdateResult.status === "ok" ? C.green : label === "rows updated" && lastUpdateResult.rowsUpdated === 0 ? C.red : "#ccc", wordBreak:"break-all" }}>{val ?? "(undefined)"}</span>
-                </div>
-              ))}
-            </div>
-          )}
         </div>
       )}
 
