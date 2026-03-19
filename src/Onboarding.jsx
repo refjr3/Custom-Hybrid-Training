@@ -134,12 +134,6 @@ const PHASES_OPTIONS = [
   { id:6, label:"6" },
 ];
 
-const DELOAD_OPTIONS = [
-  { id:"every_4th",    label:"EVERY 4TH WEEK",  sub:"Standard periodization" },
-  { id:"every_block",  label:"EVERY BLOCK",      sub:"Last week of each phase" },
-  { id:"manual",       label:"MANUAL",           sub:"Coach adjusts on HRV" },
-];
-
 const LOADING_MESSAGES = [
   "Analyzing your race goal...",
   "Structuring your training phases...",
