@@ -30,10 +30,11 @@ function computeAge(dob) {
 const DELOAD_OPTIONS = [
   { id:"every_4th",  label:"EVERY 4TH WEEK", sub:"Standard — 3 weeks hard, 1 week deload" },
   { id:"every_3rd",  label:"EVERY 3RD WEEK", sub:"Aggressive — 2 weeks hard, 1 week deload" },
-  { id:"auto_whoop", label:"AUTO (WHOOP)",   sub:"Let recovery data decide when to deload" },
+  { id:"auto_hrv",   label:"AUTO (HRV-BASED)", sub:"Let recovery data decide when to deload" },
 ];
 
 const STORAGE_KEY = "onboarding_progress";
+const STEP_KEY = "onboarding_step";
 
 function calcZones(lthr) {
   if (!lthr || isNaN(lthr) || lthr < 80 || lthr > 220) return null;
@@ -156,10 +157,9 @@ export default function Onboarding({ supabase, session, onComplete }) {
   const [sports, setSports]           = useState([]);
   const [experienceLevel, setExpLevel] = useState(null);
 
-  // Step 1 — Goal
-  const [targetRaceName, setTargetRaceName] = useState("");
-  const [targetRaceDate, setTargetRaceDate] = useState("");
-  const [weeklyHours, setWeeklyHours]       = useState("");
+  // Step 1 — Goal: one race entry per selected sport
+  const [races, setRaces]             = useState([]);  // [{ sportId, name, date, is_primary }]
+  const [weeklyHours, setWeeklyHours] = useState("");
 
   // Step 2 — Body
   const [dob, setDob]           = useState("");
@@ -179,6 +179,43 @@ export default function Onboarding({ supabase, session, onComplete }) {
 
   const next = () => { setError(null); setStep(s => s + 1); };
   const back = () => { setError(null); setStep(s => s - 1); };
+
+  // Sync races with selected sports — one race entry per sport
+  useEffect(() => {
+    if (sports.length === 0) {
+      setRaces([]);
+      return;
+    }
+    setRaces(prev => {
+      const next = [];
+      let hasPrimary = false;
+      for (const sportId of sports) {
+        const existing = prev.find(r => r.sportId === sportId);
+        next.push({
+          sportId,
+          name: existing?.name ?? (SPORT_OPTIONS.find(s => s.id === sportId)?.label || sportId),
+          date: existing?.date ?? "",
+          is_primary: existing?.is_primary ?? (!hasPrimary && (hasPrimary = true)),
+        });
+      }
+      if (next.length && !next.some(r => r.is_primary)) next[0].is_primary = true;
+      return next;
+    });
+  }, [sports]);
+
+  // WHOOP OAuth return: check URL for ?connected=true or ?whoop_connected=true and resume at Wearables (step 3)
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const params = new URLSearchParams(window.location.search);
+    const whoopReturn = params.get("connected") === "true" || params.get("whoop_connected") === "true";
+    if (whoopReturn) {
+      const saved = localStorage.getItem(STEP_KEY);
+      const targetStep = saved ? Math.min(parseInt(saved, 10), 4) : 3;
+      setStep(targetStep);
+      window.history.replaceState({}, "", window.location.pathname || "/");
+      localStorage.removeItem(STEP_KEY);
+    }
+  }, []);
 
   // Derived values
   const computedAge  = computeAge(dob);
@@ -210,6 +247,9 @@ export default function Onboarding({ supabase, session, onComplete }) {
       const lthrVal = effectiveLthr;
       const zonesCalc = calcZones(lthrVal);
 
+      const primaryRace = races.find(r => r.is_primary) || races[0];
+      const racesForProfile = races.map(r => ({ date: r.date || null, name: r.name?.trim() || null, is_primary: r.is_primary }));
+
       // 1. Save profile
       const { data: profileData, error: profileErr } = await supabase
         .from("user_profiles")
@@ -218,8 +258,9 @@ export default function Onboarding({ supabase, session, onComplete }) {
           name:                  name.trim(),
           sports,
           experience_level:      experienceLevel,
-          target_race_name:      targetRaceName.trim() || null,
-          target_race_date:      targetRaceDate || null,
+          target_race_name:      primaryRace?.name?.trim() || null,
+          target_race_date:      primaryRace?.date || null,
+          races:                 racesForProfile,
           weekly_training_hours: weeklyHours ? parseFloat(weeklyHours) : null,
           dob:                   dob || null,
           weight_lbs:            weightLbs ? parseFloat(weightLbs) : null,
@@ -315,15 +356,28 @@ export default function Onboarding({ supabase, session, onComplete }) {
           <div style={{ display:"flex", flexDirection:"column", gap:20 }}>
             <StepHeader step={2} total={TOTAL_STEPS} title={"YOUR\nGOAL."} sub="What are you working toward?" />
 
-            <div>
-              <div style={{ fontFamily:C.fm, fontSize:8, color:C.muted, letterSpacing:3, marginBottom:6 }}>TARGET RACE NAME</div>
-              <input type="text" value={targetRaceName} onChange={e => setTargetRaceName(e.target.value)} placeholder="e.g. HYROX London 2026" style={inputStyle} />
-            </div>
-
-            <div>
-              <div style={{ fontFamily:C.fm, fontSize:8, color:C.muted, letterSpacing:3, marginBottom:6 }}>RACE DATE</div>
-              <input type="date" value={targetRaceDate} onChange={e => setTargetRaceDate(e.target.value)} style={{ ...inputStyle, colorScheme:"dark" }} />
-            </div>
+            {races.map((race) => (
+              <div key={race.sportId} style={{ padding:"16px", background:C.card, border:`1px solid ${C.border}`, borderRadius:12 }}>
+                <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:10 }}>
+                  <div style={{ fontFamily:C.ff, fontSize:16, color:C.text, letterSpacing:2 }}>{SPORT_OPTIONS.find(s => s.id === race.sportId)?.label || race.sportId}</div>
+                  <button
+                    onClick={() => setRaces(prev => prev.map(r => ({ ...r, is_primary: r.sportId === race.sportId })))}
+                    style={{
+                      padding:"6px 12px", background: race.is_primary ? C.green : C.card2, color: race.is_primary ? "#000" : C.muted,
+                      border:`1px solid ${race.is_primary ? C.green : C.border}`, borderRadius:8, cursor:"pointer", fontFamily:C.fm, fontSize:8, letterSpacing:2,
+                    }}
+                  >{race.is_primary ? "PRIMARY" : "SET PRIMARY"}</button>
+                </div>
+                <div style={{ marginBottom:10 }}>
+                  <div style={{ fontFamily:C.fm, fontSize:8, color:C.muted, letterSpacing:2, marginBottom:4 }}>RACE NAME</div>
+                  <input type="text" value={race.name} onChange={e => setRaces(prev => prev.map(r => r.sportId === race.sportId ? { ...r, name: e.target.value } : r))} placeholder="e.g. HYROX London 2026" style={inputStyle} />
+                </div>
+                <div>
+                  <div style={{ fontFamily:C.fm, fontSize:8, color:C.muted, letterSpacing:2, marginBottom:4 }}>RACE DATE</div>
+                  <input type="date" value={race.date} onChange={e => setRaces(prev => prev.map(r => r.sportId === race.sportId ? { ...r, date: e.target.value } : r))} style={{ ...inputStyle, colorScheme:"dark" }} />
+                </div>
+              </div>
+            ))}
 
             <div>
               <div style={{ fontFamily:C.fm, fontSize:8, color:C.muted, letterSpacing:3, marginBottom:6 }}>CURRENT WEEKLY TRAINING HOURS</div>
@@ -333,7 +387,7 @@ export default function Onboarding({ supabase, session, onComplete }) {
               </div>
             </div>
 
-            <NavRow onBack={back} onNext={next} />
+            <NavRow onBack={back} onNext={next} nextDisabled={races.length === 0} />
           </div>
         );
 
@@ -460,7 +514,10 @@ export default function Onboarding({ supabase, session, onComplete }) {
                 </div>
                 {available ? (
                   <button
-                    onClick={() => window.open("/api/auth/login", "_blank")}
+                    onClick={() => {
+                      try { localStorage.setItem(STEP_KEY, String(step)); } catch (_) {}
+                      window.open("/api/auth/login", "_blank");
+                    }}
                     style={{ padding:"10px 16px", background:C.green, color:"#000", border:"none", borderRadius:10, cursor:"pointer", fontFamily:C.ff, fontSize:13, letterSpacing:2 }}
                   >CONNECT ↗</button>
                 ) : (
