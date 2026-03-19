@@ -515,6 +515,12 @@ export default function App() {
     if (!profile) return;
     const params = new URLSearchParams(window.location.search);
     if (params.get("connected") === "true") window.history.replaceState({}, "", "/");
+
+    // Check persistent wearable connections from profile
+    if (profile.connected_wearables?.whoop?.connected) {
+      setWhoopConnected(true);
+    }
+
     fetchWhoopData();
     fetchBiomarkers();
     fetchSupplements();
@@ -525,7 +531,11 @@ export default function App() {
     try {
       const res = await fetch("/api/whoop/recovery");
       if (res.status === 401) {
-        setWhoopConnected(false);
+        // If profile says WHOOP was connected, keep the connected state
+        // but mark data as unavailable (token may have expired)
+        if (!profile?.connected_wearables?.whoop?.connected) {
+          setWhoopConnected(false);
+        }
         setWhoopLoading(false);
         return;
       }
@@ -533,7 +543,9 @@ export default function App() {
       setWhoopData(data);
       setWhoopConnected(true);
     } catch (e) {
-      setWhoopConnected(false);
+      if (!profile?.connected_wearables?.whoop?.connected) {
+        setWhoopConnected(false);
+      }
     } finally {
       setWhoopLoading(false);
     }

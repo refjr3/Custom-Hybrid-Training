@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect, useRef } from "react";
 
 const C = {
   bg:"#000000", card:"#1a1a1a", card2:"#222222",
@@ -17,11 +17,39 @@ const input = {
 
 const RACE_GOALS = [
   { id:"hyrox",        label:"HYROX",            sub:"Functional fitness race" },
+  { id:"marathon",     label:"MARATHON",          sub:"26.2 miles" },
   { id:"olympic_tri",  label:"OLYMPIC TRI",       sub:"1.5km swim / 40km bike / 10km run" },
   { id:"half_ironman", label:"70.3 HALF IM",      sub:"1.9km / 90km / 21.1km" },
   { id:"ironman",      label:"FULL IRONMAN",       sub:"3.8km / 180km / 42.2km" },
-  { id:"marathon",     label:"MARATHON",           sub:"26.2 miles" },
   { id:"general",      label:"GENERAL FITNESS",    sub:"Health & performance" },
+];
+
+const RACE_DATABASE = [
+  { name:"HYROX Miami",              date:"2026-04-04", sport:"hyrox" },
+  { name:"HYROX New York City",      date:"2026-01-18", sport:"hyrox" },
+  { name:"HYROX Dallas",             date:"2026-02-08", sport:"hyrox" },
+  { name:"HYROX Chicago",            date:"2026-03-22", sport:"hyrox" },
+  { name:"HYROX London",             date:"2026-05-10", sport:"hyrox" },
+  { name:"HYROX Los Angeles",        date:"2026-06-06", sport:"hyrox" },
+  { name:"HYROX World Championship", date:"2026-06-14", sport:"hyrox" },
+  { name:"Boston Marathon",           date:"2026-04-20", sport:"marathon" },
+  { name:"NYC Marathon",              date:"2026-11-01", sport:"marathon" },
+  { name:"Chicago Marathon",          date:"2026-10-11", sport:"marathon" },
+  { name:"Berlin Marathon",           date:"2026-09-27", sport:"marathon" },
+  { name:"London Marathon",           date:"2026-04-26", sport:"marathon" },
+  { name:"Tokyo Marathon",            date:"2026-03-01", sport:"marathon" },
+  { name:"Marine Corps Marathon",     date:"2026-10-25", sport:"marathon" },
+  { name:"IRONMAN World Champ Kona",  date:"2026-10-10", sport:"ironman" },
+  { name:"IRONMAN Florida",           date:"2026-11-07", sport:"ironman" },
+  { name:"IRONMAN Texas",             date:"2026-04-25", sport:"ironman" },
+  { name:"IRONMAN Lake Placid",       date:"2026-07-26", sport:"ironman" },
+  { name:"IRONMAN 70.3 World Champ",  date:"2026-09-19", sport:"half_ironman" },
+  { name:"IRONMAN 70.3 Oceanside",    date:"2026-04-04", sport:"half_ironman" },
+  { name:"IRONMAN 70.3 Eagleman",     date:"2026-06-14", sport:"half_ironman" },
+  { name:"IRONMAN 70.3 Mont-Tremblant", date:"2026-06-28", sport:"half_ironman" },
+  { name:"Olympic Tri Nationals",     date:"2026-08-08", sport:"olympic_tri" },
+  { name:"NYC Triathlon",             date:"2026-07-19", sport:"olympic_tri" },
+  { name:"Chicago Triathlon",         date:"2026-08-30", sport:"olympic_tri" },
 ];
 
 const SUPP_OPTIONS = [
@@ -32,6 +60,14 @@ const SUPP_OPTIONS = [
   { id:"l_theanine",   label:"L-Theanine",              sub:"200–400mg · Calm sleep" },
   { id:"sermorelin",   label:"Sermorelin (Rx)",         sub:"Per Rx · GH pulse pre-sleep" },
 ];
+
+const DELOAD_OPTIONS = [
+  { id:"every_4th",  label:"EVERY 4TH WEEK", sub:"Standard — 3 weeks hard, 1 week deload" },
+  { id:"every_3rd",  label:"EVERY 3RD WEEK", sub:"Aggressive — 2 weeks hard, 1 week deload" },
+  { id:"auto_whoop", label:"AUTO (WHOOP)",   sub:"Let recovery data decide when to deload" },
+];
+
+const STORAGE_KEY = "onboarding_progress";
 
 function calcZones(lthr) {
   if (!lthr || isNaN(lthr) || lthr < 80 || lthr > 220) return null;
@@ -68,32 +104,188 @@ function NavRow({ onBack, onNext, nextLabel = "NEXT", nextDisabled = false, isLa
   );
 }
 
+function RaceLookup({ sport, value, onChange }) {
+  const [query, setQuery] = useState(value?.name || "");
+  const [open, setOpen] = useState(false);
+  const ref = useRef(null);
+
+  useEffect(() => { setQuery(value?.name || ""); }, [value?.name]);
+
+  useEffect(() => {
+    const handler = (e) => { if (ref.current && !ref.current.contains(e.target)) setOpen(false); };
+    document.addEventListener("mousedown", handler);
+    return () => document.removeEventListener("mousedown", handler);
+  }, []);
+
+  const q = query.toLowerCase();
+  const results = RACE_DATABASE.filter(r =>
+    (!sport || sport === "general" || r.sport === sport) &&
+    r.name.toLowerCase().includes(q)
+  ).slice(0, 6);
+
+  return (
+    <div ref={ref} style={{ position:"relative" }}>
+      <input
+        type="text"
+        value={query}
+        onChange={e => { setQuery(e.target.value); setOpen(true); onChange({ ...value, name:e.target.value }); }}
+        onFocus={() => setOpen(true)}
+        placeholder="Search or type race name…"
+        style={input}
+      />
+      {open && query.length > 0 && results.length > 0 && (
+        <div style={{
+          position:"absolute", top:"100%", left:0, right:0, zIndex:50,
+          background:C.card2, border:`1px solid ${C.border}`, borderRadius:10,
+          marginTop:4, maxHeight:200, overflowY:"auto",
+        }}>
+          {results.map((r, i) => (
+            <button
+              key={i}
+              onClick={() => {
+                onChange({ ...value, name:r.name, date:r.date });
+                setQuery(r.name);
+                setOpen(false);
+              }}
+              style={{
+                display:"block", width:"100%", padding:"10px 14px", background:"transparent",
+                border:"none", borderBottom:`1px solid ${C.border}`, cursor:"pointer", textAlign:"left",
+              }}
+            >
+              <div style={{ fontFamily:C.ff, fontSize:14, color:C.text, letterSpacing:1 }}>{r.name}</div>
+              <div style={{ fontFamily:C.fm, fontSize:8, color:C.muted, letterSpacing:1, marginTop:2 }}>
+                {new Date(r.date + "T00:00:00").toLocaleDateString("en-US",{month:"short",day:"numeric",year:"numeric"})}
+              </div>
+            </button>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
 export default function Onboarding({ supabase, session, onComplete }) {
   const [step, setStep]           = useState(0);
   const [saving, setSaving]       = useState(false);
   const [error, setError]         = useState(null);
 
-  // Step 1 — Name
+  // Step 0 — Name
   const [name, setName]           = useState("");
-  // Step 2 — Body
+  // Step 1 — Body
+  const [dob, setDob]             = useState("");
   const [age, setAge]             = useState("");
   const [weightLbs, setWeightLbs] = useState("");
   const [heightFt, setHeightFt]   = useState("");
   const [heightIn, setHeightIn]   = useState("0");
   const [sex, setSex]             = useState(null);
-  // Step 3 — Race goal
-  const [raceGoal, setRaceGoal]   = useState(null);
-  // Step 4 — HR zones
+  // Step 2 — Race goal (multi-select + race entries)
+  const [raceGoals, setRaceGoals] = useState([]);
+  const [noRace, setNoRace]       = useState(false);
+  const [races, setRaces]         = useState([]);
+  // Step 3 — HR zones + deload
   const [lthr, setLthr]           = useState("");
+  const [deloadPref, setDeloadPref] = useState(null);
+  // Step 4 — Wearables
+  const [whoopJustConnected, setWhoopJustConnected] = useState(false);
   // Step 5 — Supplements
   const [supplements, setSupplements] = useState([]);
 
-  const TOTAL = 5;
-  const next = () => setStep(s => Math.min(s + 1, TOTAL - 1));
-  const back = () => setStep(s => Math.max(s - 1, 0));
+  const TOTAL = 6;
+  const next = () => { saveProgress(); setStep(s => Math.min(s + 1, TOTAL - 1)); };
+  const back = () => { saveProgress(); setStep(s => Math.max(s - 1, 0)); };
+
+  const toggleGoal = (id) => {
+    setRaceGoals(prev => {
+      const next = prev.includes(id) ? prev.filter(g => g !== id) : [...prev, id];
+      if (!prev.includes(id)) {
+        setRaces(r => [...r, { sport:id, name:"", date:"", is_primary: r.length === 0 }]);
+      } else {
+        setRaces(r => {
+          const filtered = r.filter(rc => rc.sport !== id);
+          if (filtered.length > 0 && !filtered.some(rc => rc.is_primary)) {
+            filtered[0].is_primary = true;
+          }
+          return filtered;
+        });
+      }
+      return next;
+    });
+  };
+
+  const updateRace = (idx, updates) => {
+    setRaces(prev => prev.map((r, i) => i === idx ? { ...r, ...updates } : r));
+  };
+
+  const setPrimary = (idx) => {
+    setRaces(prev => prev.map((r, i) => ({ ...r, is_primary: i === idx })));
+  };
 
   const toggleSupp = (id) =>
     setSupplements(prev => prev.includes(id) ? prev.filter(s => s !== id) : [...prev, id]);
+
+  const saveProgress = () => {
+    try {
+      localStorage.setItem(STORAGE_KEY, JSON.stringify({
+        step, name, dob, age, weightLbs, heightFt, heightIn, sex,
+        raceGoals, noRace, races, lthr, deloadPref, supplements, whoopJustConnected,
+      }));
+    } catch (_) {}
+  };
+
+  useEffect(() => {
+    try {
+      const params = new URLSearchParams(window.location.search);
+      const justConnected = params.get("connected") === "true";
+      const saved = localStorage.getItem(STORAGE_KEY);
+
+      if (saved) {
+        const d = JSON.parse(saved);
+        if (d.name) setName(d.name);
+        if (d.dob) setDob(d.dob);
+        if (d.age) setAge(d.age);
+        if (d.weightLbs) setWeightLbs(d.weightLbs);
+        if (d.heightFt) setHeightFt(d.heightFt);
+        if (d.heightIn) setHeightIn(d.heightIn);
+        if (d.sex) setSex(d.sex);
+        if (d.raceGoals) setRaceGoals(d.raceGoals);
+        if (d.noRace) setNoRace(d.noRace);
+        if (d.races) setRaces(d.races);
+        if (d.lthr) setLthr(d.lthr);
+        if (d.deloadPref) setDeloadPref(d.deloadPref);
+        if (d.supplements) setSupplements(d.supplements);
+        if (d.whoopJustConnected) setWhoopJustConnected(true);
+
+        if (justConnected) {
+          setStep(4);
+          setWhoopJustConnected(true);
+          window.history.replaceState({}, "", "/");
+        } else {
+          setStep(d.step || 0);
+        }
+      } else if (justConnected) {
+        setStep(4);
+        setWhoopJustConnected(true);
+        window.history.replaceState({}, "", "/");
+      }
+    } catch (_) {}
+  }, []);
+
+  // Auto-calculate age from DOB
+  useEffect(() => {
+    if (!dob) return;
+    const birth = new Date(dob + "T00:00:00");
+    const today = new Date();
+    let a = today.getFullYear() - birth.getFullYear();
+    const m = today.getMonth() - birth.getMonth();
+    if (m < 0 || (m === 0 && today.getDate() < birth.getDate())) a--;
+    if (a >= 0 && a < 120) setAge(String(a));
+  }, [dob]);
+
+  const connectWhoop = () => {
+    saveProgress();
+    localStorage.setItem("onboarding_whoop_redirect", "true");
+    window.location.href = "/api/auth/login";
+  };
 
   const save = async () => {
     setSaving(true);
@@ -103,25 +295,38 @@ export default function Onboarding({ supabase, session, onComplete }) {
       const zones     = calcZones(lthrVal);
       const htIn      = heightFt ? parseInt(heightFt, 10) * 12 + parseInt(heightIn || 0, 10) : null;
 
+      const connectedWearables = {};
+      if (whoopJustConnected) {
+        connectedWearables.whoop = { connected:true, connected_at:new Date().toISOString() };
+      }
+
+      const primaryGoal = raceGoals.length > 0 ? raceGoals[0] : null;
+
       const { data, error: dbErr } = await supabase
         .from("user_profiles")
         .upsert({
-          user_id:    session.user.id,
-          name:       name.trim(),
-          age:        age       ? parseInt(age, 10)         : null,
-          weight_lbs: weightLbs ? parseFloat(weightLbs)     : null,
-          height_in:  htIn,
+          user_id:              session.user.id,
+          name:                 name.trim(),
+          dob:                  dob || null,
+          age:                  age ? parseInt(age, 10) : null,
+          weight_lbs:           weightLbs ? parseFloat(weightLbs) : null,
+          height_in:            htIn,
           sex,
-          race_goal:  raceGoal,
-          lthr:       lthrVal,
-          z2_min:     zones?.z2_min   ?? null,
-          z2_max:     zones?.z2_max   ?? null,
+          race_goal:            primaryGoal,
+          races:                noRace ? [] : races,
+          lthr:                 lthrVal,
+          z2_min:               zones?.z2_min ?? null,
+          z2_max:               zones?.z2_max ?? null,
+          deload_preference:    deloadPref,
+          connected_wearables:  connectedWearables,
           supplements,
         }, { onConflict: "user_id" })
         .select()
         .single();
 
       if (dbErr) throw dbErr;
+      localStorage.removeItem(STORAGE_KEY);
+      localStorage.removeItem("onboarding_whoop_redirect");
       onComplete(data);
     } catch (e) {
       setError(e.message);
@@ -166,8 +371,18 @@ export default function Onboarding({ supabase, session, onComplete }) {
             </div>
 
             <div>
-              <div style={{ fontFamily:C.fm, fontSize:8, color:C.muted, letterSpacing:3, marginBottom:6 }}>AGE</div>
-              <input type="number" value={age} onChange={e => setAge(e.target.value)} placeholder="32" min="16" max="99" style={input} />
+              <div style={{ fontFamily:C.fm, fontSize:8, color:C.muted, letterSpacing:3, marginBottom:6 }}>DATE OF BIRTH</div>
+              <input
+                type="date"
+                value={dob}
+                onChange={e => setDob(e.target.value)}
+                style={{ ...input, colorScheme:"dark" }}
+              />
+            </div>
+
+            <div>
+              <div style={{ fontFamily:C.fm, fontSize:8, color:C.muted, letterSpacing:3, marginBottom:6 }}>AGE {dob && <span style={{ color:C.green, fontSize:7 }}>· AUTO FROM DOB</span>}</div>
+              <input type="number" value={age} onChange={e => { if (!dob) setAge(e.target.value); }} placeholder="32" min="16" max="99" style={{ ...input, opacity: dob ? 0.6 : 1 }} readOnly={!!dob} />
             </div>
 
             <div>
@@ -189,8 +404,8 @@ export default function Onboarding({ supabase, session, onComplete }) {
               </div>
             </div>
 
-            <div>
-              <div style={{ fontFamily:C.fm, fontSize:8, color:C.muted, letterSpacing:3, marginBottom:6 }}>SEX</div>
+            <div style={{ marginTop:4 }}>
+              <div style={{ fontFamily:C.fm, fontSize:8, color:C.muted, letterSpacing:3, marginBottom:8 }}>SEX</div>
               <div style={{ display:"flex", gap:8 }}>
                 {[["M","MALE"],["F","FEMALE"],["X","OTHER"]].map(([val, label]) => (
                   <button
@@ -219,39 +434,114 @@ export default function Onboarding({ supabase, session, onComplete }) {
             <div>
               <div style={{ fontFamily:C.fm, fontSize:9, color:C.muted, letterSpacing:4, marginBottom:12 }}>STEP 3 OF {TOTAL}</div>
               <div style={{ fontFamily:C.ff, fontSize:52, color:C.text, lineHeight:0.95, marginBottom:10 }}>RACE<br/>GOAL</div>
-              <div style={{ fontFamily:C.fs, fontSize:13, color:C.muted }}>What are you training toward?</div>
+              <div style={{ fontFamily:C.fs, fontSize:13, color:C.muted }}>What are you training toward? Select all that apply.</div>
             </div>
 
             <div style={{ display:"flex", flexDirection:"column", gap:8 }}>
               {RACE_GOALS.map(({ id, label, sub }) => {
-                const on = raceGoal === id;
+                const on = raceGoals.includes(id);
                 return (
                   <button
                     key={id}
-                    onClick={() => setRaceGoal(id)}
+                    onClick={() => { if (!noRace) toggleGoal(id); }}
                     style={{
-                      display:"flex", alignItems:"center", justifyContent:"space-between",
-                      padding:"16px 18px",
-                      background: on ? `${C.green}15` : C.card,
-                      border:`1px solid ${on ? C.green : C.border}`,
-                      borderRadius:12, cursor:"pointer", textAlign:"left",
+                      display:"flex", alignItems:"center", gap:14, padding:"14px 16px",
+                      background: on ? `${C.green}10` : C.card,
+                      border:`1px solid ${on ? C.green+"55" : C.border}`,
+                      borderRadius:12, cursor: noRace ? "default" : "pointer", textAlign:"left",
+                      opacity: noRace ? 0.4 : 1,
                     }}
                   >
-                    <div>
-                      <div style={{ fontFamily:C.ff, fontSize:18, color: on ? C.green : C.text, letterSpacing:2 }}>{label}</div>
-                      <div style={{ fontFamily:C.fm, fontSize:8, color:C.muted, letterSpacing:1, marginTop:3 }}>{sub}</div>
+                    <div style={{
+                      width:22, height:22, borderRadius:6, flexShrink:0,
+                      background: on ? C.green : C.card2,
+                      border:`2px solid ${on ? C.green : C.border}`,
+                      display:"flex", alignItems:"center", justifyContent:"center",
+                    }}>
+                      {on && <span style={{ color:"#000", fontSize:13, fontWeight:900, lineHeight:1 }}>✓</span>}
                     </div>
-                    {on && <span style={{ color:C.green, fontSize:18 }}>✓</span>}
+                    <div>
+                      <div style={{ fontFamily:C.ff, fontSize:16, color: on ? C.text : C.muted, letterSpacing:1 }}>{label}</div>
+                      <div style={{ fontFamily:C.fm, fontSize:8, color:C.muted, letterSpacing:1, marginTop:2 }}>{sub}</div>
+                    </div>
                   </button>
                 );
               })}
             </div>
 
-            <NavRow onBack={back} onNext={next} nextDisabled={!raceGoal} />
+            {/* No race checkbox */}
+            <button
+              onClick={() => { setNoRace(prev => !prev); if (!noRace) { setRaces([]); setRaceGoals([]); } }}
+              style={{
+                display:"flex", alignItems:"center", gap:12, padding:"14px 16px",
+                background: noRace ? `${C.yellow}10` : C.card,
+                border:`1px solid ${noRace ? C.yellow+"55" : C.border}`,
+                borderRadius:12, cursor:"pointer", textAlign:"left",
+              }}
+            >
+              <div style={{
+                width:22, height:22, borderRadius:6, flexShrink:0,
+                background: noRace ? C.yellow : C.card2,
+                border:`2px solid ${noRace ? C.yellow : C.border}`,
+                display:"flex", alignItems:"center", justifyContent:"center",
+              }}>
+                {noRace && <span style={{ color:"#000", fontSize:13, fontWeight:900, lineHeight:1 }}>✓</span>}
+              </div>
+              <div>
+                <div style={{ fontFamily:C.ff, fontSize:15, color: noRace ? C.text : C.muted, letterSpacing:1 }}>NO UPCOMING RACE</div>
+                <div style={{ fontFamily:C.fm, fontSize:8, color:C.muted, letterSpacing:1, marginTop:2 }}>Default to 16-week general plan</div>
+              </div>
+            </button>
+
+            {/* Race entries per selected sport */}
+            {!noRace && races.length > 0 && (
+              <div style={{ display:"flex", flexDirection:"column", gap:16 }}>
+                <div style={{ fontFamily:C.fm, fontSize:8, color:C.muted, letterSpacing:3 }}>YOUR RACES</div>
+                {races.map((race, idx) => {
+                  const goalLabel = RACE_GOALS.find(g => g.id === race.sport)?.label || race.sport;
+                  return (
+                    <div key={idx} style={{ background:C.card, borderRadius:14, padding:"16px", border:`1px solid ${race.is_primary ? C.green+"55" : C.border}` }}>
+                      <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:12 }}>
+                        <div style={{ fontFamily:C.fm, fontSize:8, color:C.green, letterSpacing:3 }}>{goalLabel}</div>
+                        <button
+                          onClick={() => setPrimary(idx)}
+                          style={{
+                            padding:"4px 10px", borderRadius:20, cursor:"pointer",
+                            background: race.is_primary ? C.green : "transparent",
+                            color: race.is_primary ? "#000" : C.muted,
+                            border:`1px solid ${race.is_primary ? C.green : C.border}`,
+                            fontFamily:C.fm, fontSize:7, letterSpacing:2,
+                          }}
+                        >{race.is_primary ? "★ PRIMARY" : "SET PRIMARY"}</button>
+                      </div>
+                      <div style={{ marginBottom:10 }}>
+                        <div style={{ fontFamily:C.fm, fontSize:7, color:C.muted, letterSpacing:2, marginBottom:4 }}>RACE NAME</div>
+                        <RaceLookup
+                          sport={race.sport}
+                          value={race}
+                          onChange={(updated) => updateRace(idx, updated)}
+                        />
+                      </div>
+                      <div>
+                        <div style={{ fontFamily:C.fm, fontSize:7, color:C.muted, letterSpacing:2, marginBottom:4 }}>RACE DATE</div>
+                        <input
+                          type="date"
+                          value={race.date}
+                          onChange={e => updateRace(idx, { date:e.target.value })}
+                          style={{ ...input, colorScheme:"dark" }}
+                        />
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+
+            <NavRow onBack={back} onNext={next} nextDisabled={!noRace && raceGoals.length === 0} />
           </div>
         );
 
-      // ── Step 3: HR Zones ────────────────────────────────────────────────────
+      // ── Step 3: HR Zones + Deload ──────────────────────────────────────────
       case 3:
         return (
           <div style={{ display:"flex", flexDirection:"column", gap:20 }}>
@@ -298,16 +588,111 @@ export default function Onboarding({ supabase, session, onComplete }) {
               </div>
             )}
 
+            <div style={{ marginTop:4 }}>
+              <div style={{ fontFamily:C.fm, fontSize:8, color:C.muted, letterSpacing:3, marginBottom:10 }}>DELOAD PREFERENCE</div>
+              <div style={{ display:"flex", flexDirection:"column", gap:8 }}>
+                {DELOAD_OPTIONS.map(({ id, label, sub }) => {
+                  const on = deloadPref === id;
+                  return (
+                    <button
+                      key={id}
+                      onClick={() => setDeloadPref(id)}
+                      style={{
+                        display:"flex", alignItems:"center", justifyContent:"space-between",
+                        padding:"14px 16px",
+                        background: on ? `${C.green}15` : C.card,
+                        border:`1px solid ${on ? C.green : C.border}`,
+                        borderRadius:12, cursor:"pointer", textAlign:"left",
+                      }}
+                    >
+                      <div>
+                        <div style={{ fontFamily:C.ff, fontSize:15, color: on ? C.green : C.text, letterSpacing:2 }}>{label}</div>
+                        <div style={{ fontFamily:C.fm, fontSize:8, color:C.muted, letterSpacing:1, marginTop:3 }}>{sub}</div>
+                      </div>
+                      {on && <span style={{ color:C.green, fontSize:18 }}>✓</span>}
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+
             <NavRow onBack={back} onNext={next} />
           </div>
         );
 
-      // ── Step 4: Supplements ─────────────────────────────────────────────────
+      // ── Step 4: Wearables ──────────────────────────────────────────────────
       case 4:
         return (
           <div style={{ display:"flex", flexDirection:"column", gap:20 }}>
             <div>
               <div style={{ fontFamily:C.fm, fontSize:9, color:C.muted, letterSpacing:4, marginBottom:12 }}>STEP 5 OF {TOTAL}</div>
+              <div style={{ fontFamily:C.ff, fontSize:52, color:C.text, lineHeight:0.95, marginBottom:10 }}>CONNECT<br/>WEARABLES</div>
+              <div style={{ fontFamily:C.fs, fontSize:13, color:C.muted }}>
+                Link your devices for recovery-driven training. You can always do this later.
+              </div>
+            </div>
+
+            {/* WHOOP */}
+            <div style={{
+              background:C.card, borderRadius:14, padding:"20px", overflow:"hidden",
+              border:`1px solid ${whoopJustConnected ? C.green+"55" : C.border}`,
+            }}>
+              <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:12 }}>
+                <div>
+                  <div style={{ fontFamily:C.ff, fontSize:20, color:C.text, letterSpacing:2 }}>WHOOP</div>
+                  <div style={{ fontFamily:C.fm, fontSize:8, color:C.muted, letterSpacing:1, marginTop:2 }}>Recovery · HRV · Sleep · Strain</div>
+                </div>
+                {whoopJustConnected && (
+                  <div style={{ background:`${C.green}22`, border:`1px solid ${C.green}44`, borderRadius:20, padding:"4px 12px", fontFamily:C.fm, fontSize:8, color:C.green, letterSpacing:2 }}>
+                    CONNECTED ✓
+                  </div>
+                )}
+              </div>
+              {whoopJustConnected ? (
+                <div style={{ fontFamily:C.fs, fontSize:13, color:C.green, lineHeight:1.6 }}>
+                  Your WHOOP data is linked. Recovery scores will drive your daily training adjustments.
+                </div>
+              ) : (
+                <button
+                  onClick={connectWhoop}
+                  style={{
+                    width:"100%", padding:"14px", background:C.green, color:"#000",
+                    border:"none", borderRadius:10, cursor:"pointer",
+                    fontFamily:C.ff, fontSize:16, letterSpacing:3,
+                  }}
+                >CONNECT WHOOP</button>
+              )}
+            </div>
+
+            {/* Apple Health */}
+            <div style={{
+              background:C.card, borderRadius:14, padding:"20px", overflow:"hidden",
+              border:`1px solid ${C.border}`, opacity:0.7,
+            }}>
+              <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:12 }}>
+                <div>
+                  <div style={{ fontFamily:C.ff, fontSize:20, color:C.text, letterSpacing:2 }}>APPLE HEALTH</div>
+                  <div style={{ fontFamily:C.fm, fontSize:8, color:C.muted, letterSpacing:1, marginTop:2 }}>Workouts · Heart rate · Steps</div>
+                </div>
+                <div style={{ background:`${C.yellow}22`, border:`1px solid ${C.yellow}44`, borderRadius:20, padding:"4px 12px", fontFamily:C.fm, fontSize:8, color:C.yellow, letterSpacing:2 }}>
+                  SOON
+                </div>
+              </div>
+              <div style={{ fontFamily:C.fs, fontSize:13, color:C.muted, lineHeight:1.6 }}>
+                Available after installing the iOS app. Apple Health integration is coming soon.
+              </div>
+            </div>
+
+            <NavRow onBack={back} onNext={next} />
+          </div>
+        );
+
+      // ── Step 5: Supplements ─────────────────────────────────────────────────
+      case 5:
+        return (
+          <div style={{ display:"flex", flexDirection:"column", gap:20 }}>
+            <div>
+              <div style={{ fontFamily:C.fm, fontSize:9, color:C.muted, letterSpacing:4, marginBottom:12 }}>STEP 6 OF {TOTAL}</div>
               <div style={{ fontFamily:C.ff, fontSize:52, color:C.text, lineHeight:0.95, marginBottom:10 }}>YOUR<br/>STACK</div>
               <div style={{ fontFamily:C.fs, fontSize:13, color:C.muted }}>
                 Select what you currently use. We'll show your personalized protocol. Skip anything you don't take.
