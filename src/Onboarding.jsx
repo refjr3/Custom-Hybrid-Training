@@ -195,21 +195,20 @@ export default function Onboarding({ supabase, session, onComplete }) {
   const back = () => { saveProgress(); setStep(s => Math.max(s - 1, 0)); };
 
   const toggleGoal = (id) => {
-    setRaceGoals(prev => {
-      const next = prev.includes(id) ? prev.filter(g => g !== id) : [...prev, id];
-      if (!prev.includes(id)) {
-        setRaces(r => [...r, { sport:id, name:"", date:"", is_primary: r.length === 0 }]);
-      } else {
-        setRaces(r => {
-          const filtered = r.filter(rc => rc.sport !== id);
-          if (filtered.length > 0 && !filtered.some(rc => rc.is_primary)) {
-            filtered[0].is_primary = true;
-          }
-          return filtered;
-        });
-      }
-      return next;
-    });
+    const isRemoving = raceGoals.includes(id);
+    if (isRemoving) {
+      setRaceGoals(prev => prev.filter(g => g !== id));
+      setRaces(prev => {
+        const filtered = prev.filter(rc => rc.sport !== id);
+        if (filtered.length > 0 && !filtered.some(rc => rc.is_primary)) {
+          filtered[0].is_primary = true;
+        }
+        return filtered;
+      });
+    } else {
+      setRaceGoals(prev => [...prev, id]);
+      setRaces(prev => [...prev, { sport:id, name:"", date:"", is_primary: prev.length === 0 }]);
+    }
   };
 
   const updateRace = (idx, updates) => {
