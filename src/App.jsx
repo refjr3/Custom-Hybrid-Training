@@ -517,7 +517,7 @@ export default function App() {
     if (params.get("connected") === "true") window.history.replaceState({}, "", "/");
 
     // Check persistent wearable connections from profile
-    if (profile.connected_wearables?.whoop?.connected) {
+    if (profile.connected_wearables?.whoop) {
       setWhoopConnected(true);
     }
 
@@ -533,7 +533,7 @@ export default function App() {
       if (res.status === 401) {
         // If profile says WHOOP was connected, keep the connected state
         // but mark data as unavailable (token may have expired)
-        if (!profile?.connected_wearables?.whoop?.connected) {
+        if (!profile?.connected_wearables?.whoop) {
           setWhoopConnected(false);
         }
         setWhoopLoading(false);
@@ -543,7 +543,7 @@ export default function App() {
       setWhoopData(data);
       setWhoopConnected(true);
     } catch (e) {
-      if (!profile?.connected_wearables?.whoop?.connected) {
+      if (!profile?.connected_wearables?.whoop) {
         setWhoopConnected(false);
       }
     } finally {

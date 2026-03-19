@@ -222,19 +222,25 @@ export default function Onboarding({ supabase, session, onComplete }) {
   const toggleSupp = (id) =>
     setSupplements(prev => prev.includes(id) ? prev.filter(s => s !== id) : [...prev, id]);
 
-  const saveProgress = () => {
+  const saveProgress = (overrides) => {
     try {
       localStorage.setItem(STORAGE_KEY, JSON.stringify({
         step, name, dob, age, weightLbs, heightFt, heightIn, sex,
         raceGoals, noRace, races, lthr, deloadPref, supplements, whoopJustConnected,
+        ...overrides,
       }));
     } catch (_) {}
   };
 
+  // Restore onboarding state from localStorage on mount.
+  // If returning from WHOOP OAuth (?connected=true OR whoop_redirect flag),
+  // force step 4 (wearables) and mark WHOOP as connected.
   useEffect(() => {
     try {
       const params = new URLSearchParams(window.location.search);
-      const justConnected = params.get("connected") === "true";
+      const urlConnected = params.get("connected") === "true";
+      const whoopRedirect = localStorage.getItem("onboarding_whoop_redirect") === "true";
+      const returnFromWhoop = urlConnected || whoopRedirect;
       const saved = localStorage.getItem(STORAGE_KEY);
 
       if (saved) {
@@ -254,18 +260,19 @@ export default function Onboarding({ supabase, session, onComplete }) {
         if (d.supplements) setSupplements(d.supplements);
         if (d.whoopJustConnected) setWhoopJustConnected(true);
 
-        if (justConnected) {
+        if (returnFromWhoop) {
           setStep(4);
           setWhoopJustConnected(true);
-          window.history.replaceState({}, "", "/");
         } else {
           setStep(d.step || 0);
         }
-      } else if (justConnected) {
+      } else if (returnFromWhoop) {
         setStep(4);
         setWhoopJustConnected(true);
-        window.history.replaceState({}, "", "/");
       }
+
+      if (urlConnected) window.history.replaceState({}, "", "/");
+      if (whoopRedirect) localStorage.removeItem("onboarding_whoop_redirect");
     } catch (_) {}
   }, []);
 
@@ -281,7 +288,7 @@ export default function Onboarding({ supabase, session, onComplete }) {
   }, [dob]);
 
   const connectWhoop = () => {
-    saveProgress();
+    saveProgress({ step: 4 });
     localStorage.setItem("onboarding_whoop_redirect", "true");
     window.location.href = "/api/auth/login";
   };
@@ -296,7 +303,7 @@ export default function Onboarding({ supabase, session, onComplete }) {
 
       const connectedWearables = {};
       if (whoopJustConnected) {
-        connectedWearables.whoop = { connected:true, connected_at:new Date().toISOString() };
+        connectedWearables.whoop = true;
       }
 
       const primaryGoal = raceGoals.length > 0 ? raceGoals[0] : null;
