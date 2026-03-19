@@ -27,6 +27,14 @@ function computeAge(dob) {
   return age > 0 ? age : null;
 }
 
+const DELOAD_OPTIONS = [
+  { id:"every_4th",  label:"EVERY 4TH WEEK", sub:"Standard — 3 weeks hard, 1 week deload" },
+  { id:"every_3rd",  label:"EVERY 3RD WEEK", sub:"Aggressive — 2 weeks hard, 1 week deload" },
+  { id:"auto_whoop", label:"AUTO (WHOOP)",   sub:"Let recovery data decide when to deload" },
+];
+
+const STORAGE_KEY = "onboarding_progress";
+
 function calcZones(lthr) {
   if (!lthr || isNaN(lthr) || lthr < 80 || lthr > 220) return null;
   return {
@@ -124,12 +132,6 @@ const PHASES_OPTIONS = [
   { id:3, label:"3" },
   { id:4, label:"4" },
   { id:6, label:"6" },
-];
-
-const DELOAD_OPTIONS = [
-  { id:"every_4th",    label:"EVERY 4TH WEEK",  sub:"Standard periodization" },
-  { id:"every_block",  label:"EVERY BLOCK",      sub:"Last week of each phase" },
-  { id:"manual",       label:"MANUAL",           sub:"Coach adjusts on HRV" },
 ];
 
 const LOADING_MESSAGES = [
@@ -407,6 +409,34 @@ export default function Onboarding({ supabase, session, onComplete }) {
                 ))}
               </div>
             )}
+
+            <div style={{ marginTop:4 }}>
+              <div style={{ fontFamily:C.fm, fontSize:8, color:C.muted, letterSpacing:3, marginBottom:10 }}>DELOAD PREFERENCE</div>
+              <div style={{ display:"flex", flexDirection:"column", gap:8 }}>
+                {DELOAD_OPTIONS.map(({ id, label, sub }) => {
+                  const on = deloadPref === id;
+                  return (
+                    <button
+                      key={id}
+                      onClick={() => setDeloadPref(id)}
+                      style={{
+                        display:"flex", alignItems:"center", justifyContent:"space-between",
+                        padding:"14px 16px",
+                        background: on ? `${C.green}15` : C.card,
+                        border:`1px solid ${on ? C.green : C.border}`,
+                        borderRadius:12, cursor:"pointer", textAlign:"left",
+                      }}
+                    >
+                      <div>
+                        <div style={{ fontFamily:C.ff, fontSize:15, color: on ? C.green : C.text, letterSpacing:2 }}>{label}</div>
+                        <div style={{ fontFamily:C.fm, fontSize:8, color:C.muted, letterSpacing:1, marginTop:3 }}>{sub}</div>
+                      </div>
+                      {on && <span style={{ color:C.green, fontSize:18 }}>✓</span>}
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
 
             <NavRow onBack={back} onNext={next} />
           </div>
