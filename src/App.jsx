@@ -477,6 +477,9 @@ export default function App() {
   const [supplements, setSupplements] = useState([]);
   const [suppsLoading, setSuppsLoading] = useState(true);
   const [synthesisNote, setSynthesisNote] = useState(null);
+  const [bloodworkUploading, setBloodworkUploading] = useState(false);
+  const [bloodworkResult, setBloodworkResult] = useState(null);
+  const bloodworkInputRef = useRef(null);
 
   // ── Auth state ──────────────────────────────────────────────────────────────
   const [session, setSession]       = useState(null);
@@ -682,6 +685,36 @@ export default function App() {
       console.log("[handlePlanChange] fetchPlan complete");
     } catch (e) {
       console.log("[handlePlanChange] caught error:", e.message);
+    }
+  };
+
+  const handleBloodworkUpload = async (file) => {
+    if (!file || !session?.access_token) return;
+    setBloodworkUploading(true);
+    setBloodworkResult(null);
+    try {
+      const reader = new FileReader();
+      reader.onload = async () => {
+        const base64 = reader.result.split(",")[1];
+        const res = await fetch("/api/bloodwork/extract", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            "Authorization": `Bearer ${session.access_token}`,
+          },
+          body: JSON.stringify({
+            attachment: { data: base64, media_type: file.type, name: file.name },
+          }),
+        });
+        const data = await res.json();
+        setBloodworkResult(data);
+        if (data.inserted) fetchBiomarkers();
+        setBloodworkUploading(false);
+      };
+      reader.readAsDataURL(file);
+    } catch (e) {
+      setBloodworkResult({ error: e.message });
+      setBloodworkUploading(false);
     }
   };
 
@@ -993,8 +1026,26 @@ export default function App() {
 
       {nav === "stats" && (
         <div style={{ padding:"20px" }}>
-          <div style={{ fontFamily:C.ff, fontSize:28, letterSpacing:2, marginBottom:4 }}>MY STATS<span style={{ color:C.green }}>.</span></div>
-          <div style={{ fontFamily:C.fm, fontSize:8, color:C.muted, letterSpacing:3, marginBottom:20 }}>BODY COMPOSITION + BLOOD PANEL</div>
+          <div style={{ display:"flex", justifyContent:"space-between", alignItems:"flex-start", marginBottom:20 }}>
+            <div>
+              <div style={{ fontFamily:C.ff, fontSize:28, letterSpacing:2, marginBottom:4 }}>MY STATS<span style={{ color:C.green }}>.</span></div>
+              <div style={{ fontFamily:C.fm, fontSize:8, color:C.muted, letterSpacing:3 }}>BODY COMPOSITION + BLOOD PANEL</div>
+            </div>
+            <div>
+              <input ref={bloodworkInputRef} type="file" accept="image/*,.pdf" style={{ display:"none" }} onChange={e => { if (e.target.files?.[0]) handleBloodworkUpload(e.target.files[0]); }} />
+              <button onClick={() => bloodworkInputRef.current?.click()} disabled={bloodworkUploading}
+                style={{ padding:"10px 16px", background: bloodworkUploading ? C.card2 : C.green, color: bloodworkUploading ? C.muted : "#000", border:"none", borderRadius:10, cursor: bloodworkUploading ? "default" : "pointer", fontFamily:C.ff, fontSize:12, letterSpacing:2 }}>
+                {bloodworkUploading ? "ANALYZING..." : "UPLOAD LABS"}
+              </button>
+            </div>
+          </div>
+          {bloodworkResult && (
+            <div style={{ background: bloodworkResult.inserted ? `${C.green}15` : `${C.red}15`, border:`1px solid ${bloodworkResult.inserted ? C.green+"33" : C.red+"33"}`, borderRadius:10, padding:"12px 14px", marginBottom:16 }}>
+              <div style={{ fontFamily:C.fm, fontSize:8, color: bloodworkResult.inserted ? C.green : C.red, letterSpacing:2 }}>
+                {bloodworkResult.inserted ? `✓ ${bloodworkResult.count} MARKERS EXTRACTED` : bloodworkResult.error || "NO MARKERS FOUND"}
+              </div>
+            </div>
+          )}
           {["DXA","BLOOD"].map(cat => {
             const items = biomarkers.filter(b => b.category === cat);
             if (!items.length) return null;
