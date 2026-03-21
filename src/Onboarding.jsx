@@ -12,13 +12,13 @@ const C = {
 const input = {
   padding:"14px 16px", background:C.card, border:`1px solid ${C.border}`,
   borderRadius:10, color:C.text, fontFamily:C.fs, fontSize:15, outline:"none",
-  width:"100%", boxSizing:"border-box",
+  width:"100%", maxWidth:"100%", boxSizing:"border-box",
 };
 
 const inputSm = {
   padding:"10px 12px", background:C.card2, border:`1px solid ${C.border}`,
   borderRadius:8, color:C.text, fontFamily:C.fs, fontSize:13, outline:"none",
-  width:"100%", boxSizing:"border-box",
+  width:"100%", maxWidth:"100%", boxSizing:"border-box",
 };
 
 const RACE_GOALS = [
@@ -357,27 +357,42 @@ export default function Onboarding({ supabase, session, onComplete }) {
 
       const primaryGoal = raceGoals.length > 0 ? raceGoals[0] : null;
 
-      const { data, error: dbErr } = await supabase
+      const profileData = {
+        user_id:              session.user.id,
+        name:                 name.trim(),
+        dob:                  dob || null,
+        age:                  age ? parseInt(age, 10) : null,
+        weight_lbs:           weightLbs ? parseFloat(weightLbs) : null,
+        height_in:            htIn,
+        sex,
+        race_goal:            primaryGoal,
+        races:                noRace ? [] : races,
+        lthr:                 lthrVal,
+        z2_min:               zones?.z2_min ?? null,
+        z2_max:               zones?.z2_max ?? null,
+        deload_preference:    deloadPref,
+        connected_wearables:  connectedWearables,
+        supplements,
+      };
+
+      let { data, error: dbErr } = await supabase
         .from("user_profiles")
-        .upsert({
-          user_id:              session.user.id,
-          name:                 name.trim(),
-          dob:                  dob || null,
-          age:                  age ? parseInt(age, 10) : null,
-          weight_lbs:           weightLbs ? parseFloat(weightLbs) : null,
-          height_in:            htIn,
-          sex,
-          race_goal:            primaryGoal,
-          races:                noRace ? [] : races,
-          lthr:                 lthrVal,
-          z2_min:               zones?.z2_min ?? null,
-          z2_max:               zones?.z2_max ?? null,
-          deload_preference:    deloadPref,
-          connected_wearables:  connectedWearables,
-          supplements,
-        }, { onConflict: "user_id" })
+        .upsert(profileData, { onConflict: "user_id" })
         .select()
         .single();
+
+      // If dob column is missing from schema, retry without it
+      if (dbErr && (dbErr.message?.includes("dob") || dbErr.code === "PGRST204")) {
+        console.warn("[onboarding] dob column not found, retrying without dob:", dbErr.message);
+        const { dob: _dropped, ...profileWithoutDob } = profileData;
+        const retry = await supabase
+          .from("user_profiles")
+          .upsert(profileWithoutDob, { onConflict: "user_id" })
+          .select()
+          .single();
+        data = retry.data;
+        dbErr = retry.error;
+      }
 
       if (dbErr) throw dbErr;
       localStorage.removeItem(STORAGE_KEY);
@@ -550,7 +565,7 @@ export default function Onboarding({ supabase, session, onComplete }) {
 
             {/* Compact race entries per selected sport */}
             {!noRace && races.length > 0 && (
-              <div style={{ display:"flex", flexDirection:"column", gap:8 }}>
+              <div style={{ display:"flex", flexDirection:"column", gap:8, width:"100%", maxWidth:"100%", overflow:"hidden" }}>
                 <div style={{ fontFamily:C.fm, fontSize:7, color:C.muted, letterSpacing:3 }}>YOUR RACES</div>
                 {races.map((race, idx) => {
                   const goalLabel = RACE_GOALS.find(g => g.id === race.sport)?.label || race.sport;
@@ -558,6 +573,7 @@ export default function Onboarding({ supabase, session, onComplete }) {
                     <div key={idx} style={{
                       background:C.card, borderRadius:10, padding:"10px 12px",
                       border:`1px solid ${race.is_primary ? C.green+"55" : C.border}`,
+                      width:"100%", maxWidth:"100%", boxSizing:"border-box", overflow:"hidden",
                     }}>
                       <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:8 }}>
                         <div style={{ fontFamily:C.fm, fontSize:7, color:C.green, letterSpacing:2 }}>{goalLabel}</div>
