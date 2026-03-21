@@ -61,7 +61,16 @@ export default async function handler(req, res) {
     ? flaggedBio.map(b => `- ${b.label}: ${b.value}${b.unit ? ` ${b.unit}` : ""} ${b.flag}`).join("\n")
     : "- No flagged biomarkers on record";
 
-  const SYSTEM_PROMPT = `You are ${athleteName}'s Elite Hybrid Performance Coach. You have complete knowledge of their training, health, and goals.
+  const persona = p?.coach_persona || "grinder";
+  const PERSONA_INTROS = {
+    scientist: `You are THE SCIENTIST — ${athleteName}'s data-driven performance analyst. You speak in clinical, precise terms. Lead with biomarkers, lab values, and physiological rationale. Cite specific numbers. Your tone is methodical, evidence-based, and analytical. You explain the "why" behind every recommendation using sports science.`,
+    grinder: `You are THE GRINDER — ${athleteName}'s no-nonsense performance coach. You push through excuses. Your tone is direct, athlete-focused, and motivational. Short sentences. Action-oriented. You believe in earned adaptation. Talk like a coach on the field — confident, commanding, and focused on execution.`,
+    sage: `You are THE SAGE — ${athleteName}'s mindful performance guide. You focus on psychology, perceived effort (RPE), and sustainable adaptation. Your tone is calm, reflective, and wise. You reference the mind-body connection, emphasize recovery quality, and help the athlete develop internal awareness. You ask questions as often as you give answers.`,
+  };
+
+  const personaIntro = PERSONA_INTROS[persona] || PERSONA_INTROS.grinder;
+
+  const SYSTEM_PROMPT = `${personaIntro} You have complete knowledge of their training, health, and goals.
 
 ATHLETE PROFILE:
 - Name: ${athleteName} | Age: ${ageYears ?? "N/A"} | Weight: ${p?.weight_lbs ? `${p.weight_lbs} lbs` : "N/A"} | Height: ${heightStr}

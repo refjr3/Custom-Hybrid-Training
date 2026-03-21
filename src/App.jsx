@@ -146,7 +146,13 @@ const renderMarkdown = (text) => {
   });
 };
 
-const AIChat = ({ whoopData, currentWeek, recentActivities, onPlanChange, userName }) => {
+const PERSONAS = [
+  { id:"grinder",   label:"THE GRINDER",   sub:"Push through · Motivational", color:"#FF3B30" },
+  { id:"scientist", label:"THE SCIENTIST", sub:"Data-driven · Clinical", color:"#00F3FF" },
+  { id:"sage",      label:"THE SAGE",      sub:"Mindful · RPE-based", color:"#00D4A0" },
+];
+
+const AIChat = ({ whoopData, currentWeek, recentActivities, onPlanChange, userName, persona, onPersonaChange }) => {
   const [messages, setMessages] = useState([
     { role:"assistant", content:`Hey ${userName || "there"} — I have your WHOOP data, training plan, and biomarkers loaded. What do you need?`, planChange:null }
   ]);
@@ -154,6 +160,7 @@ const AIChat = ({ whoopData, currentWeek, recentActivities, onPlanChange, userNa
   const [loading, setLoading] = useState(false);
   const [expanded, setExpanded] = useState(false);
   const [attachment, setAttachment] = useState(null);
+  const [showPersonas, setShowPersonas] = useState(false);
   const messagesEndRef = useRef(null);
   const textareaRef = useRef(null);
   const fileInputRef = useRef(null);
@@ -224,16 +231,31 @@ const AIChat = ({ whoopData, currentWeek, recentActivities, onPlanChange, userNa
     <div style={{ position:"fixed", inset:0, zIndex:150, background:"rgba(10,10,10,0.95)", display:"flex", flexDirection:"column", maxWidth:480, margin:"0 auto" }}>
       <div style={{ padding:"16px 20px", borderBottom:`1px solid ${C.border}`, display:"flex", justifyContent:"space-between", alignItems:"center", flexShrink:0 }}>
         <div style={{ display:"flex", alignItems:"center", gap:12 }}>
-          <div style={{ width:36, height:36, borderRadius:"50%", background:`${C.green}22`, border:`1px solid ${C.green}44`, display:"flex", alignItems:"center", justifyContent:"center" }}>
+          <button onClick={() => setShowPersonas(p => !p)} style={{ width:36, height:36, borderRadius:"50%", background:`${C.green}22`, border:`1px solid ${C.green}44`, display:"flex", alignItems:"center", justifyContent:"center", cursor:"pointer" }}>
             <span style={{ fontSize:16 }}>✦</span>
-          </div>
+          </button>
           <div>
             <div style={{ fontFamily:C.ff, fontSize:16, color:C.text, letterSpacing:1 }}>AI COACH</div>
-            <div style={{ fontFamily:C.fm, fontSize:7, color:C.green, letterSpacing:2 }}>● LIVE · WHOOP {whoopData?.recovery?.score ?? "--"}% · Claude</div>
+            <div style={{ fontFamily:C.fm, fontSize:7, color:C.green, letterSpacing:2 }}>● {(PERSONAS.find(p => p.id === persona)?.label || "THE GRINDER")} · WHOOP {whoopData?.recovery?.score ?? "--"}%</div>
           </div>
         </div>
-        <button onClick={() => setExpanded(false)} style={{ background:C.card, border:"none", color:C.muted, width:32, height:32, borderRadius:"50%", cursor:"pointer", fontSize:14 }}>✕</button>
+        <button onClick={() => setExpanded(false)} style={{ background:C.cardSolid, border:"none", color:C.muted, width:32, height:32, borderRadius:"50%", cursor:"pointer", fontSize:14 }}>✕</button>
       </div>
+      {showPersonas && (
+        <div style={{ padding:"12px 20px", borderBottom:`1px solid ${C.border}`, display:"flex", gap:8 }}>
+          {PERSONAS.map(p => (
+            <button key={p.id} onClick={() => { onPersonaChange(p.id); setShowPersonas(false); }}
+              style={{
+                flex:1, padding:"10px 6px", borderRadius:10, cursor:"pointer", textAlign:"center",
+                background: persona === p.id ? `${p.color}15` : C.cardSolid,
+                border:`1px solid ${persona === p.id ? p.color+"55" : C.border}`,
+              }}>
+              <div style={{ fontFamily:C.ff, fontSize:11, color: persona === p.id ? p.color : C.text, letterSpacing:1 }}>{p.label}</div>
+              <div style={{ fontFamily:C.fm, fontSize:6, color:C.muted, letterSpacing:1, marginTop:2 }}>{p.sub}</div>
+            </button>
+          ))}
+        </div>
+      )}
       <div style={{ flex:1, overflowY:"auto", padding:"16px 20px", display:"flex", flexDirection:"column", gap:12 }}>
         {messages.map((m, i) => (
           <div key={i} style={{ display:"flex", flexDirection:"column", alignItems: m.role==="user" ? "flex-end" : "flex-start" }}>
@@ -484,6 +506,7 @@ export default function App() {
   const [bloodworkUploading, setBloodworkUploading] = useState(false);
   const [bloodworkResult, setBloodworkResult] = useState(null);
   const bloodworkInputRef = useRef(null);
+  const [coachPersona, setCoachPersona] = useState("grinder");
 
   // ── Auth state ──────────────────────────────────────────────────────────────
   const [session, setSession]       = useState(null);
@@ -527,6 +550,9 @@ export default function App() {
     // Check persistent wearable connections from profile
     if (profile.connected_wearables?.whoop) {
       setWhoopConnected(true);
+    }
+    if (profile.coach_persona) {
+      setCoachPersona(profile.coach_persona);
     }
 
     fetchWhoopData();
@@ -690,6 +716,16 @@ export default function App() {
     } catch (e) {
       console.log("[handlePlanChange] caught error:", e.message);
     }
+  };
+
+  const handlePersonaChange = async (newPersona) => {
+    setCoachPersona(newPersona);
+    try {
+      await supabase
+        .from("user_profiles")
+        .update({ coach_persona: newPersona })
+        .eq("user_id", session.user.id);
+    } catch (_) {}
   };
 
   const handleBloodworkUpload = async (file) => {
@@ -1101,7 +1137,7 @@ export default function App() {
         ))}
       </div>
 
-      <AIChat whoopData={whoopData} currentWeek={week} recentActivities={recentActivities} onPlanChange={handlePlanChange} userName={profile?.name} />
+      <AIChat whoopData={whoopData} currentWeek={week} recentActivities={recentActivities} onPlanChange={handlePlanChange} userName={profile?.name} persona={coachPersona} onPersonaChange={handlePersonaChange} />
 
       {selDay && (
         <SessionModal name={modalName} dayData={dayData} sess={sess} weekId={weekId} onClose={() => setSelDay(null)} onSessSwitch={setSess} sundayChoice={sundayChoice} setSundayChoice={setSundayChoice} />
