@@ -15,6 +15,12 @@ const input = {
   width:"100%", boxSizing:"border-box",
 };
 
+const inputSm = {
+  padding:"10px 12px", background:C.card2, border:`1px solid ${C.border}`,
+  borderRadius:8, color:C.text, fontFamily:C.fs, fontSize:13, outline:"none",
+  width:"100%", boxSizing:"border-box",
+};
+
 const RACE_GOALS = [
   { id:"hyrox",        label:"HYROX",            sub:"Functional fitness race" },
   { id:"marathon",     label:"MARATHON",          sub:"26.2 miles" },
@@ -65,6 +71,15 @@ const DELOAD_OPTIONS = [
   { id:"every_4th",  label:"EVERY 4TH WEEK", sub:"Standard — 3 weeks hard, 1 week deload" },
   { id:"every_3rd",  label:"EVERY 3RD WEEK", sub:"Aggressive — 2 weeks hard, 1 week deload" },
   { id:"auto_whoop", label:"AUTO (WHOOP)",   sub:"Let recovery data decide when to deload" },
+];
+
+const SOON_WEARABLES = [
+  { name:"APPLE WATCH",  sub:"Activity · Heart Rate · Sleep" },
+  { name:"FITBIT",       sub:"Steps · Sleep · Heart Rate" },
+  { name:"POLAR",        sub:"HR · Training Load" },
+  { name:"COROS",        sub:"GPS · Power · Recovery" },
+  { name:"WAHOO",        sub:"Cycling · Power" },
+  { name:"EIGHT SLEEP",  sub:"Sleep · HRV · Temperature" },
 ];
 
 const STORAGE_KEY = "onboarding_progress";
@@ -121,7 +136,7 @@ function RaceLookup({ sport, value, onChange }) {
   const results = RACE_DATABASE.filter(r =>
     (!sport || sport === "general" || r.sport === sport) &&
     r.name.toLowerCase().includes(q)
-  ).slice(0, 6);
+  ).slice(0, 5);
 
   return (
     <div ref={ref} style={{ position:"relative" }}>
@@ -131,13 +146,13 @@ function RaceLookup({ sport, value, onChange }) {
         onChange={e => { setQuery(e.target.value); setOpen(true); onChange({ ...value, name:e.target.value }); }}
         onFocus={() => setOpen(true)}
         placeholder="Search or type race name…"
-        style={input}
+        style={inputSm}
       />
       {open && query.length > 0 && results.length > 0 && (
         <div style={{
           position:"absolute", top:"100%", left:0, right:0, zIndex:50,
-          background:C.card2, border:`1px solid ${C.border}`, borderRadius:10,
-          marginTop:4, maxHeight:200, overflowY:"auto",
+          background:C.card2, border:`1px solid ${C.border}`, borderRadius:8,
+          marginTop:2, maxHeight:180, overflowY:"auto",
         }}>
           {results.map((r, i) => (
             <button
@@ -148,18 +163,26 @@ function RaceLookup({ sport, value, onChange }) {
                 setOpen(false);
               }}
               style={{
-                display:"block", width:"100%", padding:"10px 14px", background:"transparent",
+                display:"block", width:"100%", padding:"8px 12px", background:"transparent",
                 border:"none", borderBottom:`1px solid ${C.border}`, cursor:"pointer", textAlign:"left",
               }}
             >
-              <div style={{ fontFamily:C.ff, fontSize:14, color:C.text, letterSpacing:1 }}>{r.name}</div>
-              <div style={{ fontFamily:C.fm, fontSize:8, color:C.muted, letterSpacing:1, marginTop:2 }}>
+              <div style={{ fontFamily:C.ff, fontSize:13, color:C.text, letterSpacing:1 }}>{r.name}</div>
+              <div style={{ fontFamily:C.fm, fontSize:7, color:C.muted, letterSpacing:1, marginTop:1 }}>
                 {new Date(r.date + "T00:00:00").toLocaleDateString("en-US",{month:"short",day:"numeric",year:"numeric"})}
               </div>
             </button>
           ))}
         </div>
       )}
+    </div>
+  );
+}
+
+function SoonBadge() {
+  return (
+    <div style={{ background:`${C.yellow}22`, border:`1px solid ${C.yellow}44`, borderRadius:20, padding:"3px 10px", fontFamily:C.fm, fontSize:7, color:C.yellow, letterSpacing:2, flexShrink:0 }}>
+      SOON
     </div>
   );
 }
@@ -185,8 +208,13 @@ export default function Onboarding({ supabase, session, onComplete }) {
   // Step 3 — HR zones + deload
   const [lthr, setLthr]           = useState("");
   const [deloadPref, setDeloadPref] = useState(null);
-  // Step 4 — Wearables
+  // Step 4 — Wearables + Health Data
   const [whoopJustConnected, setWhoopJustConnected] = useState(false);
+  const [bloodworkFile, setBloodworkFile]   = useState(null);
+  const [customSupps, setCustomSupps]       = useState([]);
+  const [showSuppInput, setShowSuppInput]   = useState(false);
+  const [suppText, setSuppText]             = useState("");
+  const bloodworkRef = useRef(null);
   // Step 5 — Supplements
   const [supplements, setSupplements] = useState([]);
 
@@ -222,23 +250,41 @@ export default function Onboarding({ supabase, session, onComplete }) {
   const toggleSupp = (id) =>
     setSupplements(prev => prev.includes(id) ? prev.filter(s => s !== id) : [...prev, id]);
 
+  const addCustomSupp = () => {
+    const t = suppText.trim();
+    if (t && !customSupps.includes(t)) {
+      setCustomSupps(prev => [...prev, t]);
+    }
+    setSuppText("");
+  };
+
   const saveProgress = (overrides) => {
     try {
       localStorage.setItem(STORAGE_KEY, JSON.stringify({
         step, name, dob, age, weightLbs, heightFt, heightIn, sex,
-        raceGoals, noRace, races, lthr, deloadPref, supplements, whoopJustConnected,
+        raceGoals, noRace, races, lthr, deloadPref, supplements,
+        whoopJustConnected, customSupps,
         ...overrides,
       }));
     } catch (_) {}
   };
 
+  const persistWhoopConnection = async () => {
+    try {
+      await supabase
+        .from("user_profiles")
+        .update({ connected_wearables: { whoop: true } })
+        .eq("user_id", session.user.id);
+    } catch (_) {}
+  };
+
   // Restore onboarding state from localStorage on mount.
-  // If returning from WHOOP OAuth (?connected=true OR whoop_redirect flag),
-  // force step 4 (wearables) and mark WHOOP as connected.
+  // If returning from WHOOP OAuth (?connected=true / ?whoop_connected=true
+  // OR whoop_redirect flag), force step 4 and mark WHOOP as connected.
   useEffect(() => {
     try {
       const params = new URLSearchParams(window.location.search);
-      const urlConnected = params.get("connected") === "true";
+      const urlConnected = params.get("connected") === "true" || params.get("whoop_connected") === "true";
       const whoopRedirect = localStorage.getItem("onboarding_whoop_redirect") === "true";
       const returnFromWhoop = urlConnected || whoopRedirect;
       const saved = localStorage.getItem(STORAGE_KEY);
@@ -259,16 +305,19 @@ export default function Onboarding({ supabase, session, onComplete }) {
         if (d.deloadPref) setDeloadPref(d.deloadPref);
         if (d.supplements) setSupplements(d.supplements);
         if (d.whoopJustConnected) setWhoopJustConnected(true);
+        if (d.customSupps) setCustomSupps(d.customSupps);
 
         if (returnFromWhoop) {
           setStep(4);
           setWhoopJustConnected(true);
+          persistWhoopConnection();
         } else {
           setStep(d.step || 0);
         }
       } else if (returnFromWhoop) {
         setStep(4);
         setWhoopJustConnected(true);
+        persistWhoopConnection();
       }
 
       if (urlConnected) window.history.replaceState({}, "", "/");
@@ -410,7 +459,7 @@ export default function Onboarding({ supabase, session, onComplete }) {
               </div>
             </div>
 
-            <div style={{ marginTop:4 }}>
+            <div style={{ marginTop:16 }}>
               <div style={{ fontFamily:C.fm, fontSize:8, color:C.muted, letterSpacing:3, marginBottom:8 }}>SEX</div>
               <div style={{ display:"flex", gap:8 }}>
                 {[["M","MALE"],["F","FEMALE"],["X","OTHER"]].map(([val, label]) => (
@@ -436,14 +485,14 @@ export default function Onboarding({ supabase, session, onComplete }) {
       // ── Step 2: Race Goal ───────────────────────────────────────────────────
       case 2:
         return (
-          <div style={{ display:"flex", flexDirection:"column", gap:20 }}>
+          <div style={{ display:"flex", flexDirection:"column", gap:16 }}>
             <div>
               <div style={{ fontFamily:C.fm, fontSize:9, color:C.muted, letterSpacing:4, marginBottom:12 }}>STEP 3 OF {TOTAL}</div>
               <div style={{ fontFamily:C.ff, fontSize:52, color:C.text, lineHeight:0.95, marginBottom:10 }}>RACE<br/>GOAL</div>
               <div style={{ fontFamily:C.fs, fontSize:13, color:C.muted }}>What are you training toward? Select all that apply.</div>
             </div>
 
-            <div style={{ display:"flex", flexDirection:"column", gap:8 }}>
+            <div style={{ display:"flex", flexDirection:"column", gap:6 }}>
               {RACE_GOALS.map(({ id, label, sub }) => {
                 const on = raceGoals.includes(id);
                 return (
@@ -451,24 +500,24 @@ export default function Onboarding({ supabase, session, onComplete }) {
                     key={id}
                     onClick={() => { if (!noRace) toggleGoal(id); }}
                     style={{
-                      display:"flex", alignItems:"center", gap:14, padding:"14px 16px",
+                      display:"flex", alignItems:"center", gap:12, padding:"12px 14px",
                       background: on ? `${C.green}10` : C.card,
                       border:`1px solid ${on ? C.green+"55" : C.border}`,
-                      borderRadius:12, cursor: noRace ? "default" : "pointer", textAlign:"left",
+                      borderRadius:10, cursor: noRace ? "default" : "pointer", textAlign:"left",
                       opacity: noRace ? 0.4 : 1,
                     }}
                   >
                     <div style={{
-                      width:22, height:22, borderRadius:6, flexShrink:0,
+                      width:20, height:20, borderRadius:5, flexShrink:0,
                       background: on ? C.green : C.card2,
                       border:`2px solid ${on ? C.green : C.border}`,
                       display:"flex", alignItems:"center", justifyContent:"center",
                     }}>
-                      {on && <span style={{ color:"#000", fontSize:13, fontWeight:900, lineHeight:1 }}>✓</span>}
+                      {on && <span style={{ color:"#000", fontSize:12, fontWeight:900, lineHeight:1 }}>✓</span>}
                     </div>
-                    <div>
-                      <div style={{ fontFamily:C.ff, fontSize:16, color: on ? C.text : C.muted, letterSpacing:1 }}>{label}</div>
-                      <div style={{ fontFamily:C.fm, fontSize:8, color:C.muted, letterSpacing:1, marginTop:2 }}>{sub}</div>
+                    <div style={{ minWidth:0 }}>
+                      <div style={{ fontFamily:C.ff, fontSize:15, color: on ? C.text : C.muted, letterSpacing:1 }}>{label}</div>
+                      <div style={{ fontFamily:C.fm, fontSize:7, color:C.muted, letterSpacing:1, marginTop:1 }}>{sub}</div>
                     </div>
                   </button>
                 );
@@ -479,64 +528,63 @@ export default function Onboarding({ supabase, session, onComplete }) {
             <button
               onClick={() => { setNoRace(prev => !prev); if (!noRace) { setRaces([]); setRaceGoals([]); } }}
               style={{
-                display:"flex", alignItems:"center", gap:12, padding:"14px 16px",
+                display:"flex", alignItems:"center", gap:12, padding:"12px 14px",
                 background: noRace ? `${C.yellow}10` : C.card,
                 border:`1px solid ${noRace ? C.yellow+"55" : C.border}`,
-                borderRadius:12, cursor:"pointer", textAlign:"left",
+                borderRadius:10, cursor:"pointer", textAlign:"left",
               }}
             >
               <div style={{
-                width:22, height:22, borderRadius:6, flexShrink:0,
+                width:20, height:20, borderRadius:5, flexShrink:0,
                 background: noRace ? C.yellow : C.card2,
                 border:`2px solid ${noRace ? C.yellow : C.border}`,
                 display:"flex", alignItems:"center", justifyContent:"center",
               }}>
-                {noRace && <span style={{ color:"#000", fontSize:13, fontWeight:900, lineHeight:1 }}>✓</span>}
+                {noRace && <span style={{ color:"#000", fontSize:12, fontWeight:900, lineHeight:1 }}>✓</span>}
               </div>
               <div>
-                <div style={{ fontFamily:C.ff, fontSize:15, color: noRace ? C.text : C.muted, letterSpacing:1 }}>NO UPCOMING RACE</div>
-                <div style={{ fontFamily:C.fm, fontSize:8, color:C.muted, letterSpacing:1, marginTop:2 }}>Default to 16-week general plan</div>
+                <div style={{ fontFamily:C.ff, fontSize:14, color: noRace ? C.text : C.muted, letterSpacing:1 }}>NO UPCOMING RACE</div>
+                <div style={{ fontFamily:C.fm, fontSize:7, color:C.muted, letterSpacing:1, marginTop:1 }}>Default to 16-week general plan</div>
               </div>
             </button>
 
-            {/* Race entries per selected sport */}
+            {/* Compact race entries per selected sport */}
             {!noRace && races.length > 0 && (
-              <div style={{ display:"flex", flexDirection:"column", gap:16 }}>
-                <div style={{ fontFamily:C.fm, fontSize:8, color:C.muted, letterSpacing:3 }}>YOUR RACES</div>
+              <div style={{ display:"flex", flexDirection:"column", gap:8 }}>
+                <div style={{ fontFamily:C.fm, fontSize:7, color:C.muted, letterSpacing:3 }}>YOUR RACES</div>
                 {races.map((race, idx) => {
                   const goalLabel = RACE_GOALS.find(g => g.id === race.sport)?.label || race.sport;
                   return (
-                    <div key={idx} style={{ background:C.card, borderRadius:14, padding:"16px", border:`1px solid ${race.is_primary ? C.green+"55" : C.border}` }}>
-                      <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:12 }}>
-                        <div style={{ fontFamily:C.fm, fontSize:8, color:C.green, letterSpacing:3 }}>{goalLabel}</div>
+                    <div key={idx} style={{
+                      background:C.card, borderRadius:10, padding:"10px 12px",
+                      border:`1px solid ${race.is_primary ? C.green+"55" : C.border}`,
+                    }}>
+                      <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:8 }}>
+                        <div style={{ fontFamily:C.fm, fontSize:7, color:C.green, letterSpacing:2 }}>{goalLabel}</div>
                         <button
                           onClick={() => setPrimary(idx)}
                           style={{
-                            padding:"4px 10px", borderRadius:20, cursor:"pointer",
+                            padding:"2px 8px", borderRadius:12, cursor:"pointer",
                             background: race.is_primary ? C.green : "transparent",
                             color: race.is_primary ? "#000" : C.muted,
                             border:`1px solid ${race.is_primary ? C.green : C.border}`,
-                            fontFamily:C.fm, fontSize:7, letterSpacing:2,
+                            fontFamily:C.fm, fontSize:6, letterSpacing:2,
                           }}
                         >{race.is_primary ? "★ PRIMARY" : "SET PRIMARY"}</button>
                       </div>
-                      <div style={{ marginBottom:10 }}>
-                        <div style={{ fontFamily:C.fm, fontSize:7, color:C.muted, letterSpacing:2, marginBottom:4 }}>RACE NAME</div>
+                      <div style={{ marginBottom:6 }}>
                         <RaceLookup
                           sport={race.sport}
                           value={race}
                           onChange={(updated) => updateRace(idx, updated)}
                         />
                       </div>
-                      <div>
-                        <div style={{ fontFamily:C.fm, fontSize:7, color:C.muted, letterSpacing:2, marginBottom:4 }}>RACE DATE</div>
-                        <input
-                          type="date"
-                          value={race.date}
-                          onChange={e => updateRace(idx, { date:e.target.value })}
-                          style={{ ...input, colorScheme:"dark" }}
-                        />
-                      </div>
+                      <input
+                        type="date"
+                        value={race.date}
+                        onChange={e => updateRace(idx, { date:e.target.value })}
+                        style={{ ...inputSm, colorScheme:"dark" }}
+                      />
                     </div>
                   );
                 })}
@@ -626,67 +674,164 @@ export default function Onboarding({ supabase, session, onComplete }) {
           </div>
         );
 
-      // ── Step 4: Wearables ──────────────────────────────────────────────────
+      // ── Step 4: Wearables + Health Data ────────────────────────────────────
       case 4:
         return (
-          <div style={{ display:"flex", flexDirection:"column", gap:20 }}>
+          <div style={{ display:"flex", flexDirection:"column", gap:16 }}>
             <div>
               <div style={{ fontFamily:C.fm, fontSize:9, color:C.muted, letterSpacing:4, marginBottom:12 }}>STEP 5 OF {TOTAL}</div>
-              <div style={{ fontFamily:C.ff, fontSize:52, color:C.text, lineHeight:0.95, marginBottom:10 }}>CONNECT<br/>WEARABLES</div>
+              <div style={{ fontFamily:C.ff, fontSize:52, color:C.text, lineHeight:0.95, marginBottom:10 }}>CONNECT<br/>& IMPORT</div>
               <div style={{ fontFamily:C.fs, fontSize:13, color:C.muted }}>
-                Link your devices for recovery-driven training. You can always do this later.
+                Link devices and import health data. You can always do this later.
               </div>
             </div>
 
-            {/* WHOOP */}
+            {/* ── WEARABLES ─────────────────────────────────────────────── */}
+            <div style={{ fontFamily:C.fm, fontSize:8, color:C.muted, letterSpacing:3 }}>WEARABLES</div>
+
+            {/* WHOOP — active */}
             <div style={{
-              background:C.card, borderRadius:14, padding:"20px", overflow:"hidden",
+              background:C.card, borderRadius:12, padding:"14px", overflow:"hidden",
               border:`1px solid ${whoopJustConnected ? C.green+"55" : C.border}`,
             }}>
-              <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:12 }}>
+              <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center" }}>
                 <div>
-                  <div style={{ fontFamily:C.ff, fontSize:20, color:C.text, letterSpacing:2 }}>WHOOP</div>
-                  <div style={{ fontFamily:C.fm, fontSize:8, color:C.muted, letterSpacing:1, marginTop:2 }}>Recovery · HRV · Sleep · Strain</div>
+                  <div style={{ fontFamily:C.ff, fontSize:18, color:C.text, letterSpacing:2 }}>WHOOP</div>
+                  <div style={{ fontFamily:C.fm, fontSize:7, color:C.muted, letterSpacing:1, marginTop:2 }}>Recovery · HRV · Sleep · Strain</div>
                 </div>
                 {whoopJustConnected && (
-                  <div style={{ background:`${C.green}22`, border:`1px solid ${C.green}44`, borderRadius:20, padding:"4px 12px", fontFamily:C.fm, fontSize:8, color:C.green, letterSpacing:2 }}>
+                  <div style={{ background:`${C.green}22`, border:`1px solid ${C.green}44`, borderRadius:20, padding:"3px 10px", fontFamily:C.fm, fontSize:7, color:C.green, letterSpacing:2 }}>
                     CONNECTED ✓
                   </div>
                 )}
               </div>
-              {whoopJustConnected ? (
-                <div style={{ fontFamily:C.fs, fontSize:13, color:C.green, lineHeight:1.6 }}>
-                  Your WHOOP data is linked. Recovery scores will drive your daily training adjustments.
-                </div>
-              ) : (
+              {!whoopJustConnected && (
                 <button
                   onClick={connectWhoop}
                   style={{
-                    width:"100%", padding:"14px", background:C.green, color:"#000",
-                    border:"none", borderRadius:10, cursor:"pointer",
-                    fontFamily:C.ff, fontSize:16, letterSpacing:3,
+                    width:"100%", padding:"10px", marginTop:10, background:C.green, color:"#000",
+                    border:"none", borderRadius:8, cursor:"pointer",
+                    fontFamily:C.ff, fontSize:14, letterSpacing:3,
                   }}
                 >CONNECT WHOOP</button>
               )}
             </div>
 
-            {/* Apple Health */}
+            {/* SOON wearables — compact grid */}
+            <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:8 }}>
+              {SOON_WEARABLES.map(w => (
+                <div key={w.name} style={{
+                  background:C.card, borderRadius:10, padding:"10px 12px",
+                  border:`1px solid ${C.border}`, opacity:0.6,
+                }}>
+                  <div style={{ display:"flex", justifyContent:"space-between", alignItems:"flex-start", marginBottom:4 }}>
+                    <div style={{ fontFamily:C.ff, fontSize:13, color:C.text, letterSpacing:1, lineHeight:1.1 }}>{w.name}</div>
+                    <SoonBadge />
+                  </div>
+                  <div style={{ fontFamily:C.fm, fontSize:6, color:C.muted, letterSpacing:1 }}>{w.sub}</div>
+                </div>
+              ))}
+            </div>
+
+            {/* ── HEALTH DATA ───────────────────────────────────────────── */}
+            <div style={{ fontFamily:C.fm, fontSize:8, color:C.muted, letterSpacing:3, marginTop:8 }}>HEALTH DATA</div>
+
+            {/* Upload Bloodwork */}
             <div style={{
-              background:C.card, borderRadius:14, padding:"20px", overflow:"hidden",
-              border:`1px solid ${C.border}`, opacity:0.7,
+              background:C.card, borderRadius:12, padding:"14px",
+              border:`1px solid ${bloodworkFile ? C.green+"55" : C.border}`,
             }}>
-              <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:12 }}>
+              <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center" }}>
+                <div style={{ flex:1, minWidth:0 }}>
+                  <div style={{ fontFamily:C.ff, fontSize:16, color:C.text, letterSpacing:1 }}>UPLOAD BLOODWORK</div>
+                  <div style={{ fontFamily:C.fm, fontSize:7, color:C.muted, letterSpacing:1, marginTop:2 }}>PDF or photo · Claude reads it</div>
+                </div>
+                {bloodworkFile ? (
+                  <div style={{ display:"flex", alignItems:"center", gap:6, flexShrink:0 }}>
+                    <span style={{ fontFamily:C.fm, fontSize:8, color:C.green }}>✓</span>
+                    <button onClick={() => { setBloodworkFile(null); if (bloodworkRef.current) bloodworkRef.current.value = ""; }}
+                      style={{ background:"none", border:"none", color:C.muted, cursor:"pointer", fontSize:12, padding:0 }}>✕</button>
+                  </div>
+                ) : (
+                  <button
+                    onClick={() => bloodworkRef.current?.click()}
+                    style={{
+                      padding:"6px 14px", background:C.card2, color:C.text,
+                      border:`1px solid ${C.border}`, borderRadius:8, cursor:"pointer",
+                      fontFamily:C.ff, fontSize:12, letterSpacing:2, flexShrink:0,
+                    }}
+                  >UPLOAD</button>
+                )}
+              </div>
+              {bloodworkFile && (
+                <div style={{ fontFamily:C.fm, fontSize:8, color:C.green, marginTop:6, overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>
+                  {bloodworkFile.name}
+                </div>
+              )}
+              <input ref={bloodworkRef} type="file" accept="image/*,.pdf" style={{ display:"none" }} onChange={e => {
+                const file = e.target.files?.[0];
+                if (file) setBloodworkFile({ name: file.name, type: file.type, size: file.size });
+              }} />
+            </div>
+
+            {/* Current Supplements */}
+            <div style={{
+              background:C.card, borderRadius:12, padding:"14px",
+              border:`1px solid ${C.border}`,
+            }}>
+              <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center" }}>
                 <div>
-                  <div style={{ fontFamily:C.ff, fontSize:20, color:C.text, letterSpacing:2 }}>APPLE HEALTH</div>
-                  <div style={{ fontFamily:C.fm, fontSize:8, color:C.muted, letterSpacing:1, marginTop:2 }}>Workouts · Heart rate · Steps</div>
+                  <div style={{ fontFamily:C.ff, fontSize:16, color:C.text, letterSpacing:1 }}>CURRENT SUPPLEMENTS</div>
+                  <div style={{ fontFamily:C.fm, fontSize:7, color:C.muted, letterSpacing:1, marginTop:2 }}>Add what you're already taking</div>
                 </div>
-                <div style={{ background:`${C.yellow}22`, border:`1px solid ${C.yellow}44`, borderRadius:20, padding:"4px 12px", fontFamily:C.fm, fontSize:8, color:C.yellow, letterSpacing:2 }}>
-                  SOON
+                {!showSuppInput && (
+                  <button
+                    onClick={() => setShowSuppInput(true)}
+                    style={{
+                      padding:"6px 14px", background:C.card2, color:C.text,
+                      border:`1px solid ${C.border}`, borderRadius:8, cursor:"pointer",
+                      fontFamily:C.ff, fontSize:12, letterSpacing:2, flexShrink:0,
+                    }}
+                  >ADD</button>
+                )}
+              </div>
+              {showSuppInput && (
+                <div style={{ marginTop:10 }}>
+                  <div style={{ display:"flex", gap:6 }}>
+                    <input
+                      type="text"
+                      value={suppText}
+                      onChange={e => setSuppText(e.target.value)}
+                      onKeyDown={e => { if (e.key === "Enter") { e.preventDefault(); addCustomSupp(); } }}
+                      placeholder="e.g. Creatine 5g, Vitamin D 5000 IU"
+                      style={{ ...inputSm, flex:1 }}
+                    />
+                    <button onClick={addCustomSupp} disabled={!suppText.trim()}
+                      style={{
+                        padding:"8px 12px", background: suppText.trim() ? C.green : C.card2,
+                        color: suppText.trim() ? "#000" : C.muted,
+                        border:"none", borderRadius:8, cursor: suppText.trim() ? "pointer" : "default",
+                        fontFamily:C.ff, fontSize:11, letterSpacing:1, flexShrink:0,
+                      }}
+                    >+</button>
+                  </div>
+                  {customSupps.length > 0 && (
+                    <div style={{ display:"flex", flexWrap:"wrap", gap:6, marginTop:8 }}>
+                      {customSupps.map((s, i) => (
+                        <div key={i} style={{
+                          display:"flex", alignItems:"center", gap:6,
+                          background:C.card2, border:`1px solid ${C.border}`, borderRadius:20,
+                          padding:"4px 10px",
+                        }}>
+                          <span style={{ fontFamily:C.fm, fontSize:9, color:C.text }}>{s}</span>
+                          <button onClick={() => setCustomSupps(prev => prev.filter((_, j) => j !== i))}
+                            style={{ background:"none", border:"none", color:C.muted, cursor:"pointer", fontSize:11, padding:0, lineHeight:1 }}>✕</button>
+                        </div>
+                      ))}
+                    </div>
+                  )}
                 </div>
-              </div>
-              <div style={{ fontFamily:C.fs, fontSize:13, color:C.muted, lineHeight:1.6 }}>
-                Available after installing the iOS app. Apple Health integration is coming soon.
-              </div>
+              )}
             </div>
 
             <NavRow onBack={back} onNext={next} />
