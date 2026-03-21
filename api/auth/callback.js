@@ -30,7 +30,7 @@ export default async function handler(req, res) {
       `whoop_access=${tokens.access_token}; ${opts}`,
       `whoop_refresh=${tokens.refresh_token || ""}; ${optsRefresh}`,
     ]);
-    return res.redirect(302, "/?connected=true");
+    return res.redirect(302, "/?connected=true&whoop_connected=true");
   } catch (err) {
     return res.redirect(302, "/?error=exception");
   }
