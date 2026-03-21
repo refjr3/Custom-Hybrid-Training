@@ -476,6 +476,7 @@ export default function App() {
   const [planLoading, setPlanLoading] = useState(true);
   const [supplements, setSupplements] = useState([]);
   const [suppsLoading, setSuppsLoading] = useState(true);
+  const [synthesisNote, setSynthesisNote] = useState(null);
 
   // ── Auth state ──────────────────────────────────────────────────────────────
   const [session, setSession]       = useState(null);
@@ -594,6 +595,51 @@ export default function App() {
       setPlanLoading(false);
     }
   };
+
+  // Morning Synthesis: runs once per calendar day after WHOOP + plan data load
+  useEffect(() => {
+    if (!whoopData || planBlocks.length === 0 || !session?.access_token) return;
+    const today = new Date().toISOString().slice(0, 10);
+    if (localStorage.getItem("synthesis_date") === today) return;
+
+    const dayNames = ["SUN","MON","TUE","WED","THU","FRI","SAT"];
+    const todayDay = dayNames[new Date().getDay()];
+    const currentBlock = planBlocks[0];
+    const currentWeek = currentBlock?.weeks?.[0];
+    const todayData = currentWeek?.days?.find(d => d.day === todayDay);
+    if (!todayData || !currentWeek) {
+      localStorage.setItem("synthesis_date", today);
+      return;
+    }
+
+    const recoveryScore = whoopData?.recovery?.score;
+    const sessionName = todayData.am;
+
+    fetch("/api/synthesis/morning", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "Authorization": `Bearer ${session.access_token}`,
+      },
+      body: JSON.stringify({
+        recovery_score: recoveryScore,
+        session_name: sessionName,
+        week_id: currentWeek.id,
+        day: todayDay,
+      }),
+    })
+      .then(r => r.json())
+      .then(data => {
+        localStorage.setItem("synthesis_date", today);
+        if (data.modified) {
+          setSynthesisNote(data.note);
+          fetchPlan(session.access_token);
+        }
+      })
+      .catch(() => {
+        localStorage.setItem("synthesis_date", today);
+      });
+  }, [whoopData, planBlocks]);
 
   const handlePlanChange = async (planChange) => {
     const token = session?.access_token;
@@ -727,6 +773,18 @@ export default function App() {
               </>
             )}
           </div>
+
+          {synthesisNote && (
+            <div style={{ padding:"0 20px 16px" }}>
+              <div style={{ background:"#FF770015", border:"1px solid #FF770033", borderRadius:14, padding:"14px 16px" }}>
+                <div style={{ display:"flex", alignItems:"center", gap:8, marginBottom:6 }}>
+                  <span style={{ fontSize:14 }}>⚡</span>
+                  <div style={{ fontFamily:C.fm, fontSize:8, color:"#FF7700", letterSpacing:3, fontWeight:700 }}>ADAPTIVE COACHING</div>
+                </div>
+                <div style={{ fontFamily:C.fs, fontSize:13, color:C.text, lineHeight:1.5 }}>{synthesisNote}</div>
+              </div>
+            </div>
+          )}
 
           <div style={{ padding:"0 20px 20px" }}>
             <div style={{ fontFamily:C.fm, fontSize:8, color:C.muted, letterSpacing:3, marginBottom:12 }}>TODAY · {todayDayName}</div>
