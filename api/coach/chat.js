@@ -8,7 +8,7 @@ const supabase = createClient(
 export default async function handler(req, res) {
   if (req.method !== "POST") return res.status(405).json({ error: "Method not allowed" });
 
-  const { message, whoopData, currentWeek, recentActivities, attachment, user_id } = req.body;
+  const { message, whoopData, currentWeek, recentActivities, attachment, user_id, scenarioChanges } = req.body;
   if (!message && !attachment) return res.status(400).json({ error: "No message or attachment provided" });
 
   // Fetch user profile and flagged biomarkers in parallel so the system prompt is dynamic
@@ -215,6 +215,10 @@ RESPONSE RULES:
     const monthNames = ["January","February","March","April","May","June","July","August","September","October","November","December"];
     const todayStr = `${dayNames[now.getDay()]}, ${monthNames[now.getMonth()]} ${now.getDate()} ${now.getFullYear()}`;
 
+    const scenarioCtx = scenarioChanges?.length > 0
+      ? `\n\nACCEPTED SCENARIO CHANGES (build on these, do not contradict):\n${scenarioChanges.map((c,i) => `${i+1}. ${c.description} (${c.day || ""})`).join("\n")}`
+      : "";
+
     const contextText = `TODAY: ${todayStr}
 
 CURRENT WHOOP DATA:
@@ -223,7 +227,9 @@ CURRENT WHOOP DATA:
 - Sleep: ${whoopData?.sleep?.score ?? "N/A"}% | Hours: ${whoopData?.sleep?.hours ?? "N/A"}h
 - Strain: ${whoopData?.strain?.score ?? "N/A"}
 
-CURRENT TRAINING WEEK: id=${currentWeek?.id ?? "N/A"} label=${currentWeek?.label ?? "N/A"} — ${currentWeek?.subtitle ?? ""}
+CURRENT TRAINING WEEK UUID: ${currentWeek?.id ?? "N/A"}
+CURRENT TRAINING WEEK LABEL: ${currentWeek?.label ?? "N/A"} — ${currentWeek?.subtitle ?? ""}
+IMPORTANT: The week_id in any <plan_change> MUST be the exact UUID above (${currentWeek?.id ?? "N/A"}). Never use slug abbreviations like tw1 or p1w1.${scenarioCtx}
 
 User message: ${message || "(see attached file)"}`;
 
