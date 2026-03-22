@@ -216,14 +216,19 @@ const AIChat = ({ whoopData, currentWeek, recentActivities, onPlanChange, userNa
       <div style={{ position:"fixed", bottom:80, left:"50%", transform:"translateX(-50%)", width:"calc(100% - 40px)", maxWidth:440, zIndex:150 }}>
         <button onClick={() => setExpanded(true)}
           style={{ width:"100%", padding:"14px 20px", background:C.card, border:`1px solid ${C.border}`, borderRadius:C.radius, display:"flex", alignItems:"center", gap:12, cursor:"pointer", boxShadow:"0 4px 20px rgba(0,0,0,0.5)", ...C.glass }}>
-          <div style={{ width:32, height:32, borderRadius:"50%", background:`${C.green}22`, border:`1px solid ${C.green}44`, display:"flex", alignItems:"center", justifyContent:"center", flexShrink:0 }}>
-            <span style={{ fontSize:14 }}>✦</span>
+          <div style={{ position:"relative", width:32, height:32, borderRadius:"50%", background:`${C.cyan}15`, border:`1px solid ${C.cyan}33`, display:"flex", alignItems:"center", justifyContent:"center", flexShrink:0 }}>
+            <span style={{ fontSize:14, color:C.cyan }}>✦</span>
+            {proactiveBadge > 0 && (
+              <div style={{ position:"absolute", top:-4, right:-4, width:16, height:16, borderRadius:"50%", background:C.red, display:"flex", alignItems:"center", justifyContent:"center" }}>
+                <span style={{ fontFamily:C.fm, fontSize:8, color:"#fff", fontWeight:700 }}>{proactiveBadge}</span>
+              </div>
+            )}
           </div>
           <div style={{ flex:1, textAlign:"left" }}>
             <div style={{ fontFamily:C.ff, fontSize:13, color:C.text, letterSpacing:1 }}>ASK YOUR COACH</div>
-            <div style={{ fontFamily:C.fm, fontSize:8, color:C.muted, letterSpacing:1, marginTop:2 }}>Claude · Powered by Anthropic</div>
+            <div style={{ fontFamily:C.fm, fontSize:7, color:C.muted, letterSpacing:2, marginTop:2 }}>Claude · Powered by Anthropic</div>
           </div>
-          <div style={{ fontFamily:C.fm, fontSize:8, color:C.green, letterSpacing:2 }}>OPEN ↑</div>
+          <div style={{ fontFamily:C.fm, fontSize:7, color:C.cyan, letterSpacing:2 }}>OPEN ↑</div>
         </button>
       </div>
     );
@@ -511,6 +516,8 @@ export default function App() {
   const [coachPersona, setCoachPersona] = useState("grinder");
   const [garminActivities, setGarminActivities] = useState([]);
   const [garminConnected, setGarminConnected] = useState(false);
+  const [proactiveMessages, setProactiveMessages] = useState([]);
+  const [proactiveBadge, setProactiveBadge] = useState(0);
 
   // ── Auth state ──────────────────────────────────────────────────────────────
   const [session, setSession]       = useState(null);
@@ -697,6 +704,69 @@ export default function App() {
       });
   }, [whoopData, planBlocks]);
 
+  // Proactive Coaching: check HRV trend + Sunday weekly review
+  useEffect(() => {
+    if (!whoopData || !session?.access_token) return;
+    const today = new Date().toISOString().slice(0, 10);
+    if (localStorage.getItem("proactive_date") === today) return;
+
+    const checkProactive = async () => {
+      const msgs = [];
+      const hrv = whoopData?.recovery?.hrv;
+      if (hrv) {
+        const storedHrvs = JSON.parse(localStorage.getItem("hrv_history") || "[]");
+        storedHrvs.push({ date: today, value: hrv });
+        const recent = storedHrvs.slice(-7);
+        localStorage.setItem("hrv_history", JSON.stringify(recent));
+
+        if (recent.length >= 3) {
+          const last3 = recent.slice(-3).map(h => h.value);
+          const declining = last3.every((v, i) => i === 0 || v < last3[i - 1]);
+          if (declining) {
+            try {
+              const res = await fetch("/api/coaching/proactive", {
+                method: "POST",
+                headers: { "Content-Type": "application/json", "Authorization": `Bearer ${session.access_token}` },
+                body: JSON.stringify({ type: "hrv_trend", hrv_values: last3 }),
+              });
+              const data = await res.json();
+              if (data.messages?.length) msgs.push(...data.messages);
+            } catch (_) {}
+          }
+        }
+      }
+
+      if (new Date().getDay() === 0) {
+        try {
+          const res = await fetch("/api/coaching/proactive", {
+            method: "POST",
+            headers: { "Content-Type": "application/json", "Authorization": `Bearer ${session.access_token}` },
+            body: JSON.stringify({
+              type: "weekly_review",
+              week_summary: {
+                recovery: whoopData?.recovery?.score,
+                hrv: whoopData?.recovery?.hrv,
+                strain: whoopData?.strain?.score,
+                sleep: whoopData?.sleep?.score,
+                activities: garminActivities.slice(0, 5).map(a => ({ type: a.activity_type, distance: a.distance_meters, duration: a.duration_seconds })),
+              },
+            }),
+          });
+          const data = await res.json();
+          if (data.messages?.length) msgs.push(...data.messages);
+        } catch (_) {}
+      }
+
+      localStorage.setItem("proactive_date", today);
+      if (msgs.length > 0) {
+        setProactiveMessages(msgs);
+        setProactiveBadge(msgs.length);
+      }
+    };
+
+    checkProactive();
+  }, [whoopData]);
+
   const handlePlanChange = async (planChange) => {
     const token = session?.access_token;
     try {
@@ -869,6 +939,20 @@ export default function App() {
               </>
             )}
           </div>
+
+          {proactiveMessages.length > 0 && (
+            <div style={{ padding:"0 20px 16px" }}>
+              {proactiveMessages.map((m, i) => (
+                <div key={i} style={{ background:`${C.cyan}08`, border:`1px solid ${C.cyan}22`, borderRadius:C.radius, padding:"14px 16px", marginBottom:i < proactiveMessages.length-1 ? 8 : 0, ...C.glass }}>
+                  <div style={{ display:"flex", alignItems:"center", gap:8, marginBottom:6 }}>
+                    <span style={{ fontSize:14, color:C.cyan }}>✦</span>
+                    <div style={{ fontFamily:C.fm, fontSize:7, color:C.cyan, letterSpacing:3, textTransform:"uppercase" }}>COACH INSIGHT</div>
+                  </div>
+                  <div style={{ fontFamily:C.fs, fontSize:13, color:C.text, lineHeight:1.6 }}>{m.content}</div>
+                </div>
+              ))}
+            </div>
+          )}
 
           {synthesisNote && (
             <div style={{ padding:"0 20px 16px" }}>
