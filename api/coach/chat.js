@@ -164,11 +164,26 @@ RESPONSE RULES:
 - Talk like a coach: direct, confident, action-oriented. Short sentences.
 
 CLARIFYING QUESTIONS (apply in ALL modes):
-When you need clarifying information, identify ALL questions you need in one pass and ask them together in a SINGLE <clarifying_questions> block. Never send multiple rounds of questions. Maximum 3 questions per block. After receiving answers, proceed directly to generating the plan — do not ask follow-up clarifying questions.
-Before generating any clarifying questions, re-read the entire conversation history to check if the answer is already there. Only ask for information that was not already provided.
+Before asking ANY question, re-read the entire conversation history to check if the answer is already there. Only ask for information not already provided. Maximum 3 questions total per block. After receiving answers, generate immediately — never ask follow-up questions.
+
+Hierarchical question flow (pick only the levels needed):
+Level 1 — Scope (only if request spans multiple weeks):
+  {"question":"Which week?", "type":"single_select", "options":["${currentWeek?.label || "CURRENT WEEK"}", "NEXT WEEK"]}
+Level 2 — Days (only if request spans multiple days):
+  {"question":"Which days?", "type":"multi_select", "options":["MON","TUE","WED","THU","FRI","SAT","SUN"]}
+Level 3 — Session-specific (always ask, adapt to session type):
+  HYROX: {"question":"Format?", "type":"single_select", "options":["Full Sim","Half Sim","AMRAP","EMOM","For Time"]}
+  Run: {"question":"Type?", "type":"single_select", "options":["Threshold","Tempo","Zone 2","Fartlek","Track Workout"]}
+  Strength: {"question":"Focus?", "type":"single_select", "options":["Push","Pull","Full Body","Lower","Upper"]}
+  Recovery: {"question":"Modality?", "type":"single_select", "options":["Easy Run","Bike","Swim","Row","Walk","Mobility Only"]}
+
+Format:
 <clarifying_questions>
 [{"question":"...", "type":"multi_select", "options":["A","B","C"]}]
 </clarifying_questions>
+
+CONVERSATIONAL REFINEMENT:
+For small refinements to an already-generated session ("make it a ladder", "add sled pulls", "change to AMRAP"), make targeted edits to the existing plan_change — do not regenerate the entire session or ask new clarifying questions. Only restart the question flow if the user wants a fundamentally different structure (different day, different week, full remap).
 
 SCENARIO MODE RULES (when message starts with [SCENARIO MODE]):
 1. Travel/location/equipment requests → ask clarifying questions FIRST (days + equipment in one block)
@@ -180,6 +195,9 @@ SCENARIO MODE RULES (when message starts with [SCENARIO MODE]):
     // Fetch last 20 messages for conversation history, scoped to user
     let historyMessages = [];
     try {
+      if (!resolvedUserId) {
+        console.warn("[coach/chat] no user_id for history fetch — skipping");
+      }
       const historyQuery = supabase
         .from("ai_messages")
         .select("role, content")
@@ -187,7 +205,8 @@ SCENARIO MODE RULES (when message starts with [SCENARIO MODE]):
         .limit(20);
       if (resolvedUserId) historyQuery.eq("user_id", resolvedUserId);
       historyQuery.neq("role", "proactive");
-      const { data } = await historyQuery;
+      const { data, error: histErr } = await historyQuery;
+      if (histErr) console.error("[coach/chat] history fetch error:", histErr.message);
       if (data && data.length > 0) {
         const reversed = data.reverse();
         const validated = [];
@@ -289,10 +308,17 @@ User message: ${message || "(see attached file)"}`;
 
     // Persist messages scoped to user
     if (resolvedUserId) {
-      supabase.from("ai_messages").insert([
+      const { error: insertErr } = await supabase.from("ai_messages").insert([
         { user_id: resolvedUserId, role: "user", content: message || `[attachment: ${attachment?.name}]` },
         { user_id: resolvedUserId, role: "assistant", content: cleanText },
-      ]).then(() => {}).catch(() => {});
+      ]);
+      if (insertErr) {
+        console.error("[coach/chat] failed to save messages:", insertErr.message);
+      } else {
+        console.log("[coach/chat] saved 2 messages for user", resolvedUserId.slice(0,8));
+      }
+    } else {
+      console.warn("[coach/chat] no resolvedUserId — messages NOT saved (no auth token?)");
     }
 
     return res.status(200).json({
