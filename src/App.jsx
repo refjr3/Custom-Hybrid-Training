@@ -552,6 +552,7 @@ export default function App() {
   const [garminConnected, setGarminConnected] = useState(false);
   const [proactiveMessages, setProactiveMessages] = useState([]);
   const [proactiveBadge, setProactiveBadge] = useState(0);
+  const [unifiedMetrics, setUnifiedMetrics] = useState([]);
   const [labOpen, setLabOpen] = useState(false);
   const [labMessages, setLabMessages] = useState([]);
   const [labInput, setLabInput] = useState("");
@@ -616,6 +617,7 @@ export default function App() {
     fetchSupplements();
     fetchPlan(session?.access_token);
     fetchGarminActivities();
+    fetchUnifiedMetrics();
   }, [profile]);
 
   const fetchWhoopData = async () => {
@@ -663,8 +665,19 @@ export default function App() {
         .from("garmin_activities")
         .select("*")
         .order("start_time", { ascending: false })
-        .limit(5);
+        .limit(20);
       if (data) setGarminActivities(data);
+    } catch (_) {}
+  };
+
+  const fetchUnifiedMetrics = async () => {
+    try {
+      const { data } = await supabase
+        .from("unified_metrics")
+        .select("*")
+        .order("date", { ascending: false })
+        .limit(90);
+      if (data) setUnifiedMetrics(data);
     } catch (_) {}
   };
 
@@ -1010,6 +1023,30 @@ export default function App() {
             )}
           </div>
 
+          {garminActivities.length > 0 && (
+            <div style={{ padding:"0 20px 16px" }}>
+              <div style={{ fontFamily:C.fm, fontSize:7, color:C.muted, letterSpacing:3, marginBottom:8, textTransform:"uppercase" }}>LAST ACTIVITY</div>
+              {(() => {
+                const a = garminActivities[0];
+                return (
+                  <div style={{ background:C.card, borderRadius:C.radius, padding:"14px 16px", border:`1px solid ${C.border}`, ...C.glass }}>
+                    <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:8 }}>
+                      <div style={{ fontFamily:C.ff, fontSize:17, color:C.text, letterSpacing:1 }}>{a.name || a.activity_type}</div>
+                      <div style={{ fontFamily:C.fm, fontSize:7, color:C.muted, letterSpacing:2 }}>
+                        {a.start_time ? new Date(a.start_time).toLocaleDateString("en-US",{month:"short",day:"numeric"}).toUpperCase() : ""}
+                      </div>
+                    </div>
+                    <div style={{ display:"flex", gap:16 }}>
+                      {a.distance_meters > 0 && <div><div style={{ fontFamily:C.fm, fontSize:6, color:C.muted, letterSpacing:2 }}>DISTANCE</div><div style={{ fontFamily:C.ff, fontSize:20, color:C.cyan }}>{(a.distance_meters/1000).toFixed(1)}km</div></div>}
+                      {a.duration_seconds > 0 && <div><div style={{ fontFamily:C.fm, fontSize:6, color:C.muted, letterSpacing:2 }}>DURATION</div><div style={{ fontFamily:C.ff, fontSize:20, color:C.text }}>{Math.floor(a.duration_seconds/60)}m</div></div>}
+                      {a.avg_hr > 0 && <div><div style={{ fontFamily:C.fm, fontSize:6, color:C.muted, letterSpacing:2 }}>AVG HR</div><div style={{ fontFamily:C.ff, fontSize:20, color:C.red }}>{a.avg_hr}</div></div>}
+                    </div>
+                  </div>
+                );
+              })()}
+            </div>
+          )}
+
           {proactiveMessages.length > 0 && (
             <div style={{ padding:"0 20px 16px" }}>
               {proactiveMessages.map((m, i) => (
@@ -1180,6 +1217,13 @@ export default function App() {
                     {d.isSunday ? (sundayChoice[weekId] ? sundayChoice[weekId].toUpperCase() : "?") : d.isRaceDay ? "RACE" : getTypeLabel(d.am)}
                   </div>
                   {d.pm && <div style={{ fontFamily:C.fm, fontSize:5, color:C.light, marginTop:2 }}>+PM</div>}
+                  {(() => {
+                    const dayDate = d.date;
+                    const hasActivity = garminActivities.some(a => a.start_time && a.start_time.startsWith(dayDate?.split(" ")[0] || "___"));
+                    return hasActivity
+                      ? <div style={{ fontSize:8, color:C.green, marginTop:2 }}>✓</div>
+                      : d.am ? <div style={{ fontSize:8, color:C.light, marginTop:2 }}>—</div> : null;
+                  })()}
                 </button>
               );
             })}
@@ -1289,6 +1333,224 @@ export default function App() {
         </div>
       )}
 
+      {nav === "perf" && (() => {
+        const dayNames = ["SUN","MON","TUE","WED","THU","FRI","SAT"];
+        const currentWeekDays = (planBlocks[0]?.weeks?.[0]?.days) || [];
+
+        const complianceData = currentWeekDays.map(d => {
+          const planned = d.am || d.pm;
+          if (!planned) return { day:d.day, status:"none" };
+          const dayDateStr = d.date?.split(" ")[0];
+          const hasActivity = garminActivities.some(a => a.start_time?.startsWith(dayDateStr || "___"));
+          return { day:d.day, status: hasActivity ? "done" : "missed", planned:d.am };
+        });
+        const plannedCount = complianceData.filter(d => d.status !== "none").length;
+        const doneCount = complianceData.filter(d => d.status === "done").length;
+        const compliancePct = plannedCount > 0 ? Math.round((doneCount / plannedCount) * 100) : 0;
+
+        const last7 = garminActivities.filter(a => {
+          if (!a.start_time) return false;
+          const d = new Date(a.start_time);
+          return (Date.now() - d.getTime()) < 7 * 86400000;
+        });
+        const last42 = garminActivities.filter(a => {
+          if (!a.start_time) return false;
+          const d = new Date(a.start_time);
+          return (Date.now() - d.getTime()) < 42 * 86400000;
+        });
+        const atl = last7.length > 0 ? Math.round(last7.reduce((s,a) => s + (a.duration_seconds||0)/60, 0) / 7) : 0;
+        const ctl = last42.length > 0 ? Math.round(last42.reduce((s,a) => s + (a.duration_seconds||0)/60, 0) / 42) : 0;
+        const tsb = ctl - atl;
+        const tsbColor = tsb > 10 ? C.green : tsb > -10 ? C.yellow : C.red;
+        const tsbLabel = tsb > 10 ? "FRESH" : tsb > -10 ? "NEUTRAL" : "FATIGUED";
+
+        const vo2Metrics = unifiedMetrics.filter(m => m.vo2_max).slice(0, 30).reverse();
+        const currentVo2 = vo2Metrics.length > 0 ? vo2Metrics[vo2Metrics.length - 1].vo2_max : null;
+        const vo2Max = vo2Metrics.length > 0 ? Math.max(...vo2Metrics.map(m => Number(m.vo2_max))) : 0;
+
+        const zoneColors = ["#555", C.blue, C.yellow, "#FF7700", C.red];
+        const zoneData = [0,0,0,0,0];
+        let totalZoneTime = 0;
+        last7.forEach(a => {
+          if (a.avg_hr) {
+            const hr = a.avg_hr;
+            const dur = a.duration_seconds || 0;
+            const zone = hr >= 163 ? 4 : hr >= 150 ? 3 : hr >= 147 ? 2 : hr >= 132 ? 1 : 0;
+            zoneData[zone] += dur;
+            totalZoneTime += dur;
+          }
+        });
+
+        const prs = {};
+        garminActivities.forEach(a => {
+          if (!a.distance_meters || !a.duration_seconds) return;
+          const dist = a.distance_meters;
+          const pace = a.duration_seconds / (dist / 1000);
+          const checks = [
+            { key:"5K", min:4800, max:5500 },
+            { key:"10K", min:9500, max:10500 },
+            { key:"HALF", min:20500, max:22000 },
+            { key:"MARATHON", min:41500, max:43000 },
+          ];
+          checks.forEach(({ key, min, max }) => {
+            if (dist >= min && dist <= max) {
+              if (!prs[key] || a.duration_seconds < prs[key].time) {
+                prs[key] = { time: a.duration_seconds, date: a.start_time };
+              }
+            }
+          });
+        });
+        const fmtTime = (s) => { const m = Math.floor(s/60); const sec = Math.floor(s%60); return `${m}:${String(sec).padStart(2,"0")}`; };
+
+        return (
+          <div style={{ padding:"20px" }}>
+            <div style={{ fontFamily:C.ff, fontSize:28, letterSpacing:2, marginBottom:4 }}>PERFORMANCE<span style={{ color:C.cyan }}>.</span></div>
+            <div style={{ fontFamily:C.fm, fontSize:7, color:C.muted, letterSpacing:3, marginBottom:20, textTransform:"uppercase" }}>TRAINING ANALYTICS</div>
+
+            {/* WEEKLY COMPLIANCE */}
+            <div style={{ marginBottom:24 }}>
+              <div style={{ display:"flex", alignItems:"center", gap:10, marginBottom:12 }}>
+                <div style={{ fontFamily:C.ff, fontSize:18, color:C.cyan, letterSpacing:2 }}>WEEKLY COMPLIANCE</div>
+                <div style={{ fontFamily:C.ff, fontSize:24, color: compliancePct >= 80 ? C.green : compliancePct >= 50 ? C.yellow : C.red, fontWeight:700 }}>{compliancePct}%</div>
+              </div>
+              <div style={{ display:"flex", gap:4, marginBottom:12 }}>
+                {complianceData.map((d,i) => {
+                  const bg = d.status === "done" ? C.green : d.status === "missed" ? `${C.red}44` : C.card;
+                  const icon = d.status === "done" ? "✅" : d.status === "missed" ? "❌" : "—";
+                  return (
+                    <div key={i} style={{ flex:1, background:bg, borderRadius:8, padding:"8px 2px", textAlign:"center", border:`1px solid ${C.border}` }}>
+                      <div style={{ fontFamily:C.fm, fontSize:7, color:C.muted, letterSpacing:1, marginBottom:4 }}>{d.day}</div>
+                      <div style={{ fontSize:12 }}>{icon}</div>
+                    </div>
+                  );
+                })}
+              </div>
+              {compliancePct < 80 && compliancePct > 0 && (
+                <div style={{ background:C.card, borderRadius:12, padding:"12px 14px", border:`1px solid ${C.border}`, borderLeft:`3px solid ${C.yellow}`, ...C.glass }}>
+                  <div style={{ fontFamily:C.fs, fontSize:12, color:C.muted, lineHeight:1.6 }}>
+                    {compliancePct < 50 ? "Compliance under 50% — let's discuss what's blocking your sessions." : "Slightly under target. Prioritize the high-intensity sessions."}
+                  </div>
+                </div>
+              )}
+            </div>
+
+            {/* TRAINING LOAD */}
+            <div style={{ marginBottom:24 }}>
+              <div style={{ fontFamily:C.ff, fontSize:18, color:C.cyan, letterSpacing:2, marginBottom:12 }}>TRAINING LOAD</div>
+              <div style={{ display:"flex", gap:8 }}>
+                <div style={{ flex:1, background:C.card, borderRadius:C.radius, padding:"14px", textAlign:"center", border:`1px solid ${C.border}`, ...C.glass }}>
+                  <div style={{ fontFamily:C.fm, fontSize:7, color:C.muted, letterSpacing:3, marginBottom:6 }}>ATL (7D)</div>
+                  <div style={{ fontFamily:C.ff, fontSize:28, color:C.text, fontWeight:700 }}>{atl}</div>
+                  <div style={{ fontFamily:C.fm, fontSize:7, color:C.muted, letterSpacing:2 }}>MIN/DAY</div>
+                </div>
+                <div style={{ flex:1, background:C.card, borderRadius:C.radius, padding:"14px", textAlign:"center", border:`1px solid ${C.border}`, ...C.glass }}>
+                  <div style={{ fontFamily:C.fm, fontSize:7, color:C.muted, letterSpacing:3, marginBottom:6 }}>CTL (42D)</div>
+                  <div style={{ fontFamily:C.ff, fontSize:28, color:C.text, fontWeight:700 }}>{ctl}</div>
+                  <div style={{ fontFamily:C.fm, fontSize:7, color:C.muted, letterSpacing:2 }}>MIN/DAY</div>
+                </div>
+                <div style={{ flex:1, background:C.card, borderRadius:C.radius, padding:"14px", textAlign:"center", border:`1px solid ${tsbColor}22`, boxShadow:glow(tsbColor,0.1), ...C.glass }}>
+                  <div style={{ fontFamily:C.fm, fontSize:7, color:C.muted, letterSpacing:3, marginBottom:6 }}>TSB</div>
+                  <div style={{ fontFamily:C.ff, fontSize:28, color:tsbColor, fontWeight:700 }}>{tsb > 0 ? "+" : ""}{tsb}</div>
+                  <div style={{ fontFamily:C.fm, fontSize:7, color:tsbColor, letterSpacing:2 }}>{tsbLabel}</div>
+                </div>
+              </div>
+            </div>
+
+            {/* VO2 MAX TREND */}
+            <div style={{ marginBottom:24 }}>
+              <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:12 }}>
+                <div style={{ fontFamily:C.ff, fontSize:18, color:C.cyan, letterSpacing:2 }}>VO2 MAX</div>
+                {currentVo2 && <div style={{ fontFamily:C.ff, fontSize:32, color:C.cyan, fontWeight:700 }}>{Number(currentVo2).toFixed(1)}</div>}
+              </div>
+              {vo2Metrics.length > 1 ? (
+                <div style={{ background:C.card, borderRadius:C.radius, padding:"16px", border:`1px solid ${C.border}`, ...C.glass }}>
+                  <div style={{ display:"flex", alignItems:"flex-end", gap:2, height:80 }}>
+                    {vo2Metrics.map((m,i) => {
+                      const val = Number(m.vo2_max);
+                      const h = vo2Max > 0 ? (val / vo2Max) * 70 + 10 : 40;
+                      return <div key={i} style={{ flex:1, height:h, background: i === vo2Metrics.length-1 ? C.cyan : `${C.cyan}44`, borderRadius:2, minWidth:2 }} />;
+                    })}
+                  </div>
+                  <div style={{ display:"flex", justifyContent:"space-between", marginTop:8 }}>
+                    <div style={{ fontFamily:C.fm, fontSize:6, color:C.muted, letterSpacing:1 }}>{vo2Metrics[0]?.date}</div>
+                    <div style={{ fontFamily:C.fm, fontSize:6, color:C.muted, letterSpacing:1 }}>{vo2Metrics[vo2Metrics.length-1]?.date}</div>
+                  </div>
+                </div>
+              ) : (
+                <div style={{ fontFamily:C.fm, fontSize:9, color:C.muted, letterSpacing:2, textAlign:"center", padding:20 }}>
+                  {currentVo2 ? "More data points needed for trend" : "No VO2 Max data yet — sync Garmin"}
+                </div>
+              )}
+            </div>
+
+            {/* ZONE DISTRIBUTION */}
+            <div style={{ marginBottom:24 }}>
+              <div style={{ fontFamily:C.ff, fontSize:18, color:C.cyan, letterSpacing:2, marginBottom:12 }}>ZONE DISTRIBUTION</div>
+              {totalZoneTime > 0 ? (
+                <div style={{ display:"flex", gap:6, height:120, alignItems:"flex-end" }}>
+                  {zoneData.map((t,i) => {
+                    const pct = totalZoneTime > 0 ? (t / totalZoneTime) * 100 : 0;
+                    return (
+                      <div key={i} style={{ flex:1, display:"flex", flexDirection:"column", alignItems:"center", gap:4 }}>
+                        <div style={{ fontFamily:C.fm, fontSize:8, color:zoneColors[i], fontWeight:700 }}>{Math.round(pct)}%</div>
+                        <div style={{ width:"100%", height:Math.max(pct * 0.8, 4), background:zoneColors[i], borderRadius:4, transition:"height 0.3s" }} />
+                        <div style={{ fontFamily:C.fm, fontSize:8, color:C.muted, letterSpacing:1 }}>Z{i+1}</div>
+                      </div>
+                    );
+                  })}
+                </div>
+              ) : (
+                <div style={{ fontFamily:C.fm, fontSize:9, color:C.muted, letterSpacing:2, textAlign:"center", padding:20 }}>No HR zone data this week</div>
+              )}
+            </div>
+
+            {/* PERSONAL RECORDS */}
+            <div style={{ marginBottom:24 }}>
+              <div style={{ fontFamily:C.ff, fontSize:18, color:C.cyan, letterSpacing:2, marginBottom:12 }}>PERSONAL RECORDS</div>
+              {Object.keys(prs).length > 0 ? (
+                <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:8 }}>
+                  {Object.entries(prs).map(([key, pr]) => (
+                    <div key={key} style={{ background:C.card, borderRadius:C.radius, padding:"14px", border:`1px solid ${C.border}`, borderLeft:`3px solid ${C.cyan}`, ...C.glass }}>
+                      <div style={{ fontFamily:C.fm, fontSize:7, color:C.muted, letterSpacing:3, marginBottom:6 }}>{key}</div>
+                      <div style={{ fontFamily:C.ff, fontSize:22, color:C.cyan, fontWeight:700 }}>{fmtTime(pr.time)}</div>
+                      <div style={{ fontFamily:C.fm, fontSize:7, color:C.muted, marginTop:4, letterSpacing:1 }}>
+                        {pr.date ? new Date(pr.date).toLocaleDateString("en-US",{month:"short",day:"numeric",year:"numeric"}).toUpperCase() : ""}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <div style={{ fontFamily:C.fm, fontSize:9, color:C.muted, letterSpacing:2, textAlign:"center", padding:20 }}>No PRs detected yet — sync more activities</div>
+              )}
+            </div>
+
+            {/* RACE PREDICTIONS */}
+            <div style={{ marginBottom:24 }}>
+              <div style={{ fontFamily:C.ff, fontSize:18, color:C.cyan, letterSpacing:2, marginBottom:12 }}>RACE PREDICTIONS</div>
+              {currentVo2 ? (() => {
+                const vo2 = Number(currentVo2);
+                const predict5k  = Math.round(21.2 * 60 * Math.pow(42.195 / 5,    0.06) * Math.pow(vo2 / 50, -1.1));
+                const predict10k = Math.round(21.2 * 60 * Math.pow(42.195 / 10,   0.06) * Math.pow(vo2 / 50, -1.1) * 2.1);
+                const predictHM  = Math.round(21.2 * 60 * Math.pow(42.195 / 21.1, 0.06) * Math.pow(vo2 / 50, -1.1) * 4.6);
+                const predictM   = Math.round(21.2 * 60 * Math.pow(1,              0.06) * Math.pow(vo2 / 50, -1.1) * 10);
+                return (
+                  <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:8 }}>
+                    {[["5K",predict5k],["10K",predict10k],["HALF",predictHM],["MARATHON",predictM]].map(([label,time]) => (
+                      <div key={label} style={{ background:C.card, borderRadius:C.radius, padding:"14px", textAlign:"center", border:`1px solid ${C.border}`, ...C.glass }}>
+                        <div style={{ fontFamily:C.fm, fontSize:7, color:C.muted, letterSpacing:3, marginBottom:6 }}>{label}</div>
+                        <div style={{ fontFamily:C.ff, fontSize:20, color:C.text, fontWeight:700 }}>{fmtTime(time)}</div>
+                      </div>
+                    ))}
+                  </div>
+                );
+              })() : (
+                <div style={{ fontFamily:C.fm, fontSize:9, color:C.muted, letterSpacing:2, textAlign:"center", padding:20 }}>Need VO2 Max data for predictions — sync Garmin</div>
+              )}
+            </div>
+          </div>
+        );
+      })()}
+
       {nav === "stats" && (
         <div style={{ padding:"20px" }}>
           <div style={{ display:"flex", justifyContent:"space-between", alignItems:"flex-start", marginBottom:20 }}>
@@ -1357,7 +1619,7 @@ export default function App() {
       )}
 
       <div style={{ position:"fixed", bottom:0, left:"50%", transform:"translateX(-50%)", width:"100%", maxWidth:480, background:C.bg, borderTop:`1px solid ${C.border}`, display:"flex", zIndex:100, ...C.glass }}>
-        {[["today","⚡","TODAY"],["plan","📅","PLAN"],["supps","💊","SUPPS"],["stats","📊","STATS"]].map(([id,icon,label]) => (
+        {[["today","⚡","TODAY"],["plan","📅","PLAN"],["perf","🏆","PERF"],["supps","💊","SUPPS"],["stats","📊","STATS"]].map(([id,icon,label]) => (
           <button key={id} onClick={() => setNav(id)} style={{ flex:1, padding:"10px 4px 22px", background:"transparent", border:"none", cursor:"pointer", display:"flex", flexDirection:"column", alignItems:"center", gap:3 }}>
             <div style={{ fontSize:18 }}>{icon}</div>
             <div style={{ fontFamily:C.fm, fontSize:7, letterSpacing:2, color: nav===id ? C.cyan : C.muted, fontWeight: nav===id ? 700 : 400, textTransform:"uppercase" }}>{label}</div>
