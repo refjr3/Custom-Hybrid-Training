@@ -134,9 +134,13 @@ const TodayCard = ({ name, onTap }) => {
   );
 };
 
+const stripPlanChange = (text) =>
+  text ? text.replace(/<plan_change>[\s\S]*?<\/plan_change>/g, "").trim() : text;
+
 const renderMarkdown = (text) => {
   if (!text) return null;
-  const lines = text.split('\n');
+  const clean = stripPlanChange(text);
+  const lines = clean.split('\n');
   return lines.map((line, i) => {
     const parts = line.split(/(\*\*[^*]+\*\*)/g).map((part, j) => {
       if (part.startsWith('**') && part.endsWith('**')) {
@@ -557,6 +561,8 @@ export default function App() {
   const [labMessages, setLabMessages] = useState([]);
   const [labInput, setLabInput] = useState("");
   const [labLoading, setLabLoading] = useState(false);
+  const [scenarioChanges, setScenarioChanges] = useState([]);
+  const [showLabExit, setShowLabExit] = useState(false);
 
   // ── Auth state ──────────────────────────────────────────────────────────────
   const [session, setSession]       = useState(null);
@@ -825,14 +831,18 @@ export default function App() {
     setLabLoading(true);
     try {
       const week = (planBlocks[0]?.weeks || [])[0];
+      const scenarioCtx = scenarioChanges.length > 0
+        ? `\n\nALREADY ACCEPTED IN THIS SESSION:\n${scenarioChanges.map((c,i) => `${i+1}. ${c.description}`).join("\n")}\nBuild on top of these. Do not contradict them.`
+        : "";
       const res = await fetch("/api/coach/chat", {
         method:"POST",
         headers:{ "Content-Type":"application/json" },
         body: JSON.stringify({
-          message: `[SCENARIO MODE] ${msg}\n\nRespond with a full plan adjustment proposal. Include a <plan_change> block if applicable.`,
+          message: `[SCENARIO MODE] ${msg}${scenarioCtx}\n\nRespond with a full plan adjustment proposal. Include a <plan_change> block if applicable.`,
           whoopData,
           currentWeek: week ? { id:week.id, label:week.label, subtitle:week.subtitle } : null,
           recentActivities: garminActivities.slice(0,3),
+          scenarioChanges: scenarioChanges.length > 0 ? scenarioChanges : undefined,
         }),
       });
       const data = await res.json();
@@ -844,9 +854,34 @@ export default function App() {
     }
   };
 
-  const handleLabPlanChange = (planChange, action) => {
-    if (action === "accept") {
-      handlePlanChange(planChange);
+  const handleLabAccept = (planChange) => {
+    setScenarioChanges(prev => [...prev, planChange]);
+    setLabMessages(prev => prev.map(m => m.planChange === planChange ? { ...m, planChangeAccepted:true } : m));
+  };
+
+  const labApplyAll = async () => {
+    for (const change of scenarioChanges) {
+      await handlePlanChange(change);
+    }
+    setScenarioChanges([]);
+    setLabMessages([]);
+    setLabOpen(false);
+    setShowLabExit(false);
+  };
+
+  const labDiscard = () => {
+    setScenarioChanges([]);
+    setLabMessages([]);
+    setLabOpen(false);
+    setShowLabExit(false);
+  };
+
+  const labClose = () => {
+    if (scenarioChanges.length > 0) {
+      setShowLabExit(true);
+    } else {
+      setLabOpen(false);
+      setLabMessages([]);
     }
   };
 
@@ -1635,67 +1670,103 @@ export default function App() {
       )}
 
       {labOpen && (
-        <div style={{ position:"fixed", inset:0, zIndex:250, background:C.bg, display:"flex", flexDirection:"column", maxWidth:480, margin:"0 auto" }}>
-          <div style={{ padding:"16px 20px", borderBottom:`1px solid ${C.border}`, display:"flex", justifyContent:"space-between", alignItems:"center", flexShrink:0 }}>
-            <div style={{ display:"flex", alignItems:"center", gap:10 }}>
-              <span style={{ fontSize:18 }}>🧪</span>
-              <div>
-                <div style={{ fontFamily:C.ff, fontSize:16, color:C.cyan, letterSpacing:2 }}>SCENARIO MODE</div>
-                <div style={{ fontFamily:C.fm, fontSize:7, color:C.muted, letterSpacing:2 }}>WHAT-IF PLANNING · CHANGES ARE REVERSIBLE</div>
+        <>
+          <div onClick={labClose} style={{ position:"fixed", inset:0, zIndex:245, background:"rgba(0,0,0,0.5)" }} />
+          <div style={{ position:"fixed", bottom:0, left:"50%", transform:"translateX(-50%)", width:"100%", maxWidth:480, height:"50vh", zIndex:250, background:C.bg, borderTop:`1px solid ${C.cyan}33`, borderRadius:"20px 20px 0 0", display:"flex", flexDirection:"column", ...C.glass }}>
+            {/* Drag handle */}
+            <div style={{ display:"flex", justifyContent:"center", padding:"8px 0 4px" }}>
+              <div style={{ width:36, height:4, borderRadius:2, background:C.light }} />
+            </div>
+            <div style={{ padding:"8px 20px 12px", borderBottom:`1px solid ${C.border}`, display:"flex", justifyContent:"space-between", alignItems:"center", flexShrink:0 }}>
+              <div style={{ display:"flex", alignItems:"center", gap:8 }}>
+                <span style={{ fontSize:14 }}>🧪</span>
+                <div>
+                  <div style={{ fontFamily:C.ff, fontSize:14, color:C.cyan, letterSpacing:2 }}>SCENARIO MODE</div>
+                  <div style={{ fontFamily:C.fm, fontSize:6, color:C.muted, letterSpacing:2 }}>
+                    {scenarioChanges.length > 0 ? `${scenarioChanges.length} CHANGE${scenarioChanges.length>1?"S":""} QUEUED` : "WHAT-IF PLANNING"}
+                  </div>
+                </div>
+              </div>
+              <div style={{ display:"flex", gap:6 }}>
+                {scenarioChanges.length > 0 && (
+                  <button onClick={() => { setScenarioChanges([]); setLabMessages([]); }}
+                    style={{ padding:"6px 10px", background:"transparent", border:`1px solid ${C.border}`, borderRadius:8, cursor:"pointer", fontFamily:C.fm, fontSize:7, color:C.muted, letterSpacing:1 }}>CLEAR</button>
+                )}
+                <button onClick={labClose} style={{ background:C.cardSolid, border:"none", color:C.muted, width:28, height:28, borderRadius:"50%", cursor:"pointer", fontSize:12 }}>✕</button>
               </div>
             </div>
-            <button onClick={() => setLabOpen(false)} style={{ background:C.cardSolid, border:"none", color:C.muted, width:32, height:32, borderRadius:"50%", cursor:"pointer", fontSize:14 }}>✕</button>
-          </div>
 
-          <div style={{ flex:1, overflowY:"auto", padding:"16px 20px", display:"flex", flexDirection:"column", gap:12 }}>
-            {labMessages.length === 0 && (
-              <div style={{ padding:"20px 0" }}>
-                <div style={{ fontFamily:C.fm, fontSize:7, color:C.muted, letterSpacing:3, marginBottom:12, textTransform:"uppercase" }}>TRY A SCENARIO</div>
-                {[
-                  "If I skip Sunday's long run, redistribute the volume",
-                  "I'm traveling for 3 days — hotel gym only",
-                  "I have a wedding this weekend, adjust my week",
-                  "What if I add a second threshold session this week?",
-                  "Race is in 2 weeks — start taper now",
-                ].map((p,i) => (
-                  <button key={i} onClick={() => labSend(p)}
-                    style={{ display:"block", width:"100%", padding:"12px 16px", marginBottom:8, background:C.card, border:`1px solid ${C.border}`, borderRadius:12, cursor:"pointer", textAlign:"left", fontFamily:C.fs, fontSize:13, color:C.text, lineHeight:1.5, ...C.glass }}>{p}</button>
-                ))}
-              </div>
-            )}
-            {labMessages.map((m, i) => (
-              <div key={i} style={{ display:"flex", flexDirection:"column", alignItems: m.role==="user" ? "flex-end" : "flex-start" }}>
-                <div style={{ maxWidth:"85%", padding:"12px 16px", borderRadius: m.role==="user" ? "16px 16px 4px 16px" : "16px 16px 16px 4px", background: m.role==="user" ? "rgba(0,243,255,0.15)" : C.card, border: m.role==="user" ? `1px solid ${C.cyan}33` : `1px solid ${C.border}`, ...C.glass }}>
-                  <div style={{ fontFamily:C.fs, fontSize:13, color:C.text, lineHeight:1.6 }}>{renderMarkdown(m.content)}</div>
+            <div style={{ flex:1, overflowY:"auto", padding:"12px 20px", display:"flex", flexDirection:"column", gap:10 }}>
+              {labMessages.length === 0 && (
+                <div style={{ padding:"8px 0" }}>
+                  <div style={{ fontFamily:C.fm, fontSize:7, color:C.muted, letterSpacing:3, marginBottom:8, textTransform:"uppercase" }}>TRY A SCENARIO</div>
+                  {[
+                    "Skip Sunday's long run, redistribute volume",
+                    "Traveling 3 days — hotel gym only",
+                    "Wedding this weekend, adjust my week",
+                    "Add a second threshold session",
+                    "Start taper now — race in 2 weeks",
+                  ].map((p,i) => (
+                    <button key={i} onClick={() => labSend(p)}
+                      style={{ display:"block", width:"100%", padding:"10px 14px", marginBottom:6, background:C.card, border:`1px solid ${C.border}`, borderRadius:10, cursor:"pointer", textAlign:"left", fontFamily:C.fs, fontSize:12, color:C.text, lineHeight:1.4, ...C.glass }}>{p}</button>
+                  ))}
                 </div>
-                {m.planChange && (
-                  <div style={{ maxWidth:"85%", marginTop:8, background:C.card2, borderRadius:12, padding:"12px 14px", border:`1px solid ${C.cyan}33` }}>
-                    <div style={{ fontFamily:C.fm, fontSize:7, color:C.cyan, letterSpacing:3, marginBottom:6 }}>PROPOSED CHANGE</div>
-                    <div style={{ fontFamily:C.ff, fontSize:14, color:C.text, marginBottom:4 }}>{m.planChange.description}</div>
-                    <div style={{ display:"flex", gap:8, marginTop:10 }}>
-                      <button onClick={() => { handleLabPlanChange(m.planChange, "accept"); setLabOpen(false); }} style={{ flex:1, padding:"10px", background:C.green, color:"#000", border:"none", borderRadius:8, cursor:"pointer", fontFamily:C.ff, fontSize:12, letterSpacing:2 }}>ACCEPT</button>
-                      <button onClick={() => setLabOpen(false)} style={{ flex:1, padding:"10px", background:"transparent", color:C.muted, border:`1px solid ${C.border}`, borderRadius:8, cursor:"pointer", fontFamily:C.ff, fontSize:12, letterSpacing:2 }}>REJECT</button>
-                    </div>
+              )}
+              {labMessages.map((m, i) => (
+                <div key={i} style={{ display:"flex", flexDirection:"column", alignItems: m.role==="user" ? "flex-end" : "flex-start" }}>
+                  <div style={{ maxWidth:"90%", padding:"10px 14px", borderRadius: m.role==="user" ? "14px 14px 4px 14px" : "14px 14px 14px 4px", background: m.role==="user" ? "rgba(0,243,255,0.15)" : C.card, border: m.role==="user" ? `1px solid ${C.cyan}33` : `1px solid ${C.border}`, ...C.glass }}>
+                    <div style={{ fontFamily:C.fs, fontSize:12, color:C.text, lineHeight:1.5 }}>{renderMarkdown(m.content)}</div>
                   </div>
-                )}
-              </div>
-            ))}
-            {labLoading && (
-              <div style={{ background:C.card, borderRadius:"16px 16px 16px 4px", padding:"12px 16px", border:`1px solid ${C.border}`, ...C.glass, alignSelf:"flex-start" }}>
-                <div className="shimmer" style={{ fontFamily:C.fm, fontSize:11, letterSpacing:3 }}>SIMULATING</div>
-              </div>
-            )}
-          </div>
+                  {m.planChange && !m.planChangeAccepted && (
+                    <div style={{ maxWidth:"90%", marginTop:6, background:C.card2, borderRadius:10, padding:"10px 12px", border:`1px solid ${C.cyan}33` }}>
+                      <div style={{ fontFamily:C.fm, fontSize:7, color:C.cyan, letterSpacing:3, marginBottom:4 }}>PROPOSED CHANGE</div>
+                      <div style={{ fontFamily:C.ff, fontSize:13, color:C.text, marginBottom:4 }}>{m.planChange.description}</div>
+                      <div style={{ display:"flex", gap:6, marginTop:8 }}>
+                        <button onClick={() => handleLabAccept(m.planChange)} style={{ flex:1, padding:"8px", background:C.green, color:"#000", border:"none", borderRadius:8, cursor:"pointer", fontFamily:C.ff, fontSize:11, letterSpacing:2 }}>QUEUE CHANGE</button>
+                        <button onClick={() => setLabMessages(prev => prev.map(mm => mm.planChange === m.planChange ? {...mm, planChangeAccepted:"rejected"} : mm))} style={{ flex:1, padding:"8px", background:"transparent", color:C.muted, border:`1px solid ${C.border}`, borderRadius:8, cursor:"pointer", fontFamily:C.ff, fontSize:11, letterSpacing:2 }}>SKIP</button>
+                      </div>
+                    </div>
+                  )}
+                  {m.planChangeAccepted === true && (
+                    <div style={{ fontFamily:C.fm, fontSize:7, color:C.green, letterSpacing:2, marginTop:4 }}>✓ QUEUED</div>
+                  )}
+                  {m.planChangeAccepted === "rejected" && (
+                    <div style={{ fontFamily:C.fm, fontSize:7, color:C.muted, letterSpacing:2, marginTop:4 }}>✕ SKIPPED</div>
+                  )}
+                </div>
+              ))}
+              {labLoading && (
+                <div style={{ background:C.card, borderRadius:"14px 14px 14px 4px", padding:"10px 14px", border:`1px solid ${C.border}`, ...C.glass, alignSelf:"flex-start" }}>
+                  <div className="shimmer" style={{ fontFamily:C.fm, fontSize:10, letterSpacing:3 }}>SIMULATING</div>
+                </div>
+              )}
+            </div>
 
-          <div style={{ padding:"12px 20px 20px", display:"flex", gap:10, flexShrink:0 }}>
-            <input
-              value={labInput}
-              onChange={e => setLabInput(e.target.value)}
-              onKeyDown={e => { if (e.key === "Enter") labSend(labInput); }}
-              placeholder="Describe your scenario..."
-              style={{ flex:1, background:C.card, border:`1px solid ${C.cyan}22`, borderRadius:12, padding:"14px 16px", color:C.text, fontFamily:C.fs, fontSize:14, outline:"none", ...C.glass }}
-            />
-            <button onClick={() => labSend(labInput)} disabled={labLoading || !labInput.trim()} style={{ width:48, height:48, background: labInput.trim() ? C.cyan : C.card, border:"none", borderRadius:12, cursor: labInput.trim() ? "pointer" : "default", color: labInput.trim() ? "#000" : C.muted, fontSize:18, flexShrink:0 }}>↑</button>
+            <div style={{ padding:"10px 20px 16px", display:"flex", gap:8, flexShrink:0 }}>
+              <input
+                value={labInput}
+                onChange={e => setLabInput(e.target.value)}
+                onKeyDown={e => { if (e.key === "Enter") labSend(labInput); }}
+                placeholder="Describe your scenario..."
+                style={{ flex:1, background:C.card, border:`1px solid ${C.cyan}22`, borderRadius:10, padding:"12px 14px", color:C.text, fontFamily:C.fs, fontSize:13, outline:"none", ...C.glass }}
+              />
+              <button onClick={() => labSend(labInput)} disabled={labLoading || !labInput.trim()} style={{ width:44, height:44, background: labInput.trim() ? C.cyan : C.card, border:"none", borderRadius:10, cursor: labInput.trim() ? "pointer" : "default", color: labInput.trim() ? "#000" : C.muted, fontSize:16, flexShrink:0 }}>↑</button>
+            </div>
+          </div>
+        </>
+      )}
+
+      {showLabExit && (
+        <div style={{ position:"fixed", inset:0, zIndex:260, background:"rgba(0,0,0,0.8)", display:"flex", alignItems:"center", justifyContent:"center" }}>
+          <div style={{ background:C.bg, borderRadius:C.radius, padding:"24px", width:"calc(100% - 48px)", maxWidth:360, border:`1px solid ${C.border}`, ...C.glass }}>
+            <div style={{ fontFamily:C.ff, fontSize:20, color:C.text, letterSpacing:1, marginBottom:8 }}>APPLY CHANGES?</div>
+            <div style={{ fontFamily:C.fs, fontSize:13, color:C.muted, lineHeight:1.6, marginBottom:16 }}>
+              You have {scenarioChanges.length} queued change{scenarioChanges.length>1?"s":""}. Apply them to your plan?
+            </div>
+            <div style={{ display:"flex", gap:8 }}>
+              <button onClick={labApplyAll} style={{ flex:1, padding:"14px", background:C.green, color:"#000", border:"none", borderRadius:10, cursor:"pointer", fontFamily:C.ff, fontSize:14, letterSpacing:2 }}>APPLY ALL</button>
+              <button onClick={labDiscard} style={{ flex:1, padding:"14px", background:"transparent", color:C.muted, border:`1px solid ${C.border}`, borderRadius:10, cursor:"pointer", fontFamily:C.ff, fontSize:14, letterSpacing:2 }}>DISCARD</button>
+            </div>
           </div>
         </div>
       )}
