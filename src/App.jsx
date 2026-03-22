@@ -620,6 +620,7 @@ export default function App() {
   const [proactiveMessages, setProactiveMessages] = useState([]);
   const [proactiveBadge, setProactiveBadge] = useState(0);
   const [weeklyReview, setWeeklyReview] = useState(null);
+  const [showReadinessBreakdown, setShowReadinessBreakdown] = useState(false);
   const [unifiedMetrics, setUnifiedMetrics] = useState([]);
   const [labOpen, setLabOpen] = useState(false);
   const [labMessages, setLabMessages] = useState([]);
@@ -1155,6 +1156,57 @@ export default function App() {
               </>
             )}
           </div>
+
+          {(() => {
+            const recScore = whoopData ? Math.min(100, Math.max(0, whoopData.recovery?.score || 0)) : null;
+            const currentWeekDays = (planBlocks[0]?.weeks?.[0]?.days) || [];
+            const plannedSessions = currentWeekDays.filter(d => d.am).length;
+            const completedSessions = currentWeekDays.filter(d => {
+              const dd = d.date?.split(" ")[0];
+              return garminActivities.some(a => a.start_time?.startsWith(dd || "___"));
+            }).length;
+            const complianceScore = plannedSessions > 0 ? Math.round((completedSessions / plannedSessions) * 100) : 50;
+            const vo2Vals = unifiedMetrics.filter(m => m.vo2_max).slice(0, 5);
+            const vo2Score = vo2Vals.length >= 2 ? (Number(vo2Vals[0].vo2_max) >= Number(vo2Vals[vo2Vals.length-1].vo2_max) ? 80 : 50) : 50;
+            const sleepScore = whoopData?.sleep?.score || 50;
+            const flaggedCount = biomarkers.filter(b => b.flag === "HIGH" || b.flag === "LOW").length;
+            const bioScore = Math.max(0, 100 - flaggedCount * 20);
+            const components = [
+              { label:"RECOVERY TREND", score: recScore ?? 50, weight:0.30, color: (recScore??50) >= 67 ? C.green : (recScore??50) >= 34 ? C.yellow : C.red },
+              { label:"COMPLIANCE", score: complianceScore, weight:0.25, color: complianceScore >= 80 ? C.green : complianceScore >= 50 ? C.yellow : C.red },
+              { label:"VO2 MAX TREND", score: vo2Score, weight:0.20, color: vo2Score >= 70 ? C.green : vo2Score >= 40 ? C.yellow : C.red },
+              { label:"SLEEP QUALITY", score: sleepScore, weight:0.15, color: sleepScore >= 70 ? C.green : sleepScore >= 40 ? C.yellow : C.red },
+              { label:"BIOMARKERS", score: bioScore, weight:0.10, color: bioScore >= 70 ? C.green : bioScore >= 40 ? C.yellow : C.red },
+            ];
+            const readiness = Math.round(components.reduce((s,c) => s + c.score * c.weight, 0));
+            const rColor = readiness >= 75 ? C.green : readiness >= 50 ? C.yellow : C.red;
+            return (
+              <div style={{ padding:"0 20px 16px" }}>
+                <button onClick={() => setShowReadinessBreakdown(p => !p)} style={{ width:"100%", background:C.card, borderRadius:C.radius, padding:"16px 18px", border:`1px solid ${rColor}22`, cursor:"pointer", textAlign:"left", boxShadow:glow(rColor,0.1), ...C.glass }}>
+                  <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center" }}>
+                    <div>
+                      <div style={{ fontFamily:C.fm, fontSize:7, color:C.muted, letterSpacing:3, marginBottom:4 }}>RACE READINESS</div>
+                      <div style={{ fontFamily:C.ff, fontSize:36, color:rColor, fontWeight:700, lineHeight:1 }}>{readiness}</div>
+                    </div>
+                    <Ring score={readiness} size={56} stroke={5} color={rColor} />
+                  </div>
+                </button>
+                {showReadinessBreakdown && (
+                  <div style={{ marginTop:8, display:"flex", flexDirection:"column", gap:4 }}>
+                    {components.map((c,i) => (
+                      <div key={i} style={{ display:"flex", alignItems:"center", gap:10, padding:"8px 12px", background:C.card, borderRadius:8, border:`1px solid ${C.border}` }}>
+                        <div style={{ fontFamily:C.fm, fontSize:7, color:C.muted, letterSpacing:2, flex:1 }}>{c.label} ({Math.round(c.weight*100)}%)</div>
+                        <div style={{ width:60, height:4, borderRadius:2, background:C.cardSolid, overflow:"hidden" }}>
+                          <div style={{ width:`${c.score}%`, height:"100%", background:c.color, borderRadius:2 }} />
+                        </div>
+                        <div style={{ fontFamily:C.ff, fontSize:14, color:c.color, minWidth:28, textAlign:"right" }}>{c.score}</div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            );
+          })()}
 
           {garminActivities.length > 0 && (
             <div style={{ padding:"0 20px 16px" }}>
