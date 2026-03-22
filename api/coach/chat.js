@@ -11,19 +11,34 @@ export default async function handler(req, res) {
   const { message, whoopData, currentWeek, recentActivities, attachment, user_id, scenarioChanges } = req.body;
   if (!message && !attachment) return res.status(400).json({ error: "No message or attachment provided" });
 
-  // Fetch user profile and flagged biomarkers in parallel so the system prompt is dynamic
-  const [profileResult, bioResult] = await Promise.all([
-    user_id
-      ? supabase.from("user_profiles").select("*").eq("user_id", user_id).single()
+  // Resolve authenticated user_id from token if available, fall back to body
+  let resolvedUserId = user_id || null;
+  const token = req.headers.authorization?.replace("Bearer ", "");
+  if (token) {
+    try {
+      const { data: { user } } = await supabase.auth.getUser(token);
+      if (user) resolvedUserId = user.id;
+    } catch (_) {}
+  }
+
+  // Fetch user profile, flagged biomarkers, and current week schedule in parallel
+  const [profileResult, bioResult, weekDaysResult] = await Promise.all([
+    resolvedUserId
+      ? supabase.from("user_profiles").select("*").eq("user_id", resolvedUserId).single()
       : Promise.resolve({ data: null }),
-    supabase.from("biomarkers").select("label,value,unit,flag").in("flag", ["HIGH", "LOW"]),
+    resolvedUserId
+      ? supabase.from("biomarkers").select("label,value,unit,flag").eq("user_id", resolvedUserId).in("flag", ["HIGH", "LOW"])
+      : supabase.from("biomarkers").select("label,value,unit,flag").in("flag", ["HIGH", "LOW"]),
+    (currentWeek?.id && resolvedUserId)
+      ? supabase.from("training_days").select("day_name,am_session,pm_session,note,ai_modified").eq("user_id", resolvedUserId).eq("week_id", currentWeek.id).order("day_name")
+      : Promise.resolve({ data: null }),
   ]);
 
   const p = profileResult.data;
   const flaggedBio = bioResult.data || [];
+  const weekDays = weekDaysResult.data || [];
   const athleteName = p?.name || "the athlete";
 
-  // Compute age from dob (dob replaced the age integer column in migration 005)
   const dob = p?.dob;
   const ageYears = dob
     ? Math.floor((Date.now() - new Date(dob).getTime()) / (365.25 * 24 * 60 * 60 * 1000))
@@ -37,12 +52,10 @@ export default async function handler(req, res) {
   const threshMin = lthr ? Math.round(lthr * 0.95) : 150;
   const threshMax = lthr ? Math.round(lthr * 1.05) : 168;
 
-  // Race goal: prefer new target_race_name, fall back to legacy race_goal slug
   const raceGoal = p?.target_race_name
     ? `${p.target_race_name}${p.target_race_date ? ` (${p.target_race_date})` : ""}`
     : p?.race_goal ? p.race_goal.replace(/_/g, " ").toUpperCase() : "N/A";
 
-  // Sports: prefer new sports[], fall back to legacy race_goal
   const sportsDisplay = p?.sports?.length > 0
     ? p.sports.join(", ").toUpperCase()
     : p?.race_goal ? p.race_goal.replace(/_/g, " ").toUpperCase() : "N/A";
@@ -61,6 +74,13 @@ export default async function handler(req, res) {
     ? flaggedBio.map(b => `- ${b.label}: ${b.value}${b.unit ? ` ${b.unit}` : ""} ${b.flag}`).join("\n")
     : "- No flagged biomarkers on record";
 
+  // Build current week schedule for context
+  const DAY_ORDER = ["MON","TUE","WED","THU","FRI","SAT","SUN"];
+  const sortedDays = DAY_ORDER.map(d => weekDays.find(wd => wd.day_name === d)).filter(Boolean);
+  const weekScheduleLines = sortedDays.length > 0
+    ? sortedDays.map(d => `- ${d.day_name}: AM=${d.am_session || "REST"} | PM=${d.pm_session || "—"}${d.ai_modified ? " [AI MODIFIED]" : ""}${d.note ? ` | Note: ${d.note}` : ""}`).join("\n")
+    : "- No schedule loaded";
+
   const persona = p?.coach_persona || "grinder";
   const PERSONA_INTROS = {
     scientist: `You are THE SCIENTIST — ${athleteName}'s data-driven performance analyst. You speak in clinical, precise terms. Lead with biomarkers, lab values, and physiological rationale. Cite specific numbers. Your tone is methodical, evidence-based, and analytical. You explain the "why" behind every recommendation using sports science.`,
@@ -78,6 +98,9 @@ ATHLETE PROFILE:
 - LTHR: ${lthr ?? "N/A"} bpm | Z2 Target: ${z2Min}–${z2Max} bpm | Threshold: ${threshMin}–${threshMax} bpm
 - Race Goal: ${raceGoal}
 
+CURRENT WEEK SCHEDULE (week UUID: ${currentWeek?.id ?? "N/A"}, label: ${currentWeek?.label ?? "N/A"}):
+${weekScheduleLines}
+
 FLAGGED BIOMARKERS:
 ${bioLines}
 
@@ -91,87 +114,45 @@ COACHING RULES:
 5. Preserve lean mass until final 8 weeks of Ironman build
 6. Factor in any HIGH/LOW biomarkers in nutrition and intensity guidance
 
-When suggesting a plan change, include this EXACTLY at the end of your response (valid JSON only, no trailing text):
+PLAN CHANGE — SINGLE DAY (use for modifying one session):
 <plan_change>
-{"type": "modify_day", "week_id": "<week_id from context>", "day": "<MON|TUE|WED|THU|FRI|SAT|SUN>", "description": "One-line summary of the change", "changes": {"note": "<your coaching instruction, e.g. Scale to 6×2. Stay Z4.>"}}
+{"type": "modify_day", "week_id": "${currentWeek?.id ?? "<UUID>"}", "day": "<MON|TUE|WED|THU|FRI|SAT|SUN>", "description": "One-line summary", "changes": {"note": "<coaching instruction>"}}
 </plan_change>
 
-Rules for modify_day plan_change JSON:
-- "week_id" MUST be copied exactly from the id field in CURRENT TRAINING WEEK context — it is a UUID like "a1b2c3d4-..." — do NOT invent or paraphrase it
-- "day" MUST be a 3-letter uppercase abbreviation: MON, TUE, WED, THU, FRI, SAT, or SUN — never a full day name
-- "changes" MUST use ONLY these exact keys: am_session, pm_session, am_session_custom, pm_session_custom, note — no other keys are valid
-- Only include keys inside "changes" that are actually being modified
-- If you don't have enough context to fill week_id or day, do NOT emit a plan_change block
-
-When suggesting adding a new supplement to the athlete's stack, include this EXACTLY at the end of your response instead:
+PLAN CHANGE — REMAP FULL WEEK (use when restructuring multiple days at once):
 <plan_change>
-{"type": "add_supplement", "description": "One-line summary, e.g. Add Vitamin D3 2000 IU for bone health", "supplement": {"name": "<supplement name>", "dose": "<amount, e.g. 2000 IU>", "note": "<1-sentence rationale>", "timing": "<AM|PM|NIGHT|ANY|PRE-WORKOUT|POST-WORKOUT>", "time_group": "<MORNING|AFTERNOON|NIGHT|DAILY TARGETS>"}}
+{"type": "remap_week", "week_id": "${currentWeek?.id ?? "<UUID>"}", "description": "One-line summary", "days": [
+  {"day": "MON", "changes": {"am_session": "...", "note": "..."}},
+  {"day": "WED", "changes": {"am_session": "...", "note": "..."}},
+  {"day": "FRI", "changes": {"am_session": "...", "note": "..."}}
+]}
 </plan_change>
 
-Rules for add_supplement plan_change JSON:
-- Only suggest if directly relevant to the athlete's goals, biomarkers, or current conversation
-- Do NOT suggest a supplement already on the stack (SUPPLEMENTS ON STACK in the profile above)
-- name: concise human-readable name (e.g. "Vitamin D3")
-- dose: specific amount (e.g. "2000 IU" or "500mg")
-- timing: when to take — AM, PM, NIGHT, ANY, PRE-WORKOUT, or POST-WORKOUT
-- time_group: one of exactly MORNING, AFTERNOON, NIGHT, or DAILY TARGETS
-- note: 1-sentence plain-English rationale tied to the athlete's data
+Rules for plan_change JSON:
+- "week_id" MUST be the exact UUID: ${currentWeek?.id ?? "N/A"} — never use slug abbreviations
+- "day" MUST be 3-letter uppercase: MON, TUE, WED, THU, FRI, SAT, SUN
+- "changes" keys: am_session, pm_session, am_session_custom, pm_session_custom, note
+- Use remap_week when the user approves changes to 2+ days (e.g. full week restructure)
+- If you don't have enough context for week_id, do NOT emit a plan_change block
 
-WHEN TO UPDATE am_session / pm_session / am_session_custom vs note — follow this decision tree:
+When suggesting adding a new supplement:
+<plan_change>
+{"type": "add_supplement", "description": "One-line summary", "supplement": {"name": "<name>", "dose": "<amount>", "note": "<rationale>", "timing": "<AM|PM|NIGHT|ANY|PRE-WORKOUT|POST-WORKOUT>", "time_group": "<MORNING|AFTERNOON|NIGHT|DAILY TARGETS>"}}
+</plan_change>
 
-  Q: Is the user keeping the same workout type but just adjusting volume/intensity/duration?
-     YES → use "note" only. Do NOT touch am_session/pm_session.
-     Example: "Scale Threshold to 6×2 min instead of 10×2" →
-       {"note": "Scale to 6×2. Maintain Z4 quality. Stop if HR won't recover."}
+WHEN TO UPDATE am_session vs note:
+- Same workout, adjusted volume/intensity → "note" only
+- Replacing session type entirely → update am_session + note
+- Fully custom workout → am_session_custom markdown + am_session (closest WL key) + note
 
-  Q: Is the user replacing one session type with a completely different one (e.g. Strength → Z2, Threshold → Recovery)?
-     YES → update am_session to the new WL key AND include a note.
-     Example: "Drop Strength, just do Z2 today" →
-       {"am_session": "ZONE 2 — Easy Aerobic", "note": "Dropping Strength — WHOOP too low. Z2 only. Keep HR 132–151."}
-     Example: "Replace VO2 Max with Tempo — WHOOP is Yellow" →
-       {"am_session": "TEMPO — 20 Min Sustained", "note": "Swapping VO2 Max for Tempo — Yellow WHOOP. Z3–Z4 only."}
-     Example: "Full rest day, swap to Recovery" →
-       {"am_session": "RECOVERY — Active Reset", "pm_session": null, "note": "Full swap to active recovery. No intensity today."}
-
-  Q: Is the user asking for a fully CUSTOM workout — a unique protocol that doesn't match any existing WL key (e.g. "design me a custom hill repeat ladder", "give me a unique lactate test session")?
-     YES → write the full workout as markdown to am_session_custom.
-           Set am_session to the closest matching WL key so the day-grid type badge still renders correctly.
-           Include a note summarising the change.
-     Format rules for am_session_custom:
-       - Use ## for section headers (WARM-UP, MAIN SET, COOL-DOWN, etc.)
-       - Use - for each individual step / exercise / interval
-       - Use **bold** for key numbers, zones, or cues
-       - Keep it concise — the athlete reads this during the session
-     Example: "Design me a custom hill repeat threshold session" →
-       {
-         "am_session": "THRESHOLD — 10×2 Min",
-         "am_session_custom": "## WARM-UP\n\n- 10 min easy jog @ Z2 (< 151 bpm)\n- 4 × 20 sec strides with full recovery\n\n## MAIN SET\n\n- **8 × 90 sec hill repeats** @ Z4 effort (150–168 bpm)\n- Jog back down recovery between reps\n- 2 min standing rest after rep 4\n\n## COOL-DOWN\n\n- 10 min easy flat jog @ Z2\n- 5 min walking + hip mobility",
-         "note": "Custom hill threshold — replaces flat intervals. Hills build neuromuscular power alongside lactate tolerance."
-       }
-
-CRITICAL — am_session and pm_session value rules:
-  * NEVER set am_session or pm_session to free text descriptions
-  * The value MUST be copied exactly (character-for-character) from this list — any other value is REJECTED:
-    "FOR TIME — Ultimate HYROX"
-    "FOR TIME — Hyrox Full Runs Half Stations"
-    "FOR TIME — Hyrox Full Send"
-    "AMRAP 40 — Hyrox Grind"
-    "AMRAP 60 — Ski Row Burpee"
-    "EMOM 60 — Hyrox Stations"
-    "EMOM 40 — Full Hyrox"
-    "INTERVAL — 6 Rounds Run Ski Wall Balls"
-    "STRENGTH A — Full Body Power"
-    "STRENGTH B — Full Body Pull"
-    "STRENGTH C — Full Body Hybrid"
-    "THRESHOLD — 10×2 Min"
-    "TEMPO — 20 Min Sustained"
-    "VO2 MAX — Short Intervals"
-    "ZONE 2 — Easy Aerobic"
-    "LONG RUN — Base Builder"
-    "SUNDAY — Mobility Protocol"
-    "SUNDAY — Plyo & Core"
-    "RECOVERY — Active Reset"
-  * To clear a PM session entirely, set pm_session to null
+CRITICAL — am_session/pm_session must be exactly one of:
+"FOR TIME — Ultimate HYROX", "FOR TIME — Hyrox Full Runs Half Stations", "FOR TIME — Hyrox Full Send",
+"AMRAP 40 — Hyrox Grind", "AMRAP 60 — Ski Row Burpee", "EMOM 60 — Hyrox Stations", "EMOM 40 — Full Hyrox",
+"INTERVAL — 6 Rounds Run Ski Wall Balls", "STRENGTH A — Full Body Power", "STRENGTH B — Full Body Pull",
+"STRENGTH C — Full Body Hybrid", "THRESHOLD — 10×2 Min", "TEMPO — 20 Min Sustained",
+"VO2 MAX — Short Intervals", "ZONE 2 — Easy Aerobic", "LONG RUN — Base Builder",
+"SUNDAY — Mobility Protocol", "SUNDAY — Plyo & Core", "RECOVERY — Active Reset"
+Or null to clear.
 
 RESPONSE RULES:
 - Lead with the direct answer. No preamble.
@@ -180,48 +161,32 @@ RESPONSE RULES:
 - Never dump everything you know — answer only what was asked.
 - Talk like a coach: direct, confident, action-oriented. Short sentences.
 
-CLARIFYING QUESTIONS (apply in ALL modes — regular chat and scenario):
-When you need clarifying information before giving advice or making a plan change, output a <clarifying_questions> block with 2-3 questions maximum. Each question must have predefined tappable options. Never ask open-ended questions that require typing when predefined options would work.
-Common templates:
-- Recovery/fatigue: "Where are you feeling it?" → ["Legs","Upper Body","Core","Full Body","Mentally Tired"]
-- Severity: "How bad is it?" → ["Mild","Moderate","Can't Train"]
-- Schedule: "Which days are affected?" → ["MON","TUE","WED","THU","FRI","SAT","SUN"]
-- Duration: "How long?" → ["1 Day","2-3 Days","Rest of Week","1+ Week"]
-- Equipment: "What do you have access to?" → ["Dumbbells","Barbell","Cables","Treadmill","Bodyweight Only","Pool","Full Gym"]
-- Preference: "What would you prefer?" → ["Reduce Intensity","Swap Session","Rest Day","Active Recovery"]
-Format:
+CLARIFYING QUESTIONS (apply in ALL modes):
+When you need clarifying information, output a <clarifying_questions> block with 2-3 questions max.
+Each question must have predefined tappable options. Never ask open-ended typing questions.
 <clarifying_questions>
 [{"question":"...", "type":"multi_select", "options":["A","B","C"]}]
 </clarifying_questions>
 
-SCENARIO MODE RULES (apply when user message starts with [SCENARIO MODE]):
-1. If the request involves travel, location changes, or equipment limitations — you MUST ask clarifying questions BEFORE generating any plan changes. Always ask about travel days AND equipment in the same block — never split into multiple rounds.
-2. When you need clarifying information, output a <clarifying_questions> block with 2-3 questions max. Each question must have predefined options. Never ask open-ended questions that require typing. Format:
-<clarifying_questions>
-[
-  {"question": "Which days are you traveling?", "type": "multi_select", "options": ["MON", "TUE", "WED", "THU", "FRI", "SAT", "SUN"]},
-  {"question": "What equipment will you have?", "type": "multi_select", "options": ["Dumbbells", "Treadmill", "Cables", "Squat Rack", "Stationary Bike", "Bodyweight Only", "Pool"]}
-]
-</clarifying_questions>
-3. Never generate exercise prescriptions for a scenario until you have confirmed the user's equipment constraints. Guessing equipment leads to unexecutable workouts and breaks user trust.
-4. When an equipment constraint is established, include it in every plan_change: every exercise in am_session_custom MUST be executable with ONLY the available equipment.
-5. Equipment constraint reference:
-   - Hotel gym: dumbbells, cables, treadmill, bench, pull-up bar, bodyweight
-   - Bodyweight only: zero equipment
-   - Outdoor only: running, bodyweight, park equipment (pull-up bar, bench)
-6. If am_session_custom contains exercises requiring unavailable equipment, you must regenerate with valid alternatives.`;
+SCENARIO MODE RULES (when message starts with [SCENARIO MODE]):
+1. Travel/location/equipment requests → ask clarifying questions FIRST (days + equipment in one block)
+2. Never generate exercises until equipment constraints are confirmed
+3. Equipment reference: Hotel gym=dumbbells/cables/treadmill/bench/pull-up bar; Bodyweight=zero; Outdoor=running/bodyweight/park
+4. Every exercise must match available equipment or regenerate`;
 
   try {
-    // Fetch last 10 messages (5 pairs) for conversation history
+    // Fetch last 20 messages for conversation history, scoped to user
     let historyMessages = [];
     try {
-      const { data } = await supabase
+      const historyQuery = supabase
         .from("ai_messages")
         .select("role, content")
         .order("created_at", { ascending: false })
-        .limit(10);
+        .limit(20);
+      if (resolvedUserId) historyQuery.eq("user_id", resolvedUserId);
+      historyQuery.neq("role", "proactive");
+      const { data } = await historyQuery;
       if (data && data.length > 0) {
-        // Reverse to chronological order, ensure strict user/assistant alternation
         const reversed = data.reverse();
         const validated = [];
         let expectedRole = "user";
@@ -231,15 +196,14 @@ SCENARIO MODE RULES (apply when user message starts with [SCENARIO MODE]):
             expectedRole = expectedRole === "user" ? "assistant" : "user";
           }
         }
-        // Drop trailing user message with no assistant reply
         if (validated.length > 0 && validated[validated.length - 1].role === "user") {
           validated.pop();
         }
         historyMessages = validated;
       }
-    } catch (e) {
-      // ai_messages table may not exist yet — proceed without history
-    }
+    } catch (e) {}
+
+    console.log(`[coach/chat] user=${resolvedUserId?.slice(0,8) || "anon"} history=${historyMessages.length} msgs`);
 
     const now = new Date();
     const dayNames = ["Sunday","Monday","Tuesday","Wednesday","Thursday","Friday","Saturday"];
@@ -256,15 +220,10 @@ CURRENT WHOOP DATA:
 - Recovery: ${whoopData?.recovery?.score ?? "N/A"}% (${whoopData?.recovery?.score >= 67 ? "GREEN" : whoopData?.recovery?.score >= 34 ? "YELLOW" : "RED"})
 - HRV: ${whoopData?.recovery?.hrv ?? "N/A"}ms | RHR: ${whoopData?.recovery?.rhr ?? "N/A"}bpm
 - Sleep: ${whoopData?.sleep?.score ?? "N/A"}% | Hours: ${whoopData?.sleep?.hours ?? "N/A"}h
-- Strain: ${whoopData?.strain?.score ?? "N/A"}
-
-CURRENT TRAINING WEEK UUID: ${currentWeek?.id ?? "N/A"}
-CURRENT TRAINING WEEK LABEL: ${currentWeek?.label ?? "N/A"} — ${currentWeek?.subtitle ?? ""}
-IMPORTANT: The week_id in any <plan_change> MUST be the exact UUID above (${currentWeek?.id ?? "N/A"}). Never use slug abbreviations like tw1 or p1w1.${scenarioCtx}
+- Strain: ${whoopData?.strain?.score ?? "N/A"}${scenarioCtx}
 
 User message: ${message || "(see attached file)"}`;
 
-    // Build content for the current user message — include attachment if present
     let userContent;
     if (attachment?.data && attachment?.media_type) {
       const isImage = attachment.media_type.startsWith("image/");
@@ -326,12 +285,13 @@ User message: ${message || "(see attached file)"}`;
       }
     }
 
-    // Persist messages (fire-and-forget — don't block the response)
-    const msgBase = user_id ? { user_id } : {};
-    supabase.from("ai_messages").insert([
-      { ...msgBase, role: "user", content: message || `[attachment: ${attachment?.name}]` },
-      { ...msgBase, role: "assistant", content: cleanText },
-    ]).then(() => {}).catch(() => {});
+    // Persist messages scoped to user
+    if (resolvedUserId) {
+      supabase.from("ai_messages").insert([
+        { user_id: resolvedUserId, role: "user", content: message || `[attachment: ${attachment?.name}]` },
+        { user_id: resolvedUserId, role: "assistant", content: cleanText },
+      ]).then(() => {}).catch(() => {});
+    }
 
     return res.status(200).json({
       message: cleanText,

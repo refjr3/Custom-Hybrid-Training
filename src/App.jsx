@@ -222,6 +222,11 @@ const AIChat = ({ whoopData, currentWeek, recentActivities, onPlanChange, userNa
     setMessages(prev => [...prev, { role:"user", content:userMsg || `[${currentAttachment?.name}]`, planChange:null, attachment:currentAttachment }]);
     setLoading(true);
     try {
+      if (currentAttachment && !currentAttachment.data) {
+        setMessages(prev => [...prev, { role:"assistant", content:"File upload failed — please try again.", planChange:null }]);
+        setLoading(false);
+        return;
+      }
       const res = await fetch("/api/coach/chat", {
         method:"POST",
         headers:{ "Content-Type":"application/json" },
@@ -233,6 +238,12 @@ const AIChat = ({ whoopData, currentWeek, recentActivities, onPlanChange, userNa
           attachment: currentAttachment || null,
         }),
       });
+      if (!res.ok) {
+        const errData = await res.json().catch(() => ({}));
+        setMessages(prev => [...prev, { role:"assistant", content:`Error: ${errData.error || "Request failed"}. Try again.`, planChange:null }]);
+        setLoading(false);
+        return;
+      }
       const data = await res.json();
       const cqs = parseClarifyingQuestions(data.message);
       setMessages(prev => [...prev, { role:"assistant", content: data.message || "Something went wrong.", planChange: data.planChange || null, clarifyingQuestions: cqs }]);
@@ -243,10 +254,13 @@ const AIChat = ({ whoopData, currentWeek, recentActivities, onPlanChange, userNa
     }
   };
 
-  const handlePlanChange = (planChange, action) => {
+  const handlePlanChange = async (planChange, action) => {
     if (action === "accept") {
-      onPlanChange(planChange);
+      setMessages(prev => prev.map(m => m.planChange === planChange ? { ...m, planChangeStatus:"applying" } : m));
+      await onPlanChange(planChange);
+      const count = planChange.type === "remap_week" ? (planChange.days?.length || 0) : 1;
       setMessages(prev => prev.map(m => m.planChange === planChange ? { ...m, planChangeStatus:"accepted" } : m));
+      setMessages(prev => [...prev, { role:"assistant", content:`✓ **Plan updated** — ${count} session${count>1?"s":""} modified.`, planChange:null }]);
     } else {
       setMessages(prev => prev.map(m => m.planChange === planChange ? { ...m, planChangeStatus:"rejected" } : m));
     }
@@ -420,7 +434,8 @@ const AIChat = ({ whoopData, currentWeek, recentActivities, onPlanChange, userNa
           const file = e.target.files?.[0];
           if (!file) return;
           const reader = new FileReader();
-          reader.onload = () => setAttachment({ data: reader.result.split(",")[1], media_type: file.type, name: file.name });
+          reader.onload = () => { try { setAttachment({ data: reader.result.split(",")[1], media_type: file.type, name: file.name }); } catch(_) { setMessages(prev => [...prev, { role:"assistant", content:"Failed to read file. Try a smaller image or PDF.", planChange:null }]); } };
+          reader.onerror = () => setMessages(prev => [...prev, { role:"assistant", content:"File upload failed. Please try again.", planChange:null }]);
           reader.readAsDataURL(file);
         }} />
         <textarea
