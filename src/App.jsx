@@ -10,16 +10,18 @@ const supabase = createClient(
 
 const C = {
   bg:"#0A0A0A", surface:"#111111",
-  card:"rgba(255,255,255,0.03)", card2:"rgba(255,255,255,0.06)",
+  card:"rgba(255,255,255,0.04)", card2:"rgba(255,255,255,0.07)",
   cardSolid:"#141414",
-  border:"rgba(255,255,255,0.08)", text:"#ffffff", muted:"#888888", light:"#555555",
+  border:"rgba(255,255,255,0.08)", divider:"#444444",
+  text:"#FFFFFF", muted:"#888888", light:"#555555",
   red:"#FF3B30", green:"#00D4A0", yellow:"#FFD600", blue:"#0088FF", cyan:"#00F3FF",
   ff:"'Bebas Neue','Arial Black',sans-serif",
   fm:"'Space Mono',monospace",
-  fs:"'Inter',-apple-system,sans-serif",
-  glass:{ backdropFilter:"blur(12px)", WebkitBackdropFilter:"blur(12px)" },
+  fs:"'Inter',-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif",
+  glass:{ backdropFilter:"blur(16px)", WebkitBackdropFilter:"blur(16px)" },
   radius:16,
 };
+const glow = (color, i=0.3) => `0 0 20px ${color}${Math.round(i*255).toString(16).padStart(2,"0")}, 0 0 60px ${color}${Math.round(i*0.4*255).toString(16).padStart(2,"0")}`;
 
 const HR_ZONES = [
   { zone:"Z1", name:"WARM UP",   pct:"69–80%",  bpm:"114–136", color:"#555" },
@@ -80,31 +82,31 @@ const whoopColor = (s) => s >= 67 ? C.green : s >= 34 ? C.yellow : C.red;
 const whoopLabel = (s) => s >= 67 ? "GREEN" : s >= 34 ? "YELLOW" : "RED";
 const whoopMsg   = (s) => s >= 67 ? "Execute today's plan as written" : s >= 34 ? "Reduce intensity 20% · Skip VO2 Max" : "Recovery only · Contrast therapy · Rest";
 
-const Ring = ({ score, size=120, stroke=10, color, label, sublabel }) => {
+const Ring = ({ score, size=120, stroke=10, color, label, sublabel, glowEffect }) => {
   const r = (size - stroke) / 2;
   const circ = 2 * Math.PI * r;
   const offset = circ - (Math.min(score,100) / 100) * circ;
   return (
-    <div style={{ position:"relative", width:size, height:size, flexShrink:0 }}>
+    <div style={{ position:"relative", width:size, height:size, flexShrink:0, filter: glowEffect ? `drop-shadow(0 0 12px ${color}66)` : "none" }}>
       <svg width={size} height={size} style={{ transform:"rotate(-90deg)" }}>
-        <circle cx={size/2} cy={size/2} r={r} fill="none" stroke="#1e1e1e" strokeWidth={stroke} />
+        <circle cx={size/2} cy={size/2} r={r} fill="none" stroke="rgba(255,255,255,0.04)" strokeWidth={stroke} />
         <circle cx={size/2} cy={size/2} r={r} fill="none" stroke={color} strokeWidth={stroke}
           strokeDasharray={circ} strokeDashoffset={offset} strokeLinecap="round"
-          style={{ transition:"stroke-dashoffset 0.6s ease" }} />
+          style={{ transition:"stroke-dashoffset 0.8s cubic-bezier(.4,0,.2,1)" }} />
       </svg>
       <div style={{ position:"absolute", inset:0, display:"flex", flexDirection:"column", alignItems:"center", justifyContent:"center" }}>
-        <div style={{ fontFamily:C.ff, fontSize:size*0.28, color, lineHeight:1, letterSpacing:-1 }}>{score}</div>
-        {label && <div style={{ fontFamily:C.fm, fontSize:size*0.07, color:C.muted, letterSpacing:2, marginTop:2 }}>{label}</div>}
-        {sublabel && <div style={{ fontFamily:C.fm, fontSize:size*0.065, color, letterSpacing:1, marginTop:1 }}>{sublabel}</div>}
+        <div style={{ fontFamily:C.ff, fontSize:size*0.32, color, lineHeight:1, letterSpacing:-1, fontWeight:700 }}>{score}</div>
+        {label && <div style={{ fontFamily:C.fm, fontSize:size*0.065, color:C.muted, letterSpacing:3, marginTop:3, textTransform:"uppercase" }}>{label}</div>}
+        {sublabel && <div style={{ fontFamily:C.fm, fontSize:size*0.06, color, letterSpacing:2, marginTop:1, fontWeight:700 }}>{sublabel}</div>}
       </div>
     </div>
   );
 };
 
 const StatPill = ({ label, value, color }) => (
-  <div style={{ background:C.card, borderRadius:C.radius, padding:"10px 14px", flex:1, textAlign:"center", border:`1px solid ${C.border}`, ...C.glass }}>
-    <div style={{ fontFamily:C.fm, fontSize:7, color:C.muted, letterSpacing:2, marginBottom:4 }}>{label}</div>
-    <div style={{ fontFamily:C.ff, fontSize:20, color: color || C.text }}>{value}</div>
+  <div style={{ background:C.card, borderRadius:C.radius, padding:"12px 14px", flex:1, textAlign:"center", border:`1px solid ${C.border}`, ...C.glass }}>
+    <div style={{ fontFamily:C.fm, fontSize:7, color:C.muted, letterSpacing:3, marginBottom:6, textTransform:"uppercase" }}>{label}</div>
+    <div style={{ fontFamily:C.ff, fontSize:24, color: color || C.cyan, fontWeight:700, letterSpacing:-0.5 }}>{value}</div>
   </div>
 );
 
@@ -114,18 +116,18 @@ const TodayCard = ({ name, onTap }) => {
   if (!w) return null;
   const accent = getAccent(name);
   return (
-    <div onClick={onTap} style={{ background:C.card, borderRadius:C.radius, overflow:"hidden", cursor:"pointer", border:`1px solid ${C.border}`, ...C.glass }}>
-      <div style={{ padding:"14px 16px 12px", borderBottom:`1px solid ${C.border}` }}>
+    <div onClick={onTap} style={{ background:C.card, borderRadius:C.radius, overflow:"hidden", cursor:"pointer", border:`1px solid ${accent}22`, boxShadow:`0 0 30px ${accent}08`, ...C.glass, transition:"transform 0.1s ease" }}>
+      <div style={{ padding:"16px 18px 14px", borderBottom:`1px solid ${C.border}` }}>
         <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center" }}>
-          <div style={{ background:`${accent}22`, border:`1px solid ${accent}44`, borderRadius:20, padding:"3px 10px", fontFamily:C.fm, fontSize:8, color:accent, letterSpacing:2 }}>{w.type}</div>
-          <div style={{ fontFamily:C.fm, fontSize:8, color:C.muted, letterSpacing:1 }}>{w.duration}</div>
+          <div style={{ background:`${accent}15`, border:`1px solid ${accent}33`, borderRadius:20, padding:"4px 12px", fontFamily:C.fm, fontSize:7, color:accent, letterSpacing:3, textTransform:"uppercase" }}>{w.type}</div>
+          <div style={{ fontFamily:C.fm, fontSize:8, color:C.muted, letterSpacing:2 }}>{w.duration}</div>
         </div>
-        <div style={{ fontFamily:C.ff, fontSize:22, color:C.text, letterSpacing:0.5, marginTop:8, lineHeight:1.1 }}>{name.split(" — ")[1] || name}</div>
-        <div style={{ fontFamily:C.fm, fontSize:8, color:C.muted, letterSpacing:2, marginTop:4 }}>{w.tag}</div>
+        <div style={{ fontFamily:C.ff, fontSize:26, color:C.text, letterSpacing:0.5, marginTop:10, lineHeight:1.05 }}>{name.split(" — ")[1] || name}</div>
+        <div style={{ fontFamily:C.fm, fontSize:7, color:C.muted, letterSpacing:3, marginTop:6, textTransform:"uppercase" }}>{w.tag}</div>
       </div>
-      <div style={{ padding:"10px 16px", display:"flex", gap:8, overflowX:"auto", scrollbarWidth:"none" }}>
+      <div style={{ padding:"10px 18px", display:"flex", gap:8, overflowX:"auto", scrollbarWidth:"none" }}>
         {w.steps.filter(s => !s.startsWith("—")).slice(0,4).map((s,i) => (
-          <div key={i} style={{ background:C.card2, borderRadius:8, padding:"6px 10px", fontFamily:C.fm, fontSize:8, color:C.muted, flexShrink:0 }}>{s}</div>
+          <div key={i} style={{ background:C.card2, borderRadius:8, padding:"6px 10px", fontFamily:C.fm, fontSize:7, color:C.muted, flexShrink:0, letterSpacing:0.5 }}>{s}</div>
         ))}
       </div>
     </div>
@@ -231,8 +233,8 @@ const AIChat = ({ whoopData, currentWeek, recentActivities, onPlanChange, userNa
     <div style={{ position:"fixed", inset:0, zIndex:150, background:"rgba(10,10,10,0.95)", display:"flex", flexDirection:"column", maxWidth:480, margin:"0 auto" }}>
       <div style={{ padding:"16px 20px", borderBottom:`1px solid ${C.border}`, display:"flex", justifyContent:"space-between", alignItems:"center", flexShrink:0 }}>
         <div style={{ display:"flex", alignItems:"center", gap:12 }}>
-          <button onClick={() => setShowPersonas(p => !p)} style={{ width:36, height:36, borderRadius:"50%", background:`${C.green}22`, border:`1px solid ${C.green}44`, display:"flex", alignItems:"center", justifyContent:"center", cursor:"pointer" }}>
-            <span style={{ fontSize:16 }}>✦</span>
+          <button onClick={() => setShowPersonas(p => !p)} style={{ width:36, height:36, borderRadius:"50%", background:`${C.cyan}15`, border:`1px solid ${C.cyan}33`, display:"flex", alignItems:"center", justifyContent:"center", cursor:"pointer" }}>
+            <span className={loading ? "pulse" : ""} style={{ fontSize:16, color:C.cyan }}>✦</span>
           </button>
           <div>
             <div style={{ fontFamily:C.ff, fontSize:16, color:C.text, letterSpacing:1 }}>AI COACH</div>
@@ -259,7 +261,7 @@ const AIChat = ({ whoopData, currentWeek, recentActivities, onPlanChange, userNa
       <div style={{ flex:1, overflowY:"auto", padding:"16px 20px", display:"flex", flexDirection:"column", gap:12 }}>
         {messages.map((m, i) => (
           <div key={i} style={{ display:"flex", flexDirection:"column", alignItems: m.role==="user" ? "flex-end" : "flex-start" }}>
-            <div style={{ maxWidth:"85%", padding:"12px 16px", borderRadius: m.role==="user" ? "16px 16px 4px 16px" : "16px 16px 16px 4px", background: m.role==="user" ? C.green : C.card, color: m.role==="user" ? "#000" : C.text }}>
+            <div style={{ maxWidth:"85%", padding:"12px 16px", borderRadius: m.role==="user" ? "16px 16px 4px 16px" : "16px 16px 16px 4px", background: m.role==="user" ? "rgba(0,243,255,0.15)" : C.card, color: m.role==="user" ? C.text : C.text, border: m.role==="user" ? `1px solid ${C.cyan}33` : `1px solid ${C.border}`, ...C.glass }}>
               {m.attachment?.media_type?.startsWith("image/") && (
                 <img src={`data:${m.attachment.media_type};base64,${m.attachment.data}`} alt={m.attachment.name} style={{ width:"100%", borderRadius:8, marginBottom: m.content ? 8 : 0, display:"block" }} />
               )}
@@ -290,8 +292,8 @@ const AIChat = ({ whoopData, currentWeek, recentActivities, onPlanChange, userNa
         ))}
         {loading && (
           <div style={{ display:"flex", alignItems:"flex-start" }}>
-            <div style={{ background:C.card, borderRadius:"16px 16px 16px 4px", padding:"12px 16px" }}>
-              <div style={{ fontFamily:C.fm, fontSize:11, color:C.muted, letterSpacing:2 }}>THINKING...</div>
+            <div style={{ background:C.card, borderRadius:"16px 16px 16px 4px", padding:"12px 16px", border:`1px solid ${C.border}`, ...C.glass }}>
+              <div className="shimmer" style={{ fontFamily:C.fm, fontSize:11, letterSpacing:3 }}>THINKING</div>
             </div>
           </div>
         )}
@@ -330,7 +332,7 @@ const AIChat = ({ whoopData, currentWeek, recentActivities, onPlanChange, userNa
           }}
           onKeyDown={e => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); sendMessage(); } }}
           placeholder="Ask your coach anything..."
-          style={{ flex:1, background:C.card, border:`1px solid ${C.border}`, borderRadius:12, padding:"12px 16px", color:C.text, fontFamily:C.fs, fontSize:14, outline:"none", resize:"none", overflow:"hidden", lineHeight:"1.5", maxHeight:120 }}
+          style={{ flex:1, background:C.card, border:`1px solid ${C.cyan}22`, borderRadius:12, padding:"12px 16px", color:C.text, fontFamily:C.fs, fontSize:14, outline:"none", resize:"none", overflow:"hidden", lineHeight:"1.5", maxHeight:120, ...C.glass }}
         />
         <button onClick={() => fileInputRef.current?.click()} style={{ width:36, height:36, background: attachment ? `${C.green}22` : C.card2, border:`1px solid ${attachment ? C.green+"44" : C.border}`, borderRadius:10, cursor:"pointer", color: attachment ? C.green : C.muted, fontSize:16, flexShrink:0, display:"flex", alignItems:"center", justifyContent:"center" }} title="Attach image or PDF">📎</button>
         <button onClick={sendMessage} disabled={loading || (!input.trim() && !attachment)} style={{ width:48, height:48, background: (input.trim() || attachment) ? C.green : C.card, border:"none", borderRadius:12, cursor: (input.trim() || attachment) ? "pointer" : "default", color: (input.trim() || attachment) ? "#000" : C.muted, fontSize:18, flexShrink:0 }}>↑</button>
@@ -761,8 +763,8 @@ export default function App() {
   // ── Auth routing — must come after all hooks ───────────────────────────────
   if (authLoading) {
     return (
-      <div style={{ display:"flex", alignItems:"center", justifyContent:"center", minHeight:"100vh", background:"#000" }}>
-        <div style={{ fontFamily:"'Bebas Neue','Arial Black',sans-serif", fontSize:22, color:"#555", letterSpacing:6 }}>LOADING...</div>
+      <div style={{ display:"flex", alignItems:"center", justifyContent:"center", minHeight:"100vh", background:C.bg }}>
+        <div className="shimmer" style={{ fontFamily:C.ff, fontSize:24, letterSpacing:6 }}>LOADING</div>
       </div>
     );
   }
@@ -804,7 +806,7 @@ export default function App() {
         <div>
           <div style={{ padding:"16px 20px 12px", display:"flex", justifyContent:"space-between", alignItems:"center" }}>
             <div>
-              <div style={{ fontFamily:C.fm, fontSize:8, color:C.muted, letterSpacing:3 }}>HYBRID PERFORMANCE OS</div>
+              <div style={{ fontFamily:C.fm, fontSize:7, color:C.muted, letterSpacing:3, textTransform:"uppercase" }}>HYBRID PERFORMANCE OS</div>
               <div style={{ fontFamily:C.ff, fontSize:26, letterSpacing:2, lineHeight:1, marginTop:2 }}>{profile?.name?.toUpperCase() || "ATHLETE"}<span style={{ color:C.red }}>.</span></div>
             </div>
             <div style={{ fontFamily:C.fm, fontSize:8, color:C.muted, letterSpacing:2, textAlign:"right" }}>
@@ -825,18 +827,18 @@ export default function App() {
               </div>
             ) : (
               <>
-                <div style={{ display:"flex", justifyContent:"center", marginBottom:20 }}>
-                  <Ring score={rec} size={140} stroke={12} color={rc} label="RECOVERY" sublabel={whoopLabel(rec)} />
+                <div style={{ display:"flex", justifyContent:"center", marginBottom:24 }}>
+                  <Ring score={rec} size={170} stroke={14} color={rc} label="RECOVERY" sublabel={whoopLabel(rec)} glowEffect />
                 </div>
-                <div style={{ display:"flex", gap:16, justifyContent:"center", marginBottom:20 }}>
+                <div style={{ display:"flex", gap:12, justifyContent:"center", marginBottom:20 }}>
                   <Ring score={sleep} size={80} stroke={8} color={C.blue} label="SLEEP" />
-                  <Ring score={Math.round((strain/21)*100)} size={80} stroke={8} color="#FF7700" label="STRAIN" sublabel={`${strain}`} />
+                  <Ring score={Math.round((strain/21)*100)} size={80} stroke={8} color={C.orange || "#FF7700"} label="STRAIN" sublabel={`${strain}`} />
                   <Ring score={Math.min(Math.round((sleepHours/9)*100),100)} size={80} stroke={8} color={C.muted} label="HRS" sublabel={`${sleepHours}h`} />
                 </div>
-                <div style={{ background:`${rc}15`, border:`1px solid ${rc}33`, borderRadius:C.radius, padding:"12px 16px", marginBottom:16, ...C.glass }}>
-                  <div style={{ fontFamily:C.fm, fontSize:8, color:rc, letterSpacing:3, fontWeight:700, marginBottom:4 }}>● {whoopLabel(rec)} DAY</div>
-                  <div style={{ fontFamily:C.fs, fontSize:13, color:C.text, lineHeight:1.5 }}>{whoopMsg(rec)}</div>
-                  <div style={{ fontFamily:C.fm, fontSize:8, color:C.muted, marginTop:6 }}>HRV {hrv}ms · RHR {rhr}bpm · Sleep {sleepEff}% efficiency</div>
+                <div style={{ background:`${rc}10`, border:`1px solid ${rc}22`, borderRadius:C.radius, padding:"14px 18px", marginBottom:16, boxShadow:glow(rc,0.15), ...C.glass }}>
+                  <div style={{ fontFamily:C.fm, fontSize:7, color:rc, letterSpacing:3, fontWeight:700, marginBottom:6, textTransform:"uppercase" }}>● {whoopLabel(rec)} DAY</div>
+                  <div style={{ fontFamily:C.fs, fontSize:14, color:C.text, lineHeight:1.5 }}>{whoopMsg(rec)}</div>
+                  <div style={{ fontFamily:C.fm, fontSize:7, color:C.muted, marginTop:8, letterSpacing:2 }}>HRV {hrv}ms · RHR {rhr}bpm · SLEEP {sleepEff}%</div>
                 </div>
                 <div style={{ display:"flex", gap:8 }}>
                   <StatPill label="HRV" value={`${hrv}ms`} />
@@ -931,13 +933,13 @@ export default function App() {
             <div style={{ fontFamily:C.fm, fontSize:8, color:C.muted, letterSpacing:3, marginBottom:10 }}>TRAINING BLOCK</div>
             <div style={{ display:"flex", gap:6, overflowX:"auto", scrollbarWidth:"none" }}>
               {planBlocks.map(b => (
-                <button key={b.id} onClick={() => { setBlockId(b.id); setWeekId(b.weeks[0].id); setSelDay(null); }} style={{ flexShrink:0, padding:"8px 14px", background: blockId===b.id ? C.text : C.card, color: blockId===b.id ? "#000" : C.muted, border:`1px solid ${blockId===b.id ? C.text : C.border}`, borderRadius:20, cursor:"pointer", fontFamily:C.ff, fontSize:11, letterSpacing:2 }}>{b.label}</button>
+                <button key={b.id} onClick={() => { setBlockId(b.id); setWeekId(b.weeks[0].id); setSelDay(null); }} style={{ flexShrink:0, padding:"8px 16px", background: blockId===b.id ? C.card : "transparent", color: blockId===b.id ? C.cyan : C.muted, border:"none", borderBottom: blockId===b.id ? `2px solid ${C.cyan}` : "2px solid transparent", borderRadius:0, cursor:"pointer", fontFamily:C.ff, fontSize:12, letterSpacing:2, transition:"all 0.2s" }}>{b.label}</button>
               ))}
             </div>
           </div>
           <div style={{ display:"flex", overflowX:"auto", scrollbarWidth:"none", borderBottom:`1px solid ${C.border}`, paddingLeft:20 }}>
             {weeks.map(w => (
-              <button key={w.id} onClick={() => { setWeekId(w.id); setSelDay(null); }} style={{ flexShrink:0, padding:"10px 14px", background:"transparent", color: weekId===w.id ? C.text : C.muted, border:"none", borderBottom:`2px solid ${weekId===w.id ? C.green : "transparent"}`, cursor:"pointer", fontFamily:C.fm, fontSize:7, letterSpacing:2, whiteSpace:"nowrap" }}>
+              <button key={w.id} onClick={() => { setWeekId(w.id); setSelDay(null); }} style={{ flexShrink:0, padding:"10px 14px", background:"transparent", color: weekId===w.id ? C.text : C.muted, border:"none", borderBottom:`2px solid ${weekId===w.id ? C.cyan : "transparent"}`, cursor:"pointer", fontFamily:C.fm, fontSize:7, letterSpacing:2, whiteSpace:"nowrap", transition:"all 0.2s" }}>
                 {w.label.includes("·") ? w.label.split("·")[1]?.trim() : w.label}
                 <div style={{ fontSize:6, marginTop:2, opacity:0.6 }}>{w.dates}</div>
               </button>
@@ -954,7 +956,7 @@ export default function App() {
               const ac  = d.isSunday && !sundayChoice[weekId] ? C.light : getAccent(eAm);
               const isSel = selDay === d.day;
               return (
-                <button key={d.day} onClick={() => { setSelDay(isSel ? null : d.day); setSess("am"); }} style={{ background: isSel ? C.card : "transparent", border:"none", borderRight: i<6 ? `1px solid ${C.border}` : "none", borderBottom:`2px solid ${isSel ? ac : "transparent"}`, padding:"12px 4px 10px", cursor:"pointer", textAlign:"center", WebkitTapHighlightColor:"transparent" }}>
+                <button key={d.day} onClick={() => { setSelDay(isSel ? null : d.day); setSess("am"); }} style={{ background: isSel ? C.card : "transparent", border:"none", borderRight: i<6 ? `1px solid ${C.border}` : "none", borderBottom:`2px solid ${isSel ? C.cyan : "transparent"}`, padding:"12px 4px 10px", cursor:"pointer", textAlign:"center", boxShadow: isSel ? `inset 0 0 16px ${C.cyan}10` : "none", transition:"all 0.15s" }}>
                   <div style={{ fontFamily:C.fm, fontSize:7, color: isSel ? C.muted : C.light, letterSpacing:1 }}>{d.day}</div>
                   <div style={{ fontFamily:C.fm, fontSize:6, color:C.light, margin:"2px 0 8px" }}>{d.date.split(" ")[1]}</div>
                   <div style={{ width:8, height:8, borderRadius:"50%", background:ac, margin:"0 auto", opacity: isSel ? 1 : 0.6 }} />
@@ -1044,8 +1046,8 @@ export default function App() {
               return (
                 <div key={group} style={{ marginBottom:24 }}>
                   <div style={{ display:"flex", alignItems:"center", gap:10, marginBottom:12 }}>
-                    <div style={{ width:3, height:20, background:color, borderRadius:2 }} />
-                    <div style={{ fontFamily:C.fm, fontSize:8, color, letterSpacing:3 }}>{group}</div>
+                    <div style={{ fontFamily:C.fm, fontSize:8, color:C.cyan, letterSpacing:3, textTransform:"uppercase", flexShrink:0 }}>{group}</div>
+                    <div style={{ flex:1, height:1, background:C.divider }} />
                   </div>
                   {items.map((item) => (
                     <div key={item.id} style={{ background:C.card, borderRadius:C.radius, padding:"14px 16px", marginBottom:8, borderLeft:`3px solid ${color}44`, border:`1px solid ${C.border}`, ...C.glass }}>
@@ -1096,15 +1098,16 @@ export default function App() {
             const catLabel = cat === "DXA" ? "DXA SCAN" : "BLOOD PANEL";
             return (
               <div key={cat} style={{ marginBottom:20 }}>
-                <div style={{ fontFamily:C.fm, fontSize:8, color: cat==="DXA" ? C.green : C.red, letterSpacing:3, marginBottom:10 }}>
-                  {catLabel}{dateStr ? ` · ${dateStr}` : ""}
+                <div style={{ display:"flex", alignItems:"center", gap:10, marginBottom:12 }}>
+                  <div style={{ fontFamily:C.ff, fontSize:20, color:C.cyan, letterSpacing:2 }}>{catLabel}</div>
+                  {dateStr && <div style={{ fontFamily:C.fm, fontSize:7, color:C.muted, letterSpacing:2 }}>{dateStr}</div>}
                 </div>
                 <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:8 }}>
                   {items.map((b,i) => (
-                    <div key={i} style={{ background:C.card, borderRadius:C.radius, padding:"14px", border: b.flag==="HIGH"||b.flag==="LOW" ? `1px solid ${C.red}33` : `1px solid ${C.border}`, ...C.glass }}>
-                      <div style={{ fontFamily:C.fm, fontSize:7, color:C.muted, letterSpacing:2, marginBottom:6 }}>{b.label}</div>
-                      <div style={{ fontFamily:C.ff, fontSize:18, color: b.flag==="HIGH"||b.flag==="LOW" ? C.red : b.flag==="OPTIMAL"||b.flag==="GOOD" ? C.green : C.text }}>{b.value}{b.unit ? ` ${b.unit}` : ""}</div>
-                      {b.flag && <div style={{ fontFamily:C.fm, fontSize:7, color: b.flag==="HIGH"||b.flag==="LOW" ? C.red : b.flag==="OPTIMAL"||b.flag==="GOOD" ? C.green : C.muted, marginTop:4, letterSpacing:1 }}>● {b.flag}</div>}
+                    <div key={i} style={{ background:C.card, borderRadius:C.radius, padding:"14px", border:`1px solid ${C.border}`, borderLeft: b.flag==="HIGH"||b.flag==="LOW" ? `3px solid ${C.red}` : b.flag==="OPTIMAL"||b.flag==="GOOD" ? `3px solid ${C.green}` : `1px solid ${C.border}`, boxShadow: b.flag==="HIGH"||b.flag==="LOW" ? `0 0 16px ${C.red}10` : "none", ...C.glass }}>
+                      <div style={{ fontFamily:C.fm, fontSize:7, color:C.muted, letterSpacing:3, marginBottom:6, textTransform:"uppercase" }}>{b.label}</div>
+                      <div style={{ fontFamily:C.ff, fontSize:22, color: b.flag==="HIGH"||b.flag==="LOW" ? C.red : b.flag==="OPTIMAL"||b.flag==="GOOD" ? C.green : C.text, fontWeight:700 }}>{b.value}{b.unit ? ` ${b.unit}` : ""}</div>
+                      {b.flag && <div style={{ fontFamily:C.fm, fontSize:7, color: b.flag==="HIGH"||b.flag==="LOW" ? C.red : b.flag==="OPTIMAL"||b.flag==="GOOD" ? C.green : C.muted, marginTop:4, letterSpacing:2 }}>● {b.flag}</div>}
                     </div>
                   ))}
                 </div>
@@ -1112,7 +1115,10 @@ export default function App() {
             );
           })}
           <div>
-            <div style={{ fontFamily:C.fm, fontSize:8, color:"#aaa", letterSpacing:3, marginBottom:10 }}>HR ZONES · LTHR 165–170 BPM</div>
+            <div style={{ display:"flex", alignItems:"center", gap:10, marginBottom:12 }}>
+              <div style={{ fontFamily:C.ff, fontSize:20, color:C.cyan, letterSpacing:2 }}>HR ZONES</div>
+              <div style={{ fontFamily:C.fm, fontSize:7, color:C.muted, letterSpacing:2 }}>LTHR 165–170 BPM</div>
+            </div>
             {HR_ZONES.map((z, i) => (
               <div key={i} style={{ display:"flex", alignItems:"center", gap:12, padding:"12px 14px", background:C.card, borderRadius:12, marginBottom:6, borderLeft:`3px solid ${z.color}`, border:`1px solid ${C.border}`, ...C.glass }}>
                 <div style={{ fontFamily:C.ff, fontSize:16, color:z.color, minWidth:32 }}>{z.zone}</div>
