@@ -135,7 +135,17 @@ const TodayCard = ({ name, onTap }) => {
 };
 
 const stripPlanChange = (text) =>
-  text ? text.replace(/<plan_change>[\s\S]*?<\/plan_change>/g, "").trim() : text;
+  text ? text.replace(/<plan_change>[\s\S]*?<\/plan_change>/g, "").replace(/<clarifying_questions>[\s\S]*?<\/clarifying_questions>/g, "").trim() : text;
+
+const parseClarifyingQuestions = (text) => {
+  if (!text) return null;
+  const match = text.match(/<clarifying_questions>([\s\S]*?)<\/clarifying_questions>/);
+  if (!match) return null;
+  try {
+    const jsonMatch = match[1].match(/\[[\s\S]*\]/);
+    return JSON.parse(jsonMatch?.[0] || match[1]);
+  } catch (_) { return null; }
+};
 
 const renderMarkdown = (text) => {
   if (!text) return null;
@@ -566,6 +576,7 @@ export default function App() {
   const [labToast, setLabToast] = useState(null);
   const [labContext, setLabContext] = useState("");
   const [labTargetDay, setLabTargetDay] = useState(null);
+  const [cqSelections, setCqSelections] = useState({});
 
   // ── Auth state ──────────────────────────────────────────────────────────────
   const [session, setSession]       = useState(null);
@@ -854,7 +865,8 @@ export default function App() {
         setLabContext(`${wk} · ${data.planChange.day}`);
         setLabTargetDay(data.planChange.day);
       }
-      setLabMessages(prev => [...prev, { role:"assistant", content:data.message, planChange:data.planChange }]);
+      const cqs = parseClarifyingQuestions(data.message);
+      setLabMessages(prev => [...prev, { role:"assistant", content:data.message, planChange:data.planChange, clarifyingQuestions:cqs }]);
     } catch (e) {
       setLabMessages(prev => [...prev, { role:"assistant", content:"Connection error. Try again." }]);
     } finally {
@@ -1318,8 +1330,8 @@ export default function App() {
               </div>
             </div>
           )}
-          <div style={{ margin:"20px 20px" }}>
-            <button onClick={() => { setLabOpen(true); setLabMessages([]); const wk = week?.label?.split("·")[1]?.trim() || week?.label || ""; const selD = selDay || todayDayName; setLabContext(`${wk} · ${selD}`); setLabTargetDay(selD); }}
+          <div style={{ marginTop:24, marginBottom:24, marginLeft:20, marginRight:20 }}>
+            <button onClick={() => { setLabOpen(true); setLabMessages([]); setCqSelections({}); const wk = week?.label?.split("·")[1]?.trim() || week?.label || ""; const selD = selDay || todayDayName; setLabContext(`${wk} · ${selD}`); setLabTargetDay(selD); }}
               style={{ width:"100%", padding:"14px", background:`${C.cyan}08`, border:`1px solid ${C.cyan}22`, borderRadius:C.radius, cursor:"pointer", display:"flex", alignItems:"center", justifyContent:"center", gap:10, ...C.glass }}>
               <span style={{ fontSize:16 }}>🧪</span>
               <span style={{ fontFamily:C.ff, fontSize:14, color:C.cyan, letterSpacing:2 }}>RUN A SCENARIO</span>
@@ -1711,6 +1723,46 @@ export default function App() {
                   <div style={{ maxWidth:"90%", padding:"8px 12px", borderRadius: m.role==="user" ? "12px 12px 4px 12px" : "12px 12px 12px 4px", background: m.role==="user" ? "rgba(0,243,255,0.15)" : C.card, border: m.role==="user" ? `1px solid ${C.cyan}33` : `1px solid ${C.border}` }}>
                     <div style={{ fontFamily:C.fs, fontSize:11, color:C.text, lineHeight:1.5 }}>{renderMarkdown(m.content)}</div>
                   </div>
+                  {m.clarifyingQuestions && !m.cqSubmitted && (
+                    <div style={{ maxWidth:"95%", marginTop:6, width:"100%" }}>
+                      {m.clarifyingQuestions.map((q, qi) => {
+                        const key = `${i}_${qi}`;
+                        const selected = cqSelections[key] || [];
+                        return (
+                          <div key={qi} style={{ background:C.card, borderRadius:10, padding:"10px 12px", marginBottom:6, border:`1px solid ${C.border}` }}>
+                            <div style={{ fontFamily:C.fs, fontSize:11, color:C.text, marginBottom:8, lineHeight:1.4 }}>{q.question}</div>
+                            <div style={{ display:"flex", flexWrap:"wrap", gap:6 }}>
+                              {q.options.map((opt, oi) => {
+                                const on = selected.includes(opt);
+                                return (
+                                  <button key={oi} onClick={() => {
+                                    setCqSelections(prev => {
+                                      const cur = prev[key] || [];
+                                      return { ...prev, [key]: on ? cur.filter(x => x !== opt) : [...cur, opt] };
+                                    });
+                                  }} style={{
+                                    padding:"5px 10px", borderRadius:16, cursor:"pointer",
+                                    background: on ? `${C.cyan}22` : C.cardSolid,
+                                    border: `1px solid ${on ? C.cyan : C.border}`,
+                                    fontFamily:C.fm, fontSize:9, color: on ? C.cyan : C.muted, letterSpacing:1,
+                                  }}>{opt}</button>
+                                );
+                              })}
+                            </div>
+                          </div>
+                        );
+                      })}
+                      <button onClick={() => {
+                        const answers = m.clarifyingQuestions.map((q, qi) => {
+                          const sel = cqSelections[`${i}_${qi}`] || [];
+                          return `${q.question.replace("?","")}:  ${sel.join(", ") || "Not specified"}`;
+                        }).join(". ");
+                        setLabMessages(prev => prev.map((mm, mi) => mi === i ? {...mm, cqSubmitted:true} : mm));
+                        labSend(answers);
+                      }} style={{ width:"100%", padding:"10px", background:C.cyan, color:"#000", border:"none", borderRadius:8, cursor:"pointer", fontFamily:C.ff, fontSize:12, letterSpacing:2, marginTop:4 }}>CONFIRM →</button>
+                    </div>
+                  )}
+                  {m.cqSubmitted && <div style={{ fontFamily:C.fm, fontSize:7, color:C.green, letterSpacing:2, marginTop:3 }}>✓ ANSWERS SENT</div>}
                   {m.planChange && !m.planChangeAccepted && (
                     <div style={{ maxWidth:"90%", marginTop:4, background:C.card2, borderRadius:8, padding:"8px 10px", border:`1px solid ${C.cyan}33` }}>
                       <div style={{ fontFamily:C.ff, fontSize:12, color:C.text, marginBottom:4 }}>{m.planChange.description}</div>
