@@ -41,23 +41,21 @@ export default async function handler(req, res) {
     ]);
   }
 
-  try {
-    const headers = { Authorization: `Bearer ${access}` };
+  async function fetchWhoop(token) {
+    const headers = { Authorization: `Bearer ${token}` };
     const [recRes, sleepRes, cycleRes] = await Promise.all([
       fetch("https://api.prod.whoop.com/developer/v2/recovery?limit=1", { headers }),
       fetch("https://api.prod.whoop.com/developer/v2/activity/sleep?limit=1", { headers }),
       fetch("https://api.prod.whoop.com/developer/v2/cycle?limit=1", { headers }),
     ]);
+    return { recRes, sleepRes, cycleRes };
+  }
 
-    const [recData, sleepData, cycleData] = await Promise.all([
-      recRes.json(), sleepRes.json(), cycleRes.json(),
-    ]);
-
+  function formatResponse(recData, sleepData, cycleData) {
     const rec   = recData.records?.[0];
     const sleep = sleepData.records?.[0];
     const cycle = cycleData.records?.[0];
-
-    return res.status(200).json({
+    return {
       recovery: {
         score: Math.round(rec?.score?.recovery_score ?? 0),
         hrv:   Math.round(rec?.score?.hrv_rmssd_milli ?? 0),
@@ -75,7 +73,35 @@ export default async function handler(req, res) {
         avgHr: Math.round(cycle?.score?.average_heart_rate ?? 0),
         maxHr: Math.round(cycle?.score?.max_heart_rate ?? 0),
       },
-    });
+    };
+  }
+
+  try {
+    let { recRes, sleepRes, cycleRes } = await fetchWhoop(access);
+
+    // Auto-refresh on 401 — token expired but refresh cookie still valid
+    if ((recRes.status === 401 || sleepRes.status === 401 || cycleRes.status === 401) && refresh) {
+      const newTokens = await refreshToken(refresh);
+      if (newTokens.access_token) {
+        access = newTokens.access_token;
+        const opts = "Path=/; HttpOnly; SameSite=Lax";
+        res.setHeader("Set-Cookie", [
+          `whoop_access=${newTokens.access_token}; ${opts}; Max-Age=3600`,
+          `whoop_refresh=${newTokens.refresh_token || refresh}; ${opts}; Max-Age=2592000`,
+        ]);
+        ({ recRes, sleepRes, cycleRes } = await fetchWhoop(access));
+      } else {
+        return res.status(401).json({ error: "refresh_failed" });
+      }
+    }
+
+    if (recRes.status === 401) return res.status(401).json({ error: "token_expired" });
+
+    const [recData, sleepData, cycleData] = await Promise.all([
+      recRes.json(), sleepRes.json(), cycleRes.json(),
+    ]);
+
+    return res.status(200).json(formatResponse(recData, sleepData, cycleData));
   } catch (err) {
     return res.status(500).json({ error: "fetch_failed", details: err.message });
   }
