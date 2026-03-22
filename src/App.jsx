@@ -614,6 +614,7 @@ export default function App() {
   const [bloodworkResult, setBloodworkResult] = useState(null);
   const bloodworkInputRef = useRef(null);
   const [coachPersona, setCoachPersona] = useState("grinder");
+  const [showEntrance, setShowEntrance] = useState(false);
   const [garminActivities, setGarminActivities] = useState([]);
   const [garminConnected, setGarminConnected] = useState(false);
   const [proactiveMessages, setProactiveMessages] = useState([]);
@@ -1050,7 +1051,7 @@ export default function App() {
     );
   }
   if (!session) return <AuthScreen supabase={supabase} />;
-  if (!profile) return <Onboarding supabase={supabase} session={session} onComplete={setProfile} />;
+  if (!profile) return <Onboarding supabase={supabase} session={session} onComplete={(p) => { setShowEntrance(true); setTimeout(() => setShowEntrance(false), 2800); setProfile(p); }} />;
 
   const block   = planBlocks.find(b => b.id === blockId) || planBlocks[0] || null;
   const weeks   = block?.weeks || [];
@@ -1082,6 +1083,17 @@ export default function App() {
 
   return (
     <div style={{ minHeight:"100vh", background:C.bg, color:C.text, fontFamily:C.fs, maxWidth:480, margin:"0 auto", paddingBottom:80 }}>
+      {showEntrance && (
+        <div style={{ position:"fixed", inset:0, zIndex:9999, background:"#000", display:"flex", flexDirection:"column", alignItems:"center", justifyContent:"center", animation:"entrance-fade 2.8s ease forwards" }}>
+          <div style={{ fontSize:64, animation:"entrance-scale 1s cubic-bezier(.175,.885,.32,1.275) forwards", transform:"scale(0)" }}>△</div>
+          <div style={{ fontFamily:C.fm, fontSize:10, color:C.cyan, letterSpacing:6, marginTop:20, opacity:0, animation:"entrance-text 0.8s ease 0.6s forwards" }}>HYBRID PERFORMANCE OS</div>
+          <style>{`
+            @keyframes entrance-scale { 0%{transform:scale(0);opacity:0} 60%{transform:scale(1.1);opacity:1} 100%{transform:scale(1);opacity:1} }
+            @keyframes entrance-text { 0%{opacity:0;transform:translateY(8px)} 100%{opacity:1;transform:translateY(0)} }
+            @keyframes entrance-fade { 0%,70%{opacity:1} 100%{opacity:0;pointer-events:none} }
+          `}</style>
+        </div>
+      )}
 
       {nav === "today" && (
         <div>
