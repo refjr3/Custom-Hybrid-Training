@@ -562,7 +562,9 @@ export default function App() {
   const [labInput, setLabInput] = useState("");
   const [labLoading, setLabLoading] = useState(false);
   const [scenarioChanges, setScenarioChanges] = useState([]);
-  const [showLabExit, setShowLabExit] = useState(false);
+  const [showLabReview, setShowLabReview] = useState(false);
+  const [labToast, setLabToast] = useState(null);
+  const [labContext, setLabContext] = useState("");
 
   // ── Auth state ──────────────────────────────────────────────────────────────
   const [session, setSession]       = useState(null);
@@ -846,6 +848,10 @@ export default function App() {
         }),
       });
       const data = await res.json();
+      if (data.planChange?.day) {
+        const wk = week?.label?.split("·")[1]?.trim() || week?.label || "";
+        setLabContext(`${wk} · ${data.planChange.day}`);
+      }
       setLabMessages(prev => [...prev, { role:"assistant", content:data.message, planChange:data.planChange }]);
     } catch (e) {
       setLabMessages(prev => [...prev, { role:"assistant", content:"Connection error. Try again." }]);
@@ -865,23 +871,22 @@ export default function App() {
     }
     setScenarioChanges([]);
     setLabMessages([]);
+    setShowLabReview(false);
     setLabOpen(false);
-    setShowLabExit(false);
   };
 
   const labDiscard = () => {
     setScenarioChanges([]);
     setLabMessages([]);
+    setShowLabReview(false);
     setLabOpen(false);
-    setShowLabExit(false);
   };
 
   const labClose = () => {
+    setLabOpen(false);
     if (scenarioChanges.length > 0) {
-      setShowLabExit(true);
-    } else {
-      setLabOpen(false);
-      setLabMessages([]);
+      setLabToast(`${scenarioChanges.length} change${scenarioChanges.length>1?"s":""} saved in queue — tap to review`);
+      setTimeout(() => setLabToast(null), 5000);
     }
   };
 
@@ -1243,10 +1248,11 @@ export default function App() {
               const eAm = getEffAm(d);
               const ac  = d.isSunday && !sundayChoice[weekId] ? C.light : getAccent(eAm);
               const isSel = selDay === d.day;
+              const isToday = d.day === todayDayName;
               return (
-                <button key={d.day} onClick={() => { setSelDay(isSel ? null : d.day); setSess("am"); }} style={{ background: isSel ? C.card : "transparent", border:"none", borderRight: i<6 ? `1px solid ${C.border}` : "none", borderBottom:`2px solid ${isSel ? C.cyan : "transparent"}`, padding:"12px 4px 10px", cursor:"pointer", textAlign:"center", boxShadow: isSel ? `inset 0 0 16px ${C.cyan}10` : "none", transition:"all 0.15s" }}>
-                  <div style={{ fontFamily:C.fm, fontSize:7, color: isSel ? C.muted : C.light, letterSpacing:1 }}>{d.day}</div>
-                  <div style={{ fontFamily:C.fm, fontSize:6, color:C.light, margin:"2px 0 8px" }}>{d.date.split(" ")[1]}</div>
+                <button key={d.day} onClick={() => { setSelDay(isSel ? null : d.day); setSess("am"); }} style={{ background: isSel ? C.card : "transparent", border: isToday ? `1px solid ${C.cyan}44` : "none", borderRight: i<6 && !isToday ? `1px solid ${C.border}` : undefined, borderBottom:`2px solid ${isSel ? C.cyan : "transparent"}`, padding:"12px 4px 10px", cursor:"pointer", textAlign:"center", boxShadow: isSel ? `inset 0 0 16px ${C.cyan}10` : isToday ? `inset 0 0 12px ${C.cyan}08` : "none", transition:"all 0.15s" }}>
+                  <div style={{ fontFamily:C.fm, fontSize:7, color: isToday ? C.cyan : isSel ? C.muted : C.light, letterSpacing:1, fontWeight: isToday ? 700 : 400 }}>{d.day}</div>
+                  <div style={{ fontFamily:C.fm, fontSize:6, color: isToday ? C.cyan : C.light, margin:"2px 0 8px" }}>{d.date.split(" ")[1]}</div>
                   <div style={{ width:8, height:8, borderRadius:"50%", background:ac, margin:"0 auto", opacity: isSel ? 1 : 0.6 }} />
                   <div style={{ fontFamily:C.fm, fontSize:6, color: isSel ? ac : C.light, letterSpacing:1, marginTop:5, lineHeight:1.3 }}>
                     {d.isSunday ? (sundayChoice[weekId] ? sundayChoice[weekId].toUpperCase() : "?") : d.isRaceDay ? "RACE" : getTypeLabel(d.am)}
@@ -1259,6 +1265,7 @@ export default function App() {
                       ? <div style={{ fontSize:8, color:C.green, marginTop:2 }}>✓</div>
                       : d.am ? <div style={{ fontSize:8, color:C.light, marginTop:2 }}>—</div> : null;
                   })()}
+                  {isToday && <div style={{ width:4, height:4, borderRadius:"50%", background:C.cyan, margin:"3px auto 0" }} />}
                 </button>
               );
             })}
@@ -1308,7 +1315,7 @@ export default function App() {
             </div>
           )}
           <div style={{ margin:"0 20px 16px" }}>
-            <button onClick={() => { setLabOpen(true); setLabMessages([]); }}
+            <button onClick={() => { setLabOpen(true); setLabMessages([]); const wk = week?.label?.split("·")[1]?.trim() || week?.label || ""; const selD = selDay || todayDayName; setLabContext(`${wk} · ${selD}`); }}
               style={{ width:"100%", padding:"14px", background:`${C.cyan}08`, border:`1px solid ${C.cyan}22`, borderRadius:C.radius, cursor:"pointer", display:"flex", alignItems:"center", justifyContent:"center", gap:10, ...C.glass }}>
               <span style={{ fontSize:16 }}>🧪</span>
               <span style={{ fontFamily:C.ff, fontSize:14, color:C.cyan, letterSpacing:2 }}>RUN A SCENARIO</span>
@@ -1671,103 +1678,110 @@ export default function App() {
 
       {labOpen && (
         <>
-          <div onClick={labClose} style={{ position:"fixed", inset:0, zIndex:245, background:"rgba(0,0,0,0.5)" }} />
-          <div style={{ position:"fixed", bottom:0, left:"50%", transform:"translateX(-50%)", width:"100%", maxWidth:480, height:"50vh", zIndex:250, background:C.bg, borderTop:`1px solid ${C.cyan}33`, borderRadius:"20px 20px 0 0", display:"flex", flexDirection:"column", ...C.glass }}>
-            {/* Drag handle */}
-            <div style={{ display:"flex", justifyContent:"center", padding:"8px 0 4px" }}>
+          <div onClick={labClose} style={{ position:"fixed", inset:0, zIndex:245, background:"rgba(0,0,0,0.45)" }} />
+          <div style={{ position:"fixed", bottom:0, left:"50%", transform:"translateX(-50%)", width:"100%", maxWidth:480, height:"40vh", maxHeight:"48vh", zIndex:250, background:C.bg, borderRadius:"20px 20px 0 0", display:"flex", flexDirection:"column", boxShadow:"0 -8px 32px rgba(0,0,0,0.6)", marginTop:16, ...C.glass }}>
+            <div style={{ display:"flex", justifyContent:"center", padding:"8px 0 2px" }}>
               <div style={{ width:36, height:4, borderRadius:2, background:C.light }} />
             </div>
-            <div style={{ padding:"8px 20px 12px", borderBottom:`1px solid ${C.border}`, display:"flex", justifyContent:"space-between", alignItems:"center", flexShrink:0 }}>
+            <div style={{ padding:"6px 20px 10px", borderBottom:`1px solid ${C.border}`, display:"flex", justifyContent:"space-between", alignItems:"center", flexShrink:0 }}>
               <div style={{ display:"flex", alignItems:"center", gap:8 }}>
-                <span style={{ fontSize:14 }}>🧪</span>
-                <div>
-                  <div style={{ fontFamily:C.ff, fontSize:14, color:C.cyan, letterSpacing:2 }}>SCENARIO MODE</div>
-                  <div style={{ fontFamily:C.fm, fontSize:6, color:C.muted, letterSpacing:2 }}>
-                    {scenarioChanges.length > 0 ? `${scenarioChanges.length} CHANGE${scenarioChanges.length>1?"S":""} QUEUED` : "WHAT-IF PLANNING"}
-                  </div>
-                </div>
+                <span style={{ fontSize:13 }}>🧪</span>
+                <div style={{ fontFamily:C.fm, fontSize:7, color:C.cyan, letterSpacing:2 }}>SCENARIO MODE{labContext ? ` · ${labContext.toUpperCase()}` : ""}</div>
               </div>
-              <div style={{ display:"flex", gap:6 }}>
-                {scenarioChanges.length > 0 && (
-                  <button onClick={() => { setScenarioChanges([]); setLabMessages([]); }}
-                    style={{ padding:"6px 10px", background:"transparent", border:`1px solid ${C.border}`, borderRadius:8, cursor:"pointer", fontFamily:C.fm, fontSize:7, color:C.muted, letterSpacing:1 }}>CLEAR</button>
-                )}
-                <button onClick={labClose} style={{ background:C.cardSolid, border:"none", color:C.muted, width:28, height:28, borderRadius:"50%", cursor:"pointer", fontSize:12 }}>✕</button>
-              </div>
+              <button onClick={labClose} style={{ background:C.cardSolid, border:"none", color:C.muted, width:26, height:26, borderRadius:"50%", cursor:"pointer", fontSize:11 }}>✕</button>
             </div>
 
-            <div style={{ flex:1, overflowY:"auto", padding:"12px 20px", display:"flex", flexDirection:"column", gap:10 }}>
+            <div style={{ flex:1, overflowY:"auto", padding:"10px 20px", display:"flex", flexDirection:"column", gap:8 }}>
               {labMessages.length === 0 && (
-                <div style={{ padding:"8px 0" }}>
-                  <div style={{ fontFamily:C.fm, fontSize:7, color:C.muted, letterSpacing:3, marginBottom:8, textTransform:"uppercase" }}>TRY A SCENARIO</div>
-                  {[
-                    "Skip Sunday's long run, redistribute volume",
-                    "Traveling 3 days — hotel gym only",
-                    "Wedding this weekend, adjust my week",
-                    "Add a second threshold session",
-                    "Start taper now — race in 2 weeks",
-                  ].map((p,i) => (
+                <div>
+                  <div style={{ fontFamily:C.fm, fontSize:7, color:C.muted, letterSpacing:3, marginBottom:6, textTransform:"uppercase" }}>TRY A SCENARIO</div>
+                  {["Skip Sunday's long run, redistribute volume","Traveling 3 days — hotel gym only","Wedding this weekend, adjust week","Add a second threshold session","Start taper — race in 2 weeks"].map((p,i) => (
                     <button key={i} onClick={() => labSend(p)}
-                      style={{ display:"block", width:"100%", padding:"10px 14px", marginBottom:6, background:C.card, border:`1px solid ${C.border}`, borderRadius:10, cursor:"pointer", textAlign:"left", fontFamily:C.fs, fontSize:12, color:C.text, lineHeight:1.4, ...C.glass }}>{p}</button>
+                      style={{ display:"block", width:"100%", padding:"8px 12px", marginBottom:5, background:C.card, border:`1px solid ${C.border}`, borderRadius:8, cursor:"pointer", textAlign:"left", fontFamily:C.fs, fontSize:11, color:C.text, lineHeight:1.4 }}>{p}</button>
                   ))}
                 </div>
               )}
               {labMessages.map((m, i) => (
                 <div key={i} style={{ display:"flex", flexDirection:"column", alignItems: m.role==="user" ? "flex-end" : "flex-start" }}>
-                  <div style={{ maxWidth:"90%", padding:"10px 14px", borderRadius: m.role==="user" ? "14px 14px 4px 14px" : "14px 14px 14px 4px", background: m.role==="user" ? "rgba(0,243,255,0.15)" : C.card, border: m.role==="user" ? `1px solid ${C.cyan}33` : `1px solid ${C.border}`, ...C.glass }}>
-                    <div style={{ fontFamily:C.fs, fontSize:12, color:C.text, lineHeight:1.5 }}>{renderMarkdown(m.content)}</div>
+                  <div style={{ maxWidth:"90%", padding:"8px 12px", borderRadius: m.role==="user" ? "12px 12px 4px 12px" : "12px 12px 12px 4px", background: m.role==="user" ? "rgba(0,243,255,0.15)" : C.card, border: m.role==="user" ? `1px solid ${C.cyan}33` : `1px solid ${C.border}` }}>
+                    <div style={{ fontFamily:C.fs, fontSize:11, color:C.text, lineHeight:1.5 }}>{renderMarkdown(m.content)}</div>
                   </div>
                   {m.planChange && !m.planChangeAccepted && (
-                    <div style={{ maxWidth:"90%", marginTop:6, background:C.card2, borderRadius:10, padding:"10px 12px", border:`1px solid ${C.cyan}33` }}>
-                      <div style={{ fontFamily:C.fm, fontSize:7, color:C.cyan, letterSpacing:3, marginBottom:4 }}>PROPOSED CHANGE</div>
-                      <div style={{ fontFamily:C.ff, fontSize:13, color:C.text, marginBottom:4 }}>{m.planChange.description}</div>
-                      <div style={{ display:"flex", gap:6, marginTop:8 }}>
-                        <button onClick={() => handleLabAccept(m.planChange)} style={{ flex:1, padding:"8px", background:C.green, color:"#000", border:"none", borderRadius:8, cursor:"pointer", fontFamily:C.ff, fontSize:11, letterSpacing:2 }}>QUEUE CHANGE</button>
-                        <button onClick={() => setLabMessages(prev => prev.map(mm => mm.planChange === m.planChange ? {...mm, planChangeAccepted:"rejected"} : mm))} style={{ flex:1, padding:"8px", background:"transparent", color:C.muted, border:`1px solid ${C.border}`, borderRadius:8, cursor:"pointer", fontFamily:C.ff, fontSize:11, letterSpacing:2 }}>SKIP</button>
+                    <div style={{ maxWidth:"90%", marginTop:4, background:C.card2, borderRadius:8, padding:"8px 10px", border:`1px solid ${C.cyan}33` }}>
+                      <div style={{ fontFamily:C.ff, fontSize:12, color:C.text, marginBottom:4 }}>{m.planChange.description}</div>
+                      <div style={{ display:"flex", gap:6 }}>
+                        <button onClick={() => handleLabAccept(m.planChange)} style={{ flex:1, padding:"6px", background:C.green, color:"#000", border:"none", borderRadius:6, cursor:"pointer", fontFamily:C.ff, fontSize:10, letterSpacing:2 }}>QUEUE</button>
+                        <button onClick={() => setLabMessages(prev => prev.map(mm => mm.planChange === m.planChange ? {...mm, planChangeAccepted:"rejected"} : mm))} style={{ flex:1, padding:"6px", background:"transparent", color:C.muted, border:`1px solid ${C.border}`, borderRadius:6, cursor:"pointer", fontFamily:C.ff, fontSize:10, letterSpacing:2 }}>SKIP</button>
                       </div>
                     </div>
                   )}
-                  {m.planChangeAccepted === true && (
-                    <div style={{ fontFamily:C.fm, fontSize:7, color:C.green, letterSpacing:2, marginTop:4 }}>✓ QUEUED</div>
-                  )}
-                  {m.planChangeAccepted === "rejected" && (
-                    <div style={{ fontFamily:C.fm, fontSize:7, color:C.muted, letterSpacing:2, marginTop:4 }}>✕ SKIPPED</div>
-                  )}
+                  {m.planChangeAccepted === true && <div style={{ fontFamily:C.fm, fontSize:7, color:C.green, letterSpacing:2, marginTop:3 }}>✓ QUEUED</div>}
+                  {m.planChangeAccepted === "rejected" && <div style={{ fontFamily:C.fm, fontSize:7, color:C.muted, letterSpacing:2, marginTop:3 }}>✕ SKIPPED</div>}
                 </div>
               ))}
               {labLoading && (
-                <div style={{ background:C.card, borderRadius:"14px 14px 14px 4px", padding:"10px 14px", border:`1px solid ${C.border}`, ...C.glass, alignSelf:"flex-start" }}>
-                  <div className="shimmer" style={{ fontFamily:C.fm, fontSize:10, letterSpacing:3 }}>SIMULATING</div>
+                <div style={{ background:C.card, borderRadius:"12px 12px 12px 4px", padding:"8px 12px", border:`1px solid ${C.border}`, alignSelf:"flex-start" }}>
+                  <div className="shimmer" style={{ fontFamily:C.fm, fontSize:9, letterSpacing:3 }}>SIMULATING</div>
                 </div>
               )}
             </div>
 
-            <div style={{ padding:"10px 20px 16px", display:"flex", gap:8, flexShrink:0 }}>
+            {scenarioChanges.length > 0 && (
+              <button onClick={() => setShowLabReview(true)}
+                style={{ margin:"0 20px 8px", padding:"10px", background:`${C.cyan}12`, border:`1px solid ${C.cyan}33`, borderRadius:10, cursor:"pointer", display:"flex", alignItems:"center", justifyContent:"center", gap:8 }}>
+                <div style={{ width:6, height:6, borderRadius:"50%", background:C.cyan }} />
+                <div style={{ fontFamily:C.fm, fontSize:8, color:C.cyan, letterSpacing:2 }}>{scenarioChanges.length} CHANGE{scenarioChanges.length>1?"S":""} QUEUED → REVIEW</div>
+              </button>
+            )}
+
+            <div style={{ padding:"8px 20px 14px", display:"flex", gap:8, flexShrink:0 }}>
               <input
                 value={labInput}
                 onChange={e => setLabInput(e.target.value)}
                 onKeyDown={e => { if (e.key === "Enter") labSend(labInput); }}
                 placeholder="Describe your scenario..."
-                style={{ flex:1, background:C.card, border:`1px solid ${C.cyan}22`, borderRadius:10, padding:"12px 14px", color:C.text, fontFamily:C.fs, fontSize:13, outline:"none", ...C.glass }}
+                style={{ flex:1, background:C.card, border:`1px solid ${C.cyan}22`, borderRadius:10, padding:"10px 12px", color:C.text, fontFamily:C.fs, fontSize:12, outline:"none" }}
               />
-              <button onClick={() => labSend(labInput)} disabled={labLoading || !labInput.trim()} style={{ width:44, height:44, background: labInput.trim() ? C.cyan : C.card, border:"none", borderRadius:10, cursor: labInput.trim() ? "pointer" : "default", color: labInput.trim() ? "#000" : C.muted, fontSize:16, flexShrink:0 }}>↑</button>
+              <button onClick={() => labSend(labInput)} disabled={labLoading || !labInput.trim()} style={{ width:40, height:40, background: labInput.trim() ? C.cyan : C.card, border:"none", borderRadius:10, cursor: labInput.trim() ? "pointer" : "default", color: labInput.trim() ? "#000" : C.muted, fontSize:15, flexShrink:0 }}>↑</button>
             </div>
           </div>
         </>
       )}
 
-      {showLabExit && (
-        <div style={{ position:"fixed", inset:0, zIndex:260, background:"rgba(0,0,0,0.8)", display:"flex", alignItems:"center", justifyContent:"center" }}>
-          <div style={{ background:C.bg, borderRadius:C.radius, padding:"24px", width:"calc(100% - 48px)", maxWidth:360, border:`1px solid ${C.border}`, ...C.glass }}>
-            <div style={{ fontFamily:C.ff, fontSize:20, color:C.text, letterSpacing:1, marginBottom:8 }}>APPLY CHANGES?</div>
-            <div style={{ fontFamily:C.fs, fontSize:13, color:C.muted, lineHeight:1.6, marginBottom:16 }}>
-              You have {scenarioChanges.length} queued change{scenarioChanges.length>1?"s":""}. Apply them to your plan?
-            </div>
-            <div style={{ display:"flex", gap:8 }}>
-              <button onClick={labApplyAll} style={{ flex:1, padding:"14px", background:C.green, color:"#000", border:"none", borderRadius:10, cursor:"pointer", fontFamily:C.ff, fontSize:14, letterSpacing:2 }}>APPLY ALL</button>
-              <button onClick={labDiscard} style={{ flex:1, padding:"14px", background:"transparent", color:C.muted, border:`1px solid ${C.border}`, borderRadius:10, cursor:"pointer", fontFamily:C.ff, fontSize:14, letterSpacing:2 }}>DISCARD</button>
-            </div>
+      {showLabReview && (
+        <div style={{ position:"fixed", inset:0, zIndex:260, background:"rgba(10,10,10,0.97)", display:"flex", flexDirection:"column", maxWidth:480, margin:"0 auto" }}>
+          <div style={{ padding:"20px", borderBottom:`1px solid ${C.border}`, display:"flex", justifyContent:"space-between", alignItems:"center", flexShrink:0 }}>
+            <div style={{ fontFamily:C.ff, fontSize:20, color:C.cyan, letterSpacing:2 }}>REVIEW CHANGES</div>
+            <button onClick={() => setShowLabReview(false)} style={{ background:C.cardSolid, border:"none", color:C.muted, width:32, height:32, borderRadius:"50%", cursor:"pointer", fontSize:14 }}>✕</button>
           </div>
+          <div style={{ flex:1, overflowY:"auto", padding:"16px 20px" }}>
+            {scenarioChanges.map((c, i) => (
+              <div key={i} style={{ background:C.card, borderRadius:C.radius, padding:"14px 16px", marginBottom:10, border:`1px solid ${C.border}`, ...C.glass }}>
+                <div style={{ fontFamily:C.fm, fontSize:7, color:C.muted, letterSpacing:3, marginBottom:6 }}>CHANGE {i+1}{c.day ? ` · ${c.day}` : ""}</div>
+                <div style={{ display:"flex", gap:12 }}>
+                  <div style={{ flex:1 }}>
+                    <div style={{ fontFamily:C.fm, fontSize:6, color:C.muted, letterSpacing:2, marginBottom:4 }}>ORIGINAL</div>
+                    <div style={{ fontFamily:C.fs, fontSize:12, color:C.muted, lineHeight:1.5 }}>{c.changes?.am_session || c.changes?.note || "Current session"}</div>
+                  </div>
+                  <div style={{ width:1, background:C.border }} />
+                  <div style={{ flex:1 }}>
+                    <div style={{ fontFamily:C.fm, fontSize:6, color:C.cyan, letterSpacing:2, marginBottom:4 }}>MODIFIED</div>
+                    <div style={{ fontFamily:C.fs, fontSize:12, color:C.cyan, lineHeight:1.5 }}>{c.description}</div>
+                  </div>
+                </div>
+              </div>
+            ))}
+          </div>
+          <div style={{ padding:"16px 20px 24px", flexShrink:0 }}>
+            <button onClick={labApplyAll} style={{ width:"100%", padding:"16px", background:C.green, color:"#000", border:"none", borderRadius:12, cursor:"pointer", fontFamily:C.ff, fontSize:16, letterSpacing:3, marginBottom:10 }}>APPLY TO PLAN</button>
+            <button onClick={labDiscard} style={{ width:"100%", padding:"10px", background:"transparent", color:C.muted, border:"none", cursor:"pointer", fontFamily:C.fm, fontSize:9, letterSpacing:2 }}>DISCARD ALL</button>
+          </div>
+        </div>
+      )}
+
+      {labToast && (
+        <div onClick={() => { setLabOpen(true); setLabToast(null); }} style={{ position:"fixed", bottom:90, left:"50%", transform:"translateX(-50%)", zIndex:200, background:C.cardSolid, border:`1px solid ${C.cyan}33`, borderRadius:12, padding:"10px 16px", cursor:"pointer", boxShadow:"0 4px 20px rgba(0,0,0,0.5)", maxWidth:380 }}>
+          <div style={{ fontFamily:C.fm, fontSize:8, color:C.cyan, letterSpacing:1 }}>{labToast}</div>
         </div>
       )}
     </div>
