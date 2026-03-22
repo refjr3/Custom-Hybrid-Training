@@ -179,6 +179,7 @@ const AIChat = ({ whoopData, currentWeek, recentActivities, onPlanChange, userNa
   const [showPersonas, setShowPersonas] = useState(false);
   const [isRecording, setIsRecording] = useState(false);
   const [chatCqSelections, setChatCqSelections] = useState({});
+  const [pendingReview, setPendingReview] = useState(null);
   const recognitionRef = useRef(null);
   const messagesEndRef = useRef(null);
   const textareaRef = useRef(null);
@@ -394,14 +395,14 @@ const AIChat = ({ whoopData, currentWeek, recentActivities, onPlanChange, userNa
                 <div style={{ fontFamily:C.fm, fontSize:7, color:C.green, letterSpacing:3, marginBottom:6 }}>PROPOSED CHANGE</div>
                 <div style={{ fontFamily:C.ff, fontSize:14, color:C.text, marginBottom:4 }}>{m.planChange.description}</div>
                 <div style={{ display:"flex", gap:8, marginTop:10 }}>
-                  <button onClick={() => handlePlanChange(m.planChange, "accept")} style={{ flex:1, padding:"10px", background:C.green, color:"#000", border:"none", borderRadius:8, cursor:"pointer", fontFamily:C.ff, fontSize:12, letterSpacing:2 }}>ACCEPT</button>
-                  <button onClick={() => handlePlanChange(m.planChange, "reject")} style={{ flex:1, padding:"10px", background:"transparent", color:C.muted, border:`1px solid ${C.border}`, borderRadius:8, cursor:"pointer", fontFamily:C.ff, fontSize:12, letterSpacing:2 }}>REJECT</button>
+                  <button onClick={() => setPendingReview({ planChange:m.planChange, msgIdx:i })} style={{ flex:1, padding:"10px", background:C.green, color:"#000", border:"none", borderRadius:8, cursor:"pointer", fontFamily:C.ff, fontSize:12, letterSpacing:2 }}>REVIEW CHANGES</button>
+                  <button onClick={() => handlePlanChange(m.planChange, "reject")} style={{ flex:1, padding:"10px", background:"transparent", color:C.muted, border:`1px solid ${C.border}`, borderRadius:8, cursor:"pointer", fontFamily:C.ff, fontSize:12, letterSpacing:2 }}>DISMISS</button>
                 </div>
               </div>
             )}
             {m.planChange && m.planChangeStatus && (
-              <div style={{ fontFamily:C.fm, fontSize:8, color: m.planChangeStatus==="accepted" ? C.green : C.muted, letterSpacing:2, marginTop:4 }}>
-                {m.planChangeStatus === "accepted" ? "✓ CHANGE ACCEPTED" : "✕ CHANGE REJECTED"}
+              <div style={{ fontFamily:C.fm, fontSize:8, color: m.planChangeStatus==="accepted" ? C.green : m.planChangeStatus==="applying" ? C.cyan : C.muted, letterSpacing:2, marginTop:4 }}>
+                {m.planChangeStatus === "accepted" ? "✓ APPLIED TO PLAN" : m.planChangeStatus === "applying" ? "APPLYING..." : "✕ DISMISSED"}
               </div>
             )}
           </div>
@@ -451,12 +452,46 @@ const AIChat = ({ whoopData, currentWeek, recentActivities, onPlanChange, userNa
           placeholder="Ask your coach anything..."
           style={{ flex:1, background:C.card, border:`1px solid ${C.cyan}22`, borderRadius:12, padding:"12px 16px", color:C.text, fontFamily:C.fs, fontSize:14, outline:"none", resize:"none", overflow:"hidden", lineHeight:"1.5", maxHeight:120, ...C.glass }}
         />
-        <button onClick={() => fileInputRef.current?.click()} style={{ width:36, height:36, background: attachment ? `${C.green}22` : C.card2, border:`1px solid ${attachment ? C.green+"44" : C.border}`, borderRadius:10, cursor:"pointer", color: attachment ? C.green : C.muted, fontSize:16, flexShrink:0, display:"flex", alignItems:"center", justifyContent:"center" }} title="Attach image or PDF">📎</button>
+        {/* TODO: Re-add when image upload is verified working end-to-end */}
         <button onClick={toggleVoice} style={{ width:36, height:36, background: isRecording ? `${C.red}22` : C.card2, border:`1px solid ${isRecording ? C.red+"44" : C.border}`, borderRadius:10, cursor:"pointer", color: isRecording ? C.red : C.muted, fontSize:16, flexShrink:0, display:"flex", alignItems:"center", justifyContent:"center" }} title={isRecording ? "Stop recording" : "Voice input"}>
           {isRecording ? <span className="pulse" style={{ fontSize:14 }}>●</span> : "🎙"}
         </button>
         <button onClick={sendMessage} disabled={loading || (!input.trim() && !attachment)} style={{ width:48, height:48, background: (input.trim() || attachment) ? C.green : C.card, border:"none", borderRadius:12, cursor: (input.trim() || attachment) ? "pointer" : "default", color: (input.trim() || attachment) ? "#000" : C.muted, fontSize:18, flexShrink:0 }}>↑</button>
       </div>
+      {pendingReview && (
+        <div style={{ position:"fixed", inset:0, zIndex:300, background:"rgba(10,10,10,0.97)", display:"flex", flexDirection:"column", maxWidth:480, margin:"0 auto" }}>
+          <div style={{ padding:"20px", borderBottom:`1px solid ${C.border}`, display:"flex", justifyContent:"space-between", alignItems:"center" }}>
+            <div style={{ fontFamily:C.ff, fontSize:20, color:C.cyan, letterSpacing:2 }}>REVIEW CHANGES</div>
+            <button onClick={() => setPendingReview(null)} style={{ background:C.cardSolid, border:"none", color:C.muted, width:32, height:32, borderRadius:"50%", cursor:"pointer", fontSize:14 }}>✕</button>
+          </div>
+          <div style={{ flex:1, overflowY:"auto", padding:"20px" }}>
+            {(() => {
+              const pc = pendingReview.planChange;
+              const days = pc.type === "remap_week" ? (pc.days || []) : [{ day:pc.day, changes:pc.changes }];
+              return days.map((d, di) => (
+                <div key={di} style={{ background:C.card, borderRadius:C.radius, padding:"14px 16px", marginBottom:10, border:`1px solid ${C.border}`, ...C.glass }}>
+                  <div style={{ fontFamily:C.fm, fontSize:7, color:C.muted, letterSpacing:3, marginBottom:8 }}>{d.day || "SESSION"}</div>
+                  <div style={{ display:"flex", gap:12 }}>
+                    <div style={{ flex:1 }}>
+                      <div style={{ fontFamily:C.fm, fontSize:6, color:C.muted, letterSpacing:2, marginBottom:4 }}>CURRENT</div>
+                      <div style={{ fontFamily:C.fs, fontSize:12, color:C.muted, lineHeight:1.5 }}>{d.changes?.am_session || d.changes?.note || "Current session"}</div>
+                    </div>
+                    <div style={{ width:1, background:C.border }} />
+                    <div style={{ flex:1 }}>
+                      <div style={{ fontFamily:C.fm, fontSize:6, color:C.cyan, letterSpacing:2, marginBottom:4 }}>PROPOSED</div>
+                      <div style={{ fontFamily:C.fs, fontSize:12, color:C.cyan, lineHeight:1.5 }}>{pc.description}</div>
+                    </div>
+                  </div>
+                </div>
+              ));
+            })()}
+          </div>
+          <div style={{ padding:"16px 20px 24px" }}>
+            <button onClick={async () => { await handlePlanChange(pendingReview.planChange, "accept"); setPendingReview(null); }} style={{ width:"100%", padding:"16px", background:C.green, color:"#000", border:"none", borderRadius:12, cursor:"pointer", fontFamily:C.ff, fontSize:16, letterSpacing:3, marginBottom:10 }}>APPLY TO PLAN</button>
+            <button onClick={() => { handlePlanChange(pendingReview.planChange, "reject"); setPendingReview(null); }} style={{ width:"100%", padding:"10px", background:"transparent", color:C.muted, border:"none", cursor:"pointer", fontFamily:C.fm, fontSize:9, letterSpacing:2 }}>CANCEL</button>
+          </div>
+        </div>
+      )}
     </div>
   );
 };
