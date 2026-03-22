@@ -154,7 +154,7 @@ const PERSONAS = [
   { id:"sage",      label:"THE SAGE",      sub:"Mindful · RPE-based", color:"#00D4A0" },
 ];
 
-const AIChat = ({ whoopData, currentWeek, recentActivities, onPlanChange, userName, persona, onPersonaChange }) => {
+const AIChat = ({ whoopData, currentWeek, recentActivities, onPlanChange, userName, persona, onPersonaChange, proactiveBadge }) => {
   const [messages, setMessages] = useState([
     { role:"assistant", content:`Hey ${userName || "there"} — I have your WHOOP data, training plan, and biomarkers loaded. What do you need?`, planChange:null }
   ]);
@@ -163,9 +163,34 @@ const AIChat = ({ whoopData, currentWeek, recentActivities, onPlanChange, userNa
   const [expanded, setExpanded] = useState(false);
   const [attachment, setAttachment] = useState(null);
   const [showPersonas, setShowPersonas] = useState(false);
+  const [isRecording, setIsRecording] = useState(false);
+  const recognitionRef = useRef(null);
   const messagesEndRef = useRef(null);
   const textareaRef = useRef(null);
   const fileInputRef = useRef(null);
+
+  const toggleVoice = () => {
+    if (isRecording) {
+      recognitionRef.current?.stop();
+      setIsRecording(false);
+      return;
+    }
+    const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+    if (!SpeechRecognition) return;
+    const recognition = new SpeechRecognition();
+    recognition.continuous = false;
+    recognition.interimResults = true;
+    recognition.lang = "en-US";
+    recognition.onresult = (e) => {
+      const transcript = Array.from(e.results).map(r => r[0].transcript).join("");
+      setInput(transcript);
+    };
+    recognition.onend = () => setIsRecording(false);
+    recognition.onerror = () => setIsRecording(false);
+    recognitionRef.current = recognition;
+    recognition.start();
+    setIsRecording(true);
+  };
 
   useEffect(() => {
     if (expanded) messagesEndRef.current?.scrollIntoView({ behavior:"smooth" });
@@ -216,14 +241,19 @@ const AIChat = ({ whoopData, currentWeek, recentActivities, onPlanChange, userNa
       <div style={{ position:"fixed", bottom:80, left:"50%", transform:"translateX(-50%)", width:"calc(100% - 40px)", maxWidth:440, zIndex:150 }}>
         <button onClick={() => setExpanded(true)}
           style={{ width:"100%", padding:"14px 20px", background:C.card, border:`1px solid ${C.border}`, borderRadius:C.radius, display:"flex", alignItems:"center", gap:12, cursor:"pointer", boxShadow:"0 4px 20px rgba(0,0,0,0.5)", ...C.glass }}>
-          <div style={{ width:32, height:32, borderRadius:"50%", background:`${C.green}22`, border:`1px solid ${C.green}44`, display:"flex", alignItems:"center", justifyContent:"center", flexShrink:0 }}>
-            <span style={{ fontSize:14 }}>✦</span>
+          <div style={{ position:"relative", width:32, height:32, borderRadius:"50%", background:`${C.cyan}15`, border:`1px solid ${C.cyan}33`, display:"flex", alignItems:"center", justifyContent:"center", flexShrink:0 }}>
+            <span style={{ fontSize:14, color:C.cyan }}>✦</span>
+            {proactiveBadge > 0 && (
+              <div style={{ position:"absolute", top:-4, right:-4, width:16, height:16, borderRadius:"50%", background:C.red, display:"flex", alignItems:"center", justifyContent:"center" }}>
+                <span style={{ fontFamily:C.fm, fontSize:8, color:"#fff", fontWeight:700 }}>{proactiveBadge}</span>
+              </div>
+            )}
           </div>
           <div style={{ flex:1, textAlign:"left" }}>
             <div style={{ fontFamily:C.ff, fontSize:13, color:C.text, letterSpacing:1 }}>ASK YOUR COACH</div>
-            <div style={{ fontFamily:C.fm, fontSize:8, color:C.muted, letterSpacing:1, marginTop:2 }}>Claude · Powered by Anthropic</div>
+            <div style={{ fontFamily:C.fm, fontSize:7, color:C.muted, letterSpacing:2, marginTop:2 }}>Claude · Powered by Anthropic</div>
           </div>
-          <div style={{ fontFamily:C.fm, fontSize:8, color:C.green, letterSpacing:2 }}>OPEN ↑</div>
+          <div style={{ fontFamily:C.fm, fontSize:7, color:C.cyan, letterSpacing:2 }}>OPEN ↑</div>
         </button>
       </div>
     );
@@ -243,6 +273,12 @@ const AIChat = ({ whoopData, currentWeek, recentActivities, onPlanChange, userNa
         </div>
         <button onClick={() => setExpanded(false)} style={{ background:C.cardSolid, border:"none", color:C.muted, width:32, height:32, borderRadius:"50%", cursor:"pointer", fontSize:14 }}>✕</button>
       </div>
+      {isRecording && (
+        <div style={{ padding:"8px 20px", background:`${C.red}15`, borderBottom:`1px solid ${C.red}33`, display:"flex", alignItems:"center", gap:8 }}>
+          <span className="pulse" style={{ color:C.red, fontSize:10 }}>●</span>
+          <div style={{ fontFamily:C.fm, fontSize:8, color:C.red, letterSpacing:3 }}>RECORDING — TAP MIC TO STOP</div>
+        </div>
+      )}
       {showPersonas && (
         <div style={{ padding:"12px 20px", borderBottom:`1px solid ${C.border}`, display:"flex", gap:8 }}>
           {PERSONAS.map(p => (
@@ -335,6 +371,9 @@ const AIChat = ({ whoopData, currentWeek, recentActivities, onPlanChange, userNa
           style={{ flex:1, background:C.card, border:`1px solid ${C.cyan}22`, borderRadius:12, padding:"12px 16px", color:C.text, fontFamily:C.fs, fontSize:14, outline:"none", resize:"none", overflow:"hidden", lineHeight:"1.5", maxHeight:120, ...C.glass }}
         />
         <button onClick={() => fileInputRef.current?.click()} style={{ width:36, height:36, background: attachment ? `${C.green}22` : C.card2, border:`1px solid ${attachment ? C.green+"44" : C.border}`, borderRadius:10, cursor:"pointer", color: attachment ? C.green : C.muted, fontSize:16, flexShrink:0, display:"flex", alignItems:"center", justifyContent:"center" }} title="Attach image or PDF">📎</button>
+        <button onClick={toggleVoice} style={{ width:36, height:36, background: isRecording ? `${C.red}22` : C.card2, border:`1px solid ${isRecording ? C.red+"44" : C.border}`, borderRadius:10, cursor:"pointer", color: isRecording ? C.red : C.muted, fontSize:16, flexShrink:0, display:"flex", alignItems:"center", justifyContent:"center" }} title={isRecording ? "Stop recording" : "Voice input"}>
+          {isRecording ? <span className="pulse" style={{ fontSize:14 }}>●</span> : "🎙"}
+        </button>
         <button onClick={sendMessage} disabled={loading || (!input.trim() && !attachment)} style={{ width:48, height:48, background: (input.trim() || attachment) ? C.green : C.card, border:"none", borderRadius:12, cursor: (input.trim() || attachment) ? "pointer" : "default", color: (input.trim() || attachment) ? "#000" : C.muted, fontSize:18, flexShrink:0 }}>↑</button>
       </div>
     </div>
@@ -509,6 +548,15 @@ export default function App() {
   const [bloodworkResult, setBloodworkResult] = useState(null);
   const bloodworkInputRef = useRef(null);
   const [coachPersona, setCoachPersona] = useState("grinder");
+  const [garminActivities, setGarminActivities] = useState([]);
+  const [garminConnected, setGarminConnected] = useState(false);
+  const [proactiveMessages, setProactiveMessages] = useState([]);
+  const [proactiveBadge, setProactiveBadge] = useState(0);
+  const [unifiedMetrics, setUnifiedMetrics] = useState([]);
+  const [labOpen, setLabOpen] = useState(false);
+  const [labMessages, setLabMessages] = useState([]);
+  const [labInput, setLabInput] = useState("");
+  const [labLoading, setLabLoading] = useState(false);
 
   // ── Auth state ──────────────────────────────────────────────────────────────
   const [session, setSession]       = useState(null);
@@ -556,11 +604,20 @@ export default function App() {
     if (profile.coach_persona) {
       setCoachPersona(profile.coach_persona);
     }
+    if (profile.connected_wearables?.garmin) {
+      setGarminConnected(true);
+    }
+    if (params.get("garmin_connected") === "true") {
+      setGarminConnected(true);
+      window.history.replaceState({}, "", "/");
+    }
 
     fetchWhoopData();
     fetchBiomarkers();
     fetchSupplements();
     fetchPlan(session?.access_token);
+    fetchGarminActivities();
+    fetchUnifiedMetrics();
   }, [profile]);
 
   const fetchWhoopData = async () => {
@@ -600,6 +657,28 @@ export default function App() {
       if (data) setSupplements(data);
     } catch (e) {}
     finally { setSuppsLoading(false); }
+  };
+
+  const fetchGarminActivities = async () => {
+    try {
+      const { data } = await supabase
+        .from("garmin_activities")
+        .select("*")
+        .order("start_time", { ascending: false })
+        .limit(20);
+      if (data) setGarminActivities(data);
+    } catch (_) {}
+  };
+
+  const fetchUnifiedMetrics = async () => {
+    try {
+      const { data } = await supabase
+        .from("unified_metrics")
+        .select("*")
+        .order("date", { ascending: false })
+        .limit(90);
+      if (data) setUnifiedMetrics(data);
+    } catch (_) {}
   };
 
   // Fix #5: accept token as a parameter so callers always pass the live token —
@@ -675,6 +754,101 @@ export default function App() {
         localStorage.setItem("synthesis_date", today);
       });
   }, [whoopData, planBlocks]);
+
+  // Proactive Coaching: check HRV trend + Sunday weekly review
+  useEffect(() => {
+    if (!whoopData || !session?.access_token) return;
+    const today = new Date().toISOString().slice(0, 10);
+    if (localStorage.getItem("proactive_date") === today) return;
+
+    const checkProactive = async () => {
+      const msgs = [];
+      const hrv = whoopData?.recovery?.hrv;
+      if (hrv) {
+        const storedHrvs = JSON.parse(localStorage.getItem("hrv_history") || "[]");
+        storedHrvs.push({ date: today, value: hrv });
+        const recent = storedHrvs.slice(-7);
+        localStorage.setItem("hrv_history", JSON.stringify(recent));
+
+        if (recent.length >= 3) {
+          const last3 = recent.slice(-3).map(h => h.value);
+          const declining = last3.every((v, i) => i === 0 || v < last3[i - 1]);
+          if (declining) {
+            try {
+              const res = await fetch("/api/coaching/proactive", {
+                method: "POST",
+                headers: { "Content-Type": "application/json", "Authorization": `Bearer ${session.access_token}` },
+                body: JSON.stringify({ type: "hrv_trend", hrv_values: last3 }),
+              });
+              const data = await res.json();
+              if (data.messages?.length) msgs.push(...data.messages);
+            } catch (_) {}
+          }
+        }
+      }
+
+      if (new Date().getDay() === 0) {
+        try {
+          const res = await fetch("/api/coaching/proactive", {
+            method: "POST",
+            headers: { "Content-Type": "application/json", "Authorization": `Bearer ${session.access_token}` },
+            body: JSON.stringify({
+              type: "weekly_review",
+              week_summary: {
+                recovery: whoopData?.recovery?.score,
+                hrv: whoopData?.recovery?.hrv,
+                strain: whoopData?.strain?.score,
+                sleep: whoopData?.sleep?.score,
+                activities: garminActivities.slice(0, 5).map(a => ({ type: a.activity_type, distance: a.distance_meters, duration: a.duration_seconds })),
+              },
+            }),
+          });
+          const data = await res.json();
+          if (data.messages?.length) msgs.push(...data.messages);
+        } catch (_) {}
+      }
+
+      localStorage.setItem("proactive_date", today);
+      if (msgs.length > 0) {
+        setProactiveMessages(msgs);
+        setProactiveBadge(msgs.length);
+      }
+    };
+
+    checkProactive();
+  }, [whoopData]);
+
+  const labSend = async (msg) => {
+    if (!msg?.trim() || labLoading) return;
+    setLabMessages(prev => [...prev, { role:"user", content:msg }]);
+    setLabInput("");
+    setLabLoading(true);
+    try {
+      const week = (planBlocks[0]?.weeks || [])[0];
+      const res = await fetch("/api/coach/chat", {
+        method:"POST",
+        headers:{ "Content-Type":"application/json" },
+        body: JSON.stringify({
+          message: `[SCENARIO MODE] ${msg}\n\nRespond with a full plan adjustment proposal. Include a <plan_change> block if applicable.`,
+          whoopData,
+          currentWeek: week ? { id:week.id, label:week.label, subtitle:week.subtitle } : null,
+          recentActivities: garminActivities.slice(0,3),
+        }),
+      });
+      const data = await res.json();
+      setLabMessages(prev => [...prev, { role:"assistant", content:data.message, planChange:data.planChange }]);
+    } catch (e) {
+      setLabMessages(prev => [...prev, { role:"assistant", content:"Connection error. Try again." }]);
+    } finally {
+      setLabLoading(false);
+    }
+  };
+
+  const handleLabPlanChange = (planChange, action) => {
+    if (action === "accept") {
+      handlePlanChange(planChange);
+    }
+  };
 
   const handlePlanChange = async (planChange) => {
     const token = session?.access_token;
@@ -849,6 +1023,44 @@ export default function App() {
             )}
           </div>
 
+          {garminActivities.length > 0 && (
+            <div style={{ padding:"0 20px 16px" }}>
+              <div style={{ fontFamily:C.fm, fontSize:7, color:C.muted, letterSpacing:3, marginBottom:8, textTransform:"uppercase" }}>LAST ACTIVITY</div>
+              {(() => {
+                const a = garminActivities[0];
+                return (
+                  <div style={{ background:C.card, borderRadius:C.radius, padding:"14px 16px", border:`1px solid ${C.border}`, ...C.glass }}>
+                    <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:8 }}>
+                      <div style={{ fontFamily:C.ff, fontSize:17, color:C.text, letterSpacing:1 }}>{a.name || a.activity_type}</div>
+                      <div style={{ fontFamily:C.fm, fontSize:7, color:C.muted, letterSpacing:2 }}>
+                        {a.start_time ? new Date(a.start_time).toLocaleDateString("en-US",{month:"short",day:"numeric"}).toUpperCase() : ""}
+                      </div>
+                    </div>
+                    <div style={{ display:"flex", gap:16 }}>
+                      {a.distance_meters > 0 && <div><div style={{ fontFamily:C.fm, fontSize:6, color:C.muted, letterSpacing:2 }}>DISTANCE</div><div style={{ fontFamily:C.ff, fontSize:20, color:C.cyan }}>{(a.distance_meters/1000).toFixed(1)}km</div></div>}
+                      {a.duration_seconds > 0 && <div><div style={{ fontFamily:C.fm, fontSize:6, color:C.muted, letterSpacing:2 }}>DURATION</div><div style={{ fontFamily:C.ff, fontSize:20, color:C.text }}>{Math.floor(a.duration_seconds/60)}m</div></div>}
+                      {a.avg_hr > 0 && <div><div style={{ fontFamily:C.fm, fontSize:6, color:C.muted, letterSpacing:2 }}>AVG HR</div><div style={{ fontFamily:C.ff, fontSize:20, color:C.red }}>{a.avg_hr}</div></div>}
+                    </div>
+                  </div>
+                );
+              })()}
+            </div>
+          )}
+
+          {proactiveMessages.length > 0 && (
+            <div style={{ padding:"0 20px 16px" }}>
+              {proactiveMessages.map((m, i) => (
+                <div key={i} style={{ background:`${C.cyan}08`, border:`1px solid ${C.cyan}22`, borderRadius:C.radius, padding:"14px 16px", marginBottom:i < proactiveMessages.length-1 ? 8 : 0, ...C.glass }}>
+                  <div style={{ display:"flex", alignItems:"center", gap:8, marginBottom:6 }}>
+                    <span style={{ fontSize:14, color:C.cyan }}>✦</span>
+                    <div style={{ fontFamily:C.fm, fontSize:7, color:C.cyan, letterSpacing:3, textTransform:"uppercase" }}>COACH INSIGHT</div>
+                  </div>
+                  <div style={{ fontFamily:C.fs, fontSize:13, color:C.text, lineHeight:1.6 }}>{m.content}</div>
+                </div>
+              ))}
+            </div>
+          )}
+
           {synthesisNote && (
             <div style={{ padding:"0 20px 16px" }}>
               <div style={{ background:"#FF770015", border:"1px solid #FF770033", borderRadius:14, padding:"14px 16px" }}>
@@ -909,6 +1121,47 @@ export default function App() {
               </div>
             </div>
           )}
+
+          {garminActivities.length > 0 && (
+            <div style={{ padding:"0 20px 20px" }}>
+              <div style={{ fontFamily:C.fm, fontSize:7, color:C.muted, letterSpacing:3, marginBottom:10, textTransform:"uppercase" }}>RECENT ACTIVITIES</div>
+              <div style={{ display:"flex", flexDirection:"column", gap:8 }}>
+                {garminActivities.slice(0,3).map((a,i) => (
+                  <div key={i} style={{ background:C.card, borderRadius:C.radius, padding:"12px 16px", border:`1px solid ${C.border}`, ...C.glass }}>
+                    <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:6 }}>
+                      <div style={{ fontFamily:C.ff, fontSize:15, color:C.text, letterSpacing:1 }}>{a.name || a.activity_type}</div>
+                      <div style={{ fontFamily:C.fm, fontSize:7, color:C.muted, letterSpacing:2 }}>
+                        {a.start_time ? new Date(a.start_time).toLocaleDateString("en-US",{month:"short",day:"numeric"}).toUpperCase() : ""}
+                      </div>
+                    </div>
+                    <div style={{ display:"flex", gap:16 }}>
+                      {a.distance_meters > 0 && (
+                        <div>
+                          <div style={{ fontFamily:C.fm, fontSize:6, color:C.muted, letterSpacing:2 }}>DISTANCE</div>
+                          <div style={{ fontFamily:C.ff, fontSize:16, color:C.cyan }}>{(a.distance_meters/1000).toFixed(1)}km</div>
+                        </div>
+                      )}
+                      {a.duration_seconds > 0 && (
+                        <div>
+                          <div style={{ fontFamily:C.fm, fontSize:6, color:C.muted, letterSpacing:2 }}>DURATION</div>
+                          <div style={{ fontFamily:C.ff, fontSize:16, color:C.text }}>{Math.floor(a.duration_seconds/60)}m</div>
+                        </div>
+                      )}
+                      {a.avg_hr > 0 && (
+                        <div>
+                          <div style={{ fontFamily:C.fm, fontSize:6, color:C.muted, letterSpacing:2 }}>AVG HR</div>
+                          <div style={{ fontFamily:C.ff, fontSize:16, color:C.red }}>{a.avg_hr}</div>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                ))}
+              </div>
+              {!garminConnected && (
+                <a href="/api/auth/garmin-login" style={{ display:"block", marginTop:10, padding:"12px", background:C.card, border:`1px solid ${C.border}`, borderRadius:10, textAlign:"center", fontFamily:C.ff, fontSize:12, color:C.cyan, letterSpacing:2, textDecoration:"none" }}>CONNECT GARMIN</a>
+              )}
+            </div>
+          )}
         </div>
       )}
 
@@ -964,6 +1217,13 @@ export default function App() {
                     {d.isSunday ? (sundayChoice[weekId] ? sundayChoice[weekId].toUpperCase() : "?") : d.isRaceDay ? "RACE" : getTypeLabel(d.am)}
                   </div>
                   {d.pm && <div style={{ fontFamily:C.fm, fontSize:5, color:C.light, marginTop:2 }}>+PM</div>}
+                  {(() => {
+                    const dayDate = d.date;
+                    const hasActivity = garminActivities.some(a => a.start_time && a.start_time.startsWith(dayDate?.split(" ")[0] || "___"));
+                    return hasActivity
+                      ? <div style={{ fontSize:8, color:C.green, marginTop:2 }}>✓</div>
+                      : d.am ? <div style={{ fontSize:8, color:C.light, marginTop:2 }}>—</div> : null;
+                  })()}
                 </button>
               );
             })}
@@ -1012,6 +1272,13 @@ export default function App() {
               </div>
             </div>
           )}
+          <div style={{ margin:"0 20px 16px" }}>
+            <button onClick={() => { setLabOpen(true); setLabMessages([]); }}
+              style={{ width:"100%", padding:"14px", background:`${C.cyan}08`, border:`1px solid ${C.cyan}22`, borderRadius:C.radius, cursor:"pointer", display:"flex", alignItems:"center", justifyContent:"center", gap:10, ...C.glass }}>
+              <span style={{ fontSize:16 }}>🧪</span>
+              <span style={{ fontFamily:C.ff, fontSize:14, color:C.cyan, letterSpacing:2 }}>RUN A SCENARIO</span>
+            </button>
+          </div>
           <div style={{ margin:"0 20px 20px" }}>
             <div style={{ fontFamily:C.fm, fontSize:8, color:C.muted, letterSpacing:3, marginBottom:10 }}>WEEKLY STRUCTURE</div>
             {[["MON","HYROX SESSION",C.red],["TUE","THRESHOLD RUN",C.blue],["WED","STRENGTH + Z2 PM","#aaa"],["THU","TEMPO / VO2 MAX",C.blue],["FRI","HYROX SESSION",C.red],["SAT","LONG RUN",C.green],["SUN","MOBILITY OR PLYO+CORE",C.green]].map(([day,label,color]) => (
@@ -1065,6 +1332,224 @@ export default function App() {
           )}
         </div>
       )}
+
+      {nav === "perf" && (() => {
+        const dayNames = ["SUN","MON","TUE","WED","THU","FRI","SAT"];
+        const currentWeekDays = (planBlocks[0]?.weeks?.[0]?.days) || [];
+
+        const complianceData = currentWeekDays.map(d => {
+          const planned = d.am || d.pm;
+          if (!planned) return { day:d.day, status:"none" };
+          const dayDateStr = d.date?.split(" ")[0];
+          const hasActivity = garminActivities.some(a => a.start_time?.startsWith(dayDateStr || "___"));
+          return { day:d.day, status: hasActivity ? "done" : "missed", planned:d.am };
+        });
+        const plannedCount = complianceData.filter(d => d.status !== "none").length;
+        const doneCount = complianceData.filter(d => d.status === "done").length;
+        const compliancePct = plannedCount > 0 ? Math.round((doneCount / plannedCount) * 100) : 0;
+
+        const last7 = garminActivities.filter(a => {
+          if (!a.start_time) return false;
+          const d = new Date(a.start_time);
+          return (Date.now() - d.getTime()) < 7 * 86400000;
+        });
+        const last42 = garminActivities.filter(a => {
+          if (!a.start_time) return false;
+          const d = new Date(a.start_time);
+          return (Date.now() - d.getTime()) < 42 * 86400000;
+        });
+        const atl = last7.length > 0 ? Math.round(last7.reduce((s,a) => s + (a.duration_seconds||0)/60, 0) / 7) : 0;
+        const ctl = last42.length > 0 ? Math.round(last42.reduce((s,a) => s + (a.duration_seconds||0)/60, 0) / 42) : 0;
+        const tsb = ctl - atl;
+        const tsbColor = tsb > 10 ? C.green : tsb > -10 ? C.yellow : C.red;
+        const tsbLabel = tsb > 10 ? "FRESH" : tsb > -10 ? "NEUTRAL" : "FATIGUED";
+
+        const vo2Metrics = unifiedMetrics.filter(m => m.vo2_max).slice(0, 30).reverse();
+        const currentVo2 = vo2Metrics.length > 0 ? vo2Metrics[vo2Metrics.length - 1].vo2_max : null;
+        const vo2Max = vo2Metrics.length > 0 ? Math.max(...vo2Metrics.map(m => Number(m.vo2_max))) : 0;
+
+        const zoneColors = ["#555", C.blue, C.yellow, "#FF7700", C.red];
+        const zoneData = [0,0,0,0,0];
+        let totalZoneTime = 0;
+        last7.forEach(a => {
+          if (a.avg_hr) {
+            const hr = a.avg_hr;
+            const dur = a.duration_seconds || 0;
+            const zone = hr >= 163 ? 4 : hr >= 150 ? 3 : hr >= 147 ? 2 : hr >= 132 ? 1 : 0;
+            zoneData[zone] += dur;
+            totalZoneTime += dur;
+          }
+        });
+
+        const prs = {};
+        garminActivities.forEach(a => {
+          if (!a.distance_meters || !a.duration_seconds) return;
+          const dist = a.distance_meters;
+          const pace = a.duration_seconds / (dist / 1000);
+          const checks = [
+            { key:"5K", min:4800, max:5500 },
+            { key:"10K", min:9500, max:10500 },
+            { key:"HALF", min:20500, max:22000 },
+            { key:"MARATHON", min:41500, max:43000 },
+          ];
+          checks.forEach(({ key, min, max }) => {
+            if (dist >= min && dist <= max) {
+              if (!prs[key] || a.duration_seconds < prs[key].time) {
+                prs[key] = { time: a.duration_seconds, date: a.start_time };
+              }
+            }
+          });
+        });
+        const fmtTime = (s) => { const m = Math.floor(s/60); const sec = Math.floor(s%60); return `${m}:${String(sec).padStart(2,"0")}`; };
+
+        return (
+          <div style={{ padding:"20px" }}>
+            <div style={{ fontFamily:C.ff, fontSize:28, letterSpacing:2, marginBottom:4 }}>PERFORMANCE<span style={{ color:C.cyan }}>.</span></div>
+            <div style={{ fontFamily:C.fm, fontSize:7, color:C.muted, letterSpacing:3, marginBottom:20, textTransform:"uppercase" }}>TRAINING ANALYTICS</div>
+
+            {/* WEEKLY COMPLIANCE */}
+            <div style={{ marginBottom:24 }}>
+              <div style={{ display:"flex", alignItems:"center", gap:10, marginBottom:12 }}>
+                <div style={{ fontFamily:C.ff, fontSize:18, color:C.cyan, letterSpacing:2 }}>WEEKLY COMPLIANCE</div>
+                <div style={{ fontFamily:C.ff, fontSize:24, color: compliancePct >= 80 ? C.green : compliancePct >= 50 ? C.yellow : C.red, fontWeight:700 }}>{compliancePct}%</div>
+              </div>
+              <div style={{ display:"flex", gap:4, marginBottom:12 }}>
+                {complianceData.map((d,i) => {
+                  const bg = d.status === "done" ? C.green : d.status === "missed" ? `${C.red}44` : C.card;
+                  const icon = d.status === "done" ? "✅" : d.status === "missed" ? "❌" : "—";
+                  return (
+                    <div key={i} style={{ flex:1, background:bg, borderRadius:8, padding:"8px 2px", textAlign:"center", border:`1px solid ${C.border}` }}>
+                      <div style={{ fontFamily:C.fm, fontSize:7, color:C.muted, letterSpacing:1, marginBottom:4 }}>{d.day}</div>
+                      <div style={{ fontSize:12 }}>{icon}</div>
+                    </div>
+                  );
+                })}
+              </div>
+              {compliancePct < 80 && compliancePct > 0 && (
+                <div style={{ background:C.card, borderRadius:12, padding:"12px 14px", border:`1px solid ${C.border}`, borderLeft:`3px solid ${C.yellow}`, ...C.glass }}>
+                  <div style={{ fontFamily:C.fs, fontSize:12, color:C.muted, lineHeight:1.6 }}>
+                    {compliancePct < 50 ? "Compliance under 50% — let's discuss what's blocking your sessions." : "Slightly under target. Prioritize the high-intensity sessions."}
+                  </div>
+                </div>
+              )}
+            </div>
+
+            {/* TRAINING LOAD */}
+            <div style={{ marginBottom:24 }}>
+              <div style={{ fontFamily:C.ff, fontSize:18, color:C.cyan, letterSpacing:2, marginBottom:12 }}>TRAINING LOAD</div>
+              <div style={{ display:"flex", gap:8 }}>
+                <div style={{ flex:1, background:C.card, borderRadius:C.radius, padding:"14px", textAlign:"center", border:`1px solid ${C.border}`, ...C.glass }}>
+                  <div style={{ fontFamily:C.fm, fontSize:7, color:C.muted, letterSpacing:3, marginBottom:6 }}>ATL (7D)</div>
+                  <div style={{ fontFamily:C.ff, fontSize:28, color:C.text, fontWeight:700 }}>{atl}</div>
+                  <div style={{ fontFamily:C.fm, fontSize:7, color:C.muted, letterSpacing:2 }}>MIN/DAY</div>
+                </div>
+                <div style={{ flex:1, background:C.card, borderRadius:C.radius, padding:"14px", textAlign:"center", border:`1px solid ${C.border}`, ...C.glass }}>
+                  <div style={{ fontFamily:C.fm, fontSize:7, color:C.muted, letterSpacing:3, marginBottom:6 }}>CTL (42D)</div>
+                  <div style={{ fontFamily:C.ff, fontSize:28, color:C.text, fontWeight:700 }}>{ctl}</div>
+                  <div style={{ fontFamily:C.fm, fontSize:7, color:C.muted, letterSpacing:2 }}>MIN/DAY</div>
+                </div>
+                <div style={{ flex:1, background:C.card, borderRadius:C.radius, padding:"14px", textAlign:"center", border:`1px solid ${tsbColor}22`, boxShadow:glow(tsbColor,0.1), ...C.glass }}>
+                  <div style={{ fontFamily:C.fm, fontSize:7, color:C.muted, letterSpacing:3, marginBottom:6 }}>TSB</div>
+                  <div style={{ fontFamily:C.ff, fontSize:28, color:tsbColor, fontWeight:700 }}>{tsb > 0 ? "+" : ""}{tsb}</div>
+                  <div style={{ fontFamily:C.fm, fontSize:7, color:tsbColor, letterSpacing:2 }}>{tsbLabel}</div>
+                </div>
+              </div>
+            </div>
+
+            {/* VO2 MAX TREND */}
+            <div style={{ marginBottom:24 }}>
+              <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:12 }}>
+                <div style={{ fontFamily:C.ff, fontSize:18, color:C.cyan, letterSpacing:2 }}>VO2 MAX</div>
+                {currentVo2 && <div style={{ fontFamily:C.ff, fontSize:32, color:C.cyan, fontWeight:700 }}>{Number(currentVo2).toFixed(1)}</div>}
+              </div>
+              {vo2Metrics.length > 1 ? (
+                <div style={{ background:C.card, borderRadius:C.radius, padding:"16px", border:`1px solid ${C.border}`, ...C.glass }}>
+                  <div style={{ display:"flex", alignItems:"flex-end", gap:2, height:80 }}>
+                    {vo2Metrics.map((m,i) => {
+                      const val = Number(m.vo2_max);
+                      const h = vo2Max > 0 ? (val / vo2Max) * 70 + 10 : 40;
+                      return <div key={i} style={{ flex:1, height:h, background: i === vo2Metrics.length-1 ? C.cyan : `${C.cyan}44`, borderRadius:2, minWidth:2 }} />;
+                    })}
+                  </div>
+                  <div style={{ display:"flex", justifyContent:"space-between", marginTop:8 }}>
+                    <div style={{ fontFamily:C.fm, fontSize:6, color:C.muted, letterSpacing:1 }}>{vo2Metrics[0]?.date}</div>
+                    <div style={{ fontFamily:C.fm, fontSize:6, color:C.muted, letterSpacing:1 }}>{vo2Metrics[vo2Metrics.length-1]?.date}</div>
+                  </div>
+                </div>
+              ) : (
+                <div style={{ fontFamily:C.fm, fontSize:9, color:C.muted, letterSpacing:2, textAlign:"center", padding:20 }}>
+                  {currentVo2 ? "More data points needed for trend" : "No VO2 Max data yet — sync Garmin"}
+                </div>
+              )}
+            </div>
+
+            {/* ZONE DISTRIBUTION */}
+            <div style={{ marginBottom:24 }}>
+              <div style={{ fontFamily:C.ff, fontSize:18, color:C.cyan, letterSpacing:2, marginBottom:12 }}>ZONE DISTRIBUTION</div>
+              {totalZoneTime > 0 ? (
+                <div style={{ display:"flex", gap:6, height:120, alignItems:"flex-end" }}>
+                  {zoneData.map((t,i) => {
+                    const pct = totalZoneTime > 0 ? (t / totalZoneTime) * 100 : 0;
+                    return (
+                      <div key={i} style={{ flex:1, display:"flex", flexDirection:"column", alignItems:"center", gap:4 }}>
+                        <div style={{ fontFamily:C.fm, fontSize:8, color:zoneColors[i], fontWeight:700 }}>{Math.round(pct)}%</div>
+                        <div style={{ width:"100%", height:Math.max(pct * 0.8, 4), background:zoneColors[i], borderRadius:4, transition:"height 0.3s" }} />
+                        <div style={{ fontFamily:C.fm, fontSize:8, color:C.muted, letterSpacing:1 }}>Z{i+1}</div>
+                      </div>
+                    );
+                  })}
+                </div>
+              ) : (
+                <div style={{ fontFamily:C.fm, fontSize:9, color:C.muted, letterSpacing:2, textAlign:"center", padding:20 }}>No HR zone data this week</div>
+              )}
+            </div>
+
+            {/* PERSONAL RECORDS */}
+            <div style={{ marginBottom:24 }}>
+              <div style={{ fontFamily:C.ff, fontSize:18, color:C.cyan, letterSpacing:2, marginBottom:12 }}>PERSONAL RECORDS</div>
+              {Object.keys(prs).length > 0 ? (
+                <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:8 }}>
+                  {Object.entries(prs).map(([key, pr]) => (
+                    <div key={key} style={{ background:C.card, borderRadius:C.radius, padding:"14px", border:`1px solid ${C.border}`, borderLeft:`3px solid ${C.cyan}`, ...C.glass }}>
+                      <div style={{ fontFamily:C.fm, fontSize:7, color:C.muted, letterSpacing:3, marginBottom:6 }}>{key}</div>
+                      <div style={{ fontFamily:C.ff, fontSize:22, color:C.cyan, fontWeight:700 }}>{fmtTime(pr.time)}</div>
+                      <div style={{ fontFamily:C.fm, fontSize:7, color:C.muted, marginTop:4, letterSpacing:1 }}>
+                        {pr.date ? new Date(pr.date).toLocaleDateString("en-US",{month:"short",day:"numeric",year:"numeric"}).toUpperCase() : ""}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <div style={{ fontFamily:C.fm, fontSize:9, color:C.muted, letterSpacing:2, textAlign:"center", padding:20 }}>No PRs detected yet — sync more activities</div>
+              )}
+            </div>
+
+            {/* RACE PREDICTIONS */}
+            <div style={{ marginBottom:24 }}>
+              <div style={{ fontFamily:C.ff, fontSize:18, color:C.cyan, letterSpacing:2, marginBottom:12 }}>RACE PREDICTIONS</div>
+              {currentVo2 ? (() => {
+                const vo2 = Number(currentVo2);
+                const predict5k  = Math.round(21.2 * 60 * Math.pow(42.195 / 5,    0.06) * Math.pow(vo2 / 50, -1.1));
+                const predict10k = Math.round(21.2 * 60 * Math.pow(42.195 / 10,   0.06) * Math.pow(vo2 / 50, -1.1) * 2.1);
+                const predictHM  = Math.round(21.2 * 60 * Math.pow(42.195 / 21.1, 0.06) * Math.pow(vo2 / 50, -1.1) * 4.6);
+                const predictM   = Math.round(21.2 * 60 * Math.pow(1,              0.06) * Math.pow(vo2 / 50, -1.1) * 10);
+                return (
+                  <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:8 }}>
+                    {[["5K",predict5k],["10K",predict10k],["HALF",predictHM],["MARATHON",predictM]].map(([label,time]) => (
+                      <div key={label} style={{ background:C.card, borderRadius:C.radius, padding:"14px", textAlign:"center", border:`1px solid ${C.border}`, ...C.glass }}>
+                        <div style={{ fontFamily:C.fm, fontSize:7, color:C.muted, letterSpacing:3, marginBottom:6 }}>{label}</div>
+                        <div style={{ fontFamily:C.ff, fontSize:20, color:C.text, fontWeight:700 }}>{fmtTime(time)}</div>
+                      </div>
+                    ))}
+                  </div>
+                );
+              })() : (
+                <div style={{ fontFamily:C.fm, fontSize:9, color:C.muted, letterSpacing:2, textAlign:"center", padding:20 }}>Need VO2 Max data for predictions — sync Garmin</div>
+              )}
+            </div>
+          </div>
+        );
+      })()}
 
       {nav === "stats" && (
         <div style={{ padding:"20px" }}>
@@ -1134,7 +1619,7 @@ export default function App() {
       )}
 
       <div style={{ position:"fixed", bottom:0, left:"50%", transform:"translateX(-50%)", width:"100%", maxWidth:480, background:C.bg, borderTop:`1px solid ${C.border}`, display:"flex", zIndex:100, ...C.glass }}>
-        {[["today","⚡","TODAY"],["plan","📅","PLAN"],["supps","💊","SUPPS"],["stats","📊","STATS"]].map(([id,icon,label]) => (
+        {[["today","⚡","TODAY"],["plan","📅","PLAN"],["perf","🏆","PERF"],["supps","💊","SUPPS"],["stats","📊","STATS"]].map(([id,icon,label]) => (
           <button key={id} onClick={() => setNav(id)} style={{ flex:1, padding:"10px 4px 22px", background:"transparent", border:"none", cursor:"pointer", display:"flex", flexDirection:"column", alignItems:"center", gap:3 }}>
             <div style={{ fontSize:18 }}>{icon}</div>
             <div style={{ fontFamily:C.fm, fontSize:7, letterSpacing:2, color: nav===id ? C.cyan : C.muted, fontWeight: nav===id ? 700 : 400, textTransform:"uppercase" }}>{label}</div>
@@ -1143,10 +1628,76 @@ export default function App() {
         ))}
       </div>
 
-      <AIChat whoopData={whoopData} currentWeek={week} recentActivities={recentActivities} onPlanChange={handlePlanChange} userName={profile?.name} persona={coachPersona} onPersonaChange={handlePersonaChange} />
+      <AIChat whoopData={whoopData} currentWeek={week} recentActivities={recentActivities} onPlanChange={handlePlanChange} userName={profile?.name} persona={coachPersona} onPersonaChange={handlePersonaChange} proactiveBadge={proactiveBadge} />
 
       {selDay && (
         <SessionModal name={modalName} dayData={dayData} sess={sess} weekId={weekId} onClose={() => setSelDay(null)} onSessSwitch={setSess} sundayChoice={sundayChoice} setSundayChoice={setSundayChoice} />
+      )}
+
+      {labOpen && (
+        <div style={{ position:"fixed", inset:0, zIndex:250, background:C.bg, display:"flex", flexDirection:"column", maxWidth:480, margin:"0 auto" }}>
+          <div style={{ padding:"16px 20px", borderBottom:`1px solid ${C.border}`, display:"flex", justifyContent:"space-between", alignItems:"center", flexShrink:0 }}>
+            <div style={{ display:"flex", alignItems:"center", gap:10 }}>
+              <span style={{ fontSize:18 }}>🧪</span>
+              <div>
+                <div style={{ fontFamily:C.ff, fontSize:16, color:C.cyan, letterSpacing:2 }}>SCENARIO MODE</div>
+                <div style={{ fontFamily:C.fm, fontSize:7, color:C.muted, letterSpacing:2 }}>WHAT-IF PLANNING · CHANGES ARE REVERSIBLE</div>
+              </div>
+            </div>
+            <button onClick={() => setLabOpen(false)} style={{ background:C.cardSolid, border:"none", color:C.muted, width:32, height:32, borderRadius:"50%", cursor:"pointer", fontSize:14 }}>✕</button>
+          </div>
+
+          <div style={{ flex:1, overflowY:"auto", padding:"16px 20px", display:"flex", flexDirection:"column", gap:12 }}>
+            {labMessages.length === 0 && (
+              <div style={{ padding:"20px 0" }}>
+                <div style={{ fontFamily:C.fm, fontSize:7, color:C.muted, letterSpacing:3, marginBottom:12, textTransform:"uppercase" }}>TRY A SCENARIO</div>
+                {[
+                  "If I skip Sunday's long run, redistribute the volume",
+                  "I'm traveling for 3 days — hotel gym only",
+                  "I have a wedding this weekend, adjust my week",
+                  "What if I add a second threshold session this week?",
+                  "Race is in 2 weeks — start taper now",
+                ].map((p,i) => (
+                  <button key={i} onClick={() => labSend(p)}
+                    style={{ display:"block", width:"100%", padding:"12px 16px", marginBottom:8, background:C.card, border:`1px solid ${C.border}`, borderRadius:12, cursor:"pointer", textAlign:"left", fontFamily:C.fs, fontSize:13, color:C.text, lineHeight:1.5, ...C.glass }}>{p}</button>
+                ))}
+              </div>
+            )}
+            {labMessages.map((m, i) => (
+              <div key={i} style={{ display:"flex", flexDirection:"column", alignItems: m.role==="user" ? "flex-end" : "flex-start" }}>
+                <div style={{ maxWidth:"85%", padding:"12px 16px", borderRadius: m.role==="user" ? "16px 16px 4px 16px" : "16px 16px 16px 4px", background: m.role==="user" ? "rgba(0,243,255,0.15)" : C.card, border: m.role==="user" ? `1px solid ${C.cyan}33` : `1px solid ${C.border}`, ...C.glass }}>
+                  <div style={{ fontFamily:C.fs, fontSize:13, color:C.text, lineHeight:1.6 }}>{renderMarkdown(m.content)}</div>
+                </div>
+                {m.planChange && (
+                  <div style={{ maxWidth:"85%", marginTop:8, background:C.card2, borderRadius:12, padding:"12px 14px", border:`1px solid ${C.cyan}33` }}>
+                    <div style={{ fontFamily:C.fm, fontSize:7, color:C.cyan, letterSpacing:3, marginBottom:6 }}>PROPOSED CHANGE</div>
+                    <div style={{ fontFamily:C.ff, fontSize:14, color:C.text, marginBottom:4 }}>{m.planChange.description}</div>
+                    <div style={{ display:"flex", gap:8, marginTop:10 }}>
+                      <button onClick={() => { handleLabPlanChange(m.planChange, "accept"); setLabOpen(false); }} style={{ flex:1, padding:"10px", background:C.green, color:"#000", border:"none", borderRadius:8, cursor:"pointer", fontFamily:C.ff, fontSize:12, letterSpacing:2 }}>ACCEPT</button>
+                      <button onClick={() => setLabOpen(false)} style={{ flex:1, padding:"10px", background:"transparent", color:C.muted, border:`1px solid ${C.border}`, borderRadius:8, cursor:"pointer", fontFamily:C.ff, fontSize:12, letterSpacing:2 }}>REJECT</button>
+                    </div>
+                  </div>
+                )}
+              </div>
+            ))}
+            {labLoading && (
+              <div style={{ background:C.card, borderRadius:"16px 16px 16px 4px", padding:"12px 16px", border:`1px solid ${C.border}`, ...C.glass, alignSelf:"flex-start" }}>
+                <div className="shimmer" style={{ fontFamily:C.fm, fontSize:11, letterSpacing:3 }}>SIMULATING</div>
+              </div>
+            )}
+          </div>
+
+          <div style={{ padding:"12px 20px 20px", display:"flex", gap:10, flexShrink:0 }}>
+            <input
+              value={labInput}
+              onChange={e => setLabInput(e.target.value)}
+              onKeyDown={e => { if (e.key === "Enter") labSend(labInput); }}
+              placeholder="Describe your scenario..."
+              style={{ flex:1, background:C.card, border:`1px solid ${C.cyan}22`, borderRadius:12, padding:"14px 16px", color:C.text, fontFamily:C.fs, fontSize:14, outline:"none", ...C.glass }}
+            />
+            <button onClick={() => labSend(labInput)} disabled={labLoading || !labInput.trim()} style={{ width:48, height:48, background: labInput.trim() ? C.cyan : C.card, border:"none", borderRadius:12, cursor: labInput.trim() ? "pointer" : "default", color: labInput.trim() ? "#000" : C.muted, fontSize:18, flexShrink:0 }}>↑</button>
+          </div>
+        </div>
       )}
     </div>
   );
