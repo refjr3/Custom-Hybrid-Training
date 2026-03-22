@@ -509,6 +509,8 @@ export default function App() {
   const [bloodworkResult, setBloodworkResult] = useState(null);
   const bloodworkInputRef = useRef(null);
   const [coachPersona, setCoachPersona] = useState("grinder");
+  const [garminActivities, setGarminActivities] = useState([]);
+  const [garminConnected, setGarminConnected] = useState(false);
 
   // ── Auth state ──────────────────────────────────────────────────────────────
   const [session, setSession]       = useState(null);
@@ -556,11 +558,19 @@ export default function App() {
     if (profile.coach_persona) {
       setCoachPersona(profile.coach_persona);
     }
+    if (profile.connected_wearables?.garmin) {
+      setGarminConnected(true);
+    }
+    if (params.get("garmin_connected") === "true") {
+      setGarminConnected(true);
+      window.history.replaceState({}, "", "/");
+    }
 
     fetchWhoopData();
     fetchBiomarkers();
     fetchSupplements();
     fetchPlan(session?.access_token);
+    fetchGarminActivities();
   }, [profile]);
 
   const fetchWhoopData = async () => {
@@ -600,6 +610,17 @@ export default function App() {
       if (data) setSupplements(data);
     } catch (e) {}
     finally { setSuppsLoading(false); }
+  };
+
+  const fetchGarminActivities = async () => {
+    try {
+      const { data } = await supabase
+        .from("garmin_activities")
+        .select("*")
+        .order("start_time", { ascending: false })
+        .limit(5);
+      if (data) setGarminActivities(data);
+    } catch (_) {}
   };
 
   // Fix #5: accept token as a parameter so callers always pass the live token —
@@ -907,6 +928,47 @@ export default function App() {
                   </div>
                 ))}
               </div>
+            </div>
+          )}
+
+          {garminActivities.length > 0 && (
+            <div style={{ padding:"0 20px 20px" }}>
+              <div style={{ fontFamily:C.fm, fontSize:7, color:C.muted, letterSpacing:3, marginBottom:10, textTransform:"uppercase" }}>RECENT ACTIVITIES</div>
+              <div style={{ display:"flex", flexDirection:"column", gap:8 }}>
+                {garminActivities.slice(0,3).map((a,i) => (
+                  <div key={i} style={{ background:C.card, borderRadius:C.radius, padding:"12px 16px", border:`1px solid ${C.border}`, ...C.glass }}>
+                    <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:6 }}>
+                      <div style={{ fontFamily:C.ff, fontSize:15, color:C.text, letterSpacing:1 }}>{a.name || a.activity_type}</div>
+                      <div style={{ fontFamily:C.fm, fontSize:7, color:C.muted, letterSpacing:2 }}>
+                        {a.start_time ? new Date(a.start_time).toLocaleDateString("en-US",{month:"short",day:"numeric"}).toUpperCase() : ""}
+                      </div>
+                    </div>
+                    <div style={{ display:"flex", gap:16 }}>
+                      {a.distance_meters > 0 && (
+                        <div>
+                          <div style={{ fontFamily:C.fm, fontSize:6, color:C.muted, letterSpacing:2 }}>DISTANCE</div>
+                          <div style={{ fontFamily:C.ff, fontSize:16, color:C.cyan }}>{(a.distance_meters/1000).toFixed(1)}km</div>
+                        </div>
+                      )}
+                      {a.duration_seconds > 0 && (
+                        <div>
+                          <div style={{ fontFamily:C.fm, fontSize:6, color:C.muted, letterSpacing:2 }}>DURATION</div>
+                          <div style={{ fontFamily:C.ff, fontSize:16, color:C.text }}>{Math.floor(a.duration_seconds/60)}m</div>
+                        </div>
+                      )}
+                      {a.avg_hr > 0 && (
+                        <div>
+                          <div style={{ fontFamily:C.fm, fontSize:6, color:C.muted, letterSpacing:2 }}>AVG HR</div>
+                          <div style={{ fontFamily:C.ff, fontSize:16, color:C.red }}>{a.avg_hr}</div>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                ))}
+              </div>
+              {!garminConnected && (
+                <a href="/api/auth/garmin-login" style={{ display:"block", marginTop:10, padding:"12px", background:C.card, border:`1px solid ${C.border}`, borderRadius:10, textAlign:"center", fontFamily:C.ff, fontSize:12, color:C.cyan, letterSpacing:2, textDecoration:"none" }}>CONNECT GARMIN</a>
+              )}
             </div>
           )}
         </div>
