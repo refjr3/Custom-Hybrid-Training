@@ -1416,8 +1416,54 @@ export default function App() {
 
       {nav === "supps" && (
         <div style={{ padding:"20px" }}>
-          <div style={{ fontFamily:C.ff, fontSize:28, letterSpacing:2, marginBottom:4 }}>SUPPLEMENTS<span style={{ color:C.red }}>.</span></div>
-          <div style={{ fontFamily:C.fm, fontSize:8, color:C.muted, letterSpacing:3, marginBottom:20 }}>DAILY PROTOCOL</div>
+          <div style={{ display:"flex", justifyContent:"space-between", alignItems:"flex-start", marginBottom:20 }}>
+            <div>
+              <div style={{ fontFamily:C.ff, fontSize:28, letterSpacing:2, marginBottom:4 }}>SUPPLEMENTS<span style={{ color:C.red }}>.</span></div>
+              <div style={{ fontFamily:C.fm, fontSize:8, color:C.muted, letterSpacing:3 }}>DAILY PROTOCOL</div>
+            </div>
+            {supplements.length > 0 && (
+              <button onClick={() => {
+                const canvas = document.createElement("canvas");
+                const W = 800, pad = 40;
+                const groups = {};
+                supplements.forEach(s => { if (!groups[s.time_group]) groups[s.time_group] = []; groups[s.time_group].push(s); });
+                const groupKeys = Object.keys(groups);
+                const totalItems = supplements.length;
+                const H = 200 + totalItems * 50 + groupKeys.length * 40 + 80;
+                canvas.width = W; canvas.height = H;
+                const ctx = canvas.getContext("2d");
+                ctx.fillStyle = "#0A0A0A"; ctx.fillRect(0, 0, W, H);
+                ctx.fillStyle = "#00F3FF"; ctx.font = "bold 32px 'Arial Black', sans-serif";
+                ctx.fillText("MY SUPPLEMENT STACK", pad, 60);
+                ctx.fillStyle = "#888"; ctx.font = "12px monospace";
+                ctx.fillText((profile?.name || "ATHLETE").toUpperCase() + " · DAILY PROTOCOL", pad, 85);
+                let y = 120;
+                const gcols = { MORNING:"#FFD600", AFTERNOON:"#FF3B30", NIGHT:"#0088FF", "DAILY TARGETS":"#888" };
+                groupKeys.forEach(g => {
+                  ctx.fillStyle = gcols[g] || "#888"; ctx.font = "bold 14px monospace"; ctx.fillText(g, pad, y); y += 28;
+                  groups[g].forEach(s => {
+                    ctx.fillStyle = "rgba(255,255,255,0.06)";
+                    ctx.beginPath(); ctx.roundRect(pad, y - 16, W - pad * 2, 40, 8); ctx.fill();
+                    ctx.fillStyle = "#fff"; ctx.font = "16px sans-serif"; ctx.fillText(s.name, pad + 12, y + 6);
+                    ctx.fillStyle = "#888"; ctx.font = "12px monospace"; ctx.fillText(s.dose, W - pad - ctx.measureText(s.dose).width - 12, y + 6);
+                    y += 50;
+                  });
+                  y += 10;
+                });
+                const optBio = biomarkers.filter(b => b.flag === "OPTIMAL" || b.flag === "GOOD").slice(0, 3);
+                if (optBio.length > 0) {
+                  y += 10; ctx.fillStyle = "#00D4A0"; ctx.font = "bold 14px monospace"; ctx.fillText("OPTIMAL BIOMARKERS", pad, y); y += 28;
+                  optBio.forEach(b => { ctx.fillStyle = "#00D4A0"; ctx.font = "14px sans-serif"; ctx.fillText(`✓ ${b.label}: ${b.value}${b.unit?" "+b.unit:""}`, pad + 12, y); y += 24; });
+                }
+                y = H - 30; ctx.fillStyle = "#444"; ctx.font = "10px monospace"; ctx.fillText("△ HYBRID PERFORMANCE OS", pad, y);
+                const link = document.createElement("a");
+                link.download = "my-stack.png"; link.href = canvas.toDataURL("image/png"); link.click();
+              }}
+              style={{ padding:"10px 16px", background:C.card, border:`1px solid ${C.cyan}33`, borderRadius:10, cursor:"pointer", fontFamily:C.ff, fontSize:12, color:C.cyan, letterSpacing:2 }}>
+                SHARE MY STACK
+              </button>
+            )}
+          </div>
           {suppsLoading ? (
             <div style={{ fontFamily:C.ff, fontSize:14, color:C.muted, letterSpacing:3, textAlign:"center", padding:40 }}>LOADING...</div>
           ) : supplements.length === 0 ? (
