@@ -614,10 +614,13 @@ export default function App() {
   const [bloodworkResult, setBloodworkResult] = useState(null);
   const bloodworkInputRef = useRef(null);
   const [coachPersona, setCoachPersona] = useState("grinder");
+  const [showEntrance, setShowEntrance] = useState(false);
   const [garminActivities, setGarminActivities] = useState([]);
   const [garminConnected, setGarminConnected] = useState(false);
   const [proactiveMessages, setProactiveMessages] = useState([]);
   const [proactiveBadge, setProactiveBadge] = useState(0);
+  const [weeklyReview, setWeeklyReview] = useState(null);
+  const [showReadinessBreakdown, setShowReadinessBreakdown] = useState(false);
   const [unifiedMetrics, setUnifiedMetrics] = useState([]);
   const [labOpen, setLabOpen] = useState(false);
   const [labMessages, setLabMessages] = useState([]);
@@ -861,6 +864,12 @@ export default function App() {
 
       if (new Date().getDay() === 0) {
         try {
+          const currentWeekDays = (planBlocks[0]?.weeks?.[0]?.days) || [];
+          const planned = currentWeekDays.filter(d => d.am).length;
+          const completed = currentWeekDays.filter(d => {
+            const dd = d.date?.split(" ")[0];
+            return garminActivities.some(a => a.start_time?.startsWith(dd || "___"));
+          }).length;
           const res = await fetch("/api/coaching/proactive", {
             method: "POST",
             headers: { "Content-Type": "application/json", "Authorization": `Bearer ${session.access_token}` },
@@ -871,12 +880,19 @@ export default function App() {
                 hrv: whoopData?.recovery?.hrv,
                 strain: whoopData?.strain?.score,
                 sleep: whoopData?.sleep?.score,
-                activities: garminActivities.slice(0, 5).map(a => ({ type: a.activity_type, distance: a.distance_meters, duration: a.duration_seconds })),
+                sessions_planned: planned,
+                sessions_completed: completed,
+                compliance: planned > 0 ? Math.round((completed/planned)*100) : 0,
+                activities: garminActivities.slice(0, 7).map(a => ({ type: a.activity_type, distance: a.distance_meters, duration: a.duration_seconds, name: a.name })),
               },
             }),
           });
           const data = await res.json();
-          if (data.messages?.length) msgs.push(...data.messages);
+          if (data.messages?.length) {
+            const reviewMsg = data.messages.find(m => m.content);
+            if (reviewMsg) setWeeklyReview(reviewMsg.content);
+            msgs.push(...data.messages);
+          }
         } catch (_) {}
       }
 
@@ -1050,7 +1066,7 @@ export default function App() {
     );
   }
   if (!session) return <AuthScreen supabase={supabase} />;
-  if (!profile) return <Onboarding supabase={supabase} session={session} onComplete={setProfile} />;
+  if (!profile) return <Onboarding supabase={supabase} session={session} onComplete={(p) => { setShowEntrance(true); setTimeout(() => setShowEntrance(false), 2800); setProfile(p); }} />;
 
   const block   = planBlocks.find(b => b.id === blockId) || planBlocks[0] || null;
   const weeks   = block?.weeks || [];
@@ -1082,6 +1098,17 @@ export default function App() {
 
   return (
     <div style={{ minHeight:"100vh", background:C.bg, color:C.text, fontFamily:C.fs, maxWidth:480, margin:"0 auto", paddingBottom:80 }}>
+      {showEntrance && (
+        <div style={{ position:"fixed", inset:0, zIndex:9999, background:"#000", display:"flex", flexDirection:"column", alignItems:"center", justifyContent:"center", animation:"entrance-fade 2.8s ease forwards" }}>
+          <div style={{ fontSize:64, animation:"entrance-scale 1s cubic-bezier(.175,.885,.32,1.275) forwards", transform:"scale(0)" }}>△</div>
+          <div style={{ fontFamily:C.fm, fontSize:10, color:C.cyan, letterSpacing:6, marginTop:20, opacity:0, animation:"entrance-text 0.8s ease 0.6s forwards" }}>HYBRID PERFORMANCE OS</div>
+          <style>{`
+            @keyframes entrance-scale { 0%{transform:scale(0);opacity:0} 60%{transform:scale(1.1);opacity:1} 100%{transform:scale(1);opacity:1} }
+            @keyframes entrance-text { 0%{opacity:0;transform:translateY(8px)} 100%{opacity:1;transform:translateY(0)} }
+            @keyframes entrance-fade { 0%,70%{opacity:1} 100%{opacity:0;pointer-events:none} }
+          `}</style>
+        </div>
+      )}
 
       {nav === "today" && (
         <div>
@@ -1130,6 +1157,57 @@ export default function App() {
             )}
           </div>
 
+          {(() => {
+            const recScore = whoopData ? Math.min(100, Math.max(0, whoopData.recovery?.score || 0)) : null;
+            const currentWeekDays = (planBlocks[0]?.weeks?.[0]?.days) || [];
+            const plannedSessions = currentWeekDays.filter(d => d.am).length;
+            const completedSessions = currentWeekDays.filter(d => {
+              const dd = d.date?.split(" ")[0];
+              return garminActivities.some(a => a.start_time?.startsWith(dd || "___"));
+            }).length;
+            const complianceScore = plannedSessions > 0 ? Math.round((completedSessions / plannedSessions) * 100) : 50;
+            const vo2Vals = unifiedMetrics.filter(m => m.vo2_max).slice(0, 5);
+            const vo2Score = vo2Vals.length >= 2 ? (Number(vo2Vals[0].vo2_max) >= Number(vo2Vals[vo2Vals.length-1].vo2_max) ? 80 : 50) : 50;
+            const sleepScore = whoopData?.sleep?.score || 50;
+            const flaggedCount = biomarkers.filter(b => b.flag === "HIGH" || b.flag === "LOW").length;
+            const bioScore = Math.max(0, 100 - flaggedCount * 20);
+            const components = [
+              { label:"RECOVERY TREND", score: recScore ?? 50, weight:0.30, color: (recScore??50) >= 67 ? C.green : (recScore??50) >= 34 ? C.yellow : C.red },
+              { label:"COMPLIANCE", score: complianceScore, weight:0.25, color: complianceScore >= 80 ? C.green : complianceScore >= 50 ? C.yellow : C.red },
+              { label:"VO2 MAX TREND", score: vo2Score, weight:0.20, color: vo2Score >= 70 ? C.green : vo2Score >= 40 ? C.yellow : C.red },
+              { label:"SLEEP QUALITY", score: sleepScore, weight:0.15, color: sleepScore >= 70 ? C.green : sleepScore >= 40 ? C.yellow : C.red },
+              { label:"BIOMARKERS", score: bioScore, weight:0.10, color: bioScore >= 70 ? C.green : bioScore >= 40 ? C.yellow : C.red },
+            ];
+            const readiness = Math.round(components.reduce((s,c) => s + c.score * c.weight, 0));
+            const rColor = readiness >= 75 ? C.green : readiness >= 50 ? C.yellow : C.red;
+            return (
+              <div style={{ padding:"0 20px 16px" }}>
+                <button onClick={() => setShowReadinessBreakdown(p => !p)} style={{ width:"100%", background:C.card, borderRadius:C.radius, padding:"16px 18px", border:`1px solid ${rColor}22`, cursor:"pointer", textAlign:"left", boxShadow:glow(rColor,0.1), ...C.glass }}>
+                  <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center" }}>
+                    <div>
+                      <div style={{ fontFamily:C.fm, fontSize:7, color:C.muted, letterSpacing:3, marginBottom:4 }}>RACE READINESS</div>
+                      <div style={{ fontFamily:C.ff, fontSize:36, color:rColor, fontWeight:700, lineHeight:1 }}>{readiness}</div>
+                    </div>
+                    <Ring score={readiness} size={56} stroke={5} color={rColor} />
+                  </div>
+                </button>
+                {showReadinessBreakdown && (
+                  <div style={{ marginTop:8, display:"flex", flexDirection:"column", gap:4 }}>
+                    {components.map((c,i) => (
+                      <div key={i} style={{ display:"flex", alignItems:"center", gap:10, padding:"8px 12px", background:C.card, borderRadius:8, border:`1px solid ${C.border}` }}>
+                        <div style={{ fontFamily:C.fm, fontSize:7, color:C.muted, letterSpacing:2, flex:1 }}>{c.label} ({Math.round(c.weight*100)}%)</div>
+                        <div style={{ width:60, height:4, borderRadius:2, background:C.cardSolid, overflow:"hidden" }}>
+                          <div style={{ width:`${c.score}%`, height:"100%", background:c.color, borderRadius:2 }} />
+                        </div>
+                        <div style={{ fontFamily:C.ff, fontSize:14, color:c.color, minWidth:28, textAlign:"right" }}>{c.score}</div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            );
+          })()}
+
           {garminActivities.length > 0 && (
             <div style={{ padding:"0 20px 16px" }}>
               <div style={{ fontFamily:C.fm, fontSize:7, color:C.muted, letterSpacing:3, marginBottom:8, textTransform:"uppercase" }}>LAST ACTIVITY</div>
@@ -1151,6 +1229,18 @@ export default function App() {
                   </div>
                 );
               })()}
+            </div>
+          )}
+
+          {weeklyReview && new Date().getDay() === 0 && (
+            <div style={{ padding:"0 20px 16px" }}>
+              <div style={{ background:`${C.cyan}06`, border:`1px solid ${C.cyan}22`, borderRadius:C.radius, padding:"16px 18px", ...C.glass }}>
+                <div style={{ display:"flex", alignItems:"center", gap:8, marginBottom:10 }}>
+                  <span style={{ fontSize:16 }}>📊</span>
+                  <div style={{ fontFamily:C.ff, fontSize:16, color:C.cyan, letterSpacing:2 }}>WEEKLY REVIEW</div>
+                </div>
+                <div style={{ fontFamily:C.fs, fontSize:13, color:C.text, lineHeight:1.7 }}>{renderMarkdown(weeklyReview)}</div>
+              </div>
             </div>
           )}
 
@@ -1404,8 +1494,54 @@ export default function App() {
 
       {nav === "supps" && (
         <div style={{ padding:"20px" }}>
-          <div style={{ fontFamily:C.ff, fontSize:28, letterSpacing:2, marginBottom:4 }}>SUPPLEMENTS<span style={{ color:C.red }}>.</span></div>
-          <div style={{ fontFamily:C.fm, fontSize:8, color:C.muted, letterSpacing:3, marginBottom:20 }}>DAILY PROTOCOL</div>
+          <div style={{ display:"flex", justifyContent:"space-between", alignItems:"flex-start", marginBottom:20 }}>
+            <div>
+              <div style={{ fontFamily:C.ff, fontSize:28, letterSpacing:2, marginBottom:4 }}>SUPPLEMENTS<span style={{ color:C.red }}>.</span></div>
+              <div style={{ fontFamily:C.fm, fontSize:8, color:C.muted, letterSpacing:3 }}>DAILY PROTOCOL</div>
+            </div>
+            {supplements.length > 0 && (
+              <button onClick={() => {
+                const canvas = document.createElement("canvas");
+                const W = 800, pad = 40;
+                const groups = {};
+                supplements.forEach(s => { if (!groups[s.time_group]) groups[s.time_group] = []; groups[s.time_group].push(s); });
+                const groupKeys = Object.keys(groups);
+                const totalItems = supplements.length;
+                const H = 200 + totalItems * 50 + groupKeys.length * 40 + 80;
+                canvas.width = W; canvas.height = H;
+                const ctx = canvas.getContext("2d");
+                ctx.fillStyle = "#0A0A0A"; ctx.fillRect(0, 0, W, H);
+                ctx.fillStyle = "#00F3FF"; ctx.font = "bold 32px 'Arial Black', sans-serif";
+                ctx.fillText("MY SUPPLEMENT STACK", pad, 60);
+                ctx.fillStyle = "#888"; ctx.font = "12px monospace";
+                ctx.fillText((profile?.name || "ATHLETE").toUpperCase() + " · DAILY PROTOCOL", pad, 85);
+                let y = 120;
+                const gcols = { MORNING:"#FFD600", AFTERNOON:"#FF3B30", NIGHT:"#0088FF", "DAILY TARGETS":"#888" };
+                groupKeys.forEach(g => {
+                  ctx.fillStyle = gcols[g] || "#888"; ctx.font = "bold 14px monospace"; ctx.fillText(g, pad, y); y += 28;
+                  groups[g].forEach(s => {
+                    ctx.fillStyle = "rgba(255,255,255,0.06)";
+                    ctx.beginPath(); ctx.roundRect(pad, y - 16, W - pad * 2, 40, 8); ctx.fill();
+                    ctx.fillStyle = "#fff"; ctx.font = "16px sans-serif"; ctx.fillText(s.name, pad + 12, y + 6);
+                    ctx.fillStyle = "#888"; ctx.font = "12px monospace"; ctx.fillText(s.dose, W - pad - ctx.measureText(s.dose).width - 12, y + 6);
+                    y += 50;
+                  });
+                  y += 10;
+                });
+                const optBio = biomarkers.filter(b => b.flag === "OPTIMAL" || b.flag === "GOOD").slice(0, 3);
+                if (optBio.length > 0) {
+                  y += 10; ctx.fillStyle = "#00D4A0"; ctx.font = "bold 14px monospace"; ctx.fillText("OPTIMAL BIOMARKERS", pad, y); y += 28;
+                  optBio.forEach(b => { ctx.fillStyle = "#00D4A0"; ctx.font = "14px sans-serif"; ctx.fillText(`✓ ${b.label}: ${b.value}${b.unit?" "+b.unit:""}`, pad + 12, y); y += 24; });
+                }
+                y = H - 30; ctx.fillStyle = "#444"; ctx.font = "10px monospace"; ctx.fillText("△ HYBRID PERFORMANCE OS", pad, y);
+                const link = document.createElement("a");
+                link.download = "my-stack.png"; link.href = canvas.toDataURL("image/png"); link.click();
+              }}
+              style={{ padding:"10px 16px", background:C.card, border:`1px solid ${C.cyan}33`, borderRadius:10, cursor:"pointer", fontFamily:C.ff, fontSize:12, color:C.cyan, letterSpacing:2 }}>
+                SHARE MY STACK
+              </button>
+            )}
+          </div>
           {suppsLoading ? (
             <div style={{ fontFamily:C.ff, fontSize:14, color:C.muted, letterSpacing:3, textAlign:"center", padding:40 }}>LOADING...</div>
           ) : supplements.length === 0 ? (
