@@ -9,6 +9,7 @@ function parseCookies(header) {
 }
 
 async function refreshToken(refreshTok) {
+  console.log("[whoop] refreshing token, refresh_token length:", refreshTok?.length);
   const res = await fetch("https://api.prod.whoop.com/oauth/oauth2/token", {
     method: "POST",
     headers: { "Content-Type": "application/x-www-form-urlencoded" },
@@ -17,16 +18,20 @@ async function refreshToken(refreshTok) {
       refresh_token: refreshTok,
       client_id: process.env.VITE_WHOOP_CLIENT_ID,
       client_secret: process.env.VITE_WHOOP_CLIENT_SECRET,
-      scope: "offline",
+      scope: "offline read:recovery read:sleep read:cycles read:profile",
     }).toString(),
   });
-  return res.json();
+  const data = await res.json();
+  console.log("[whoop] refresh result:", data.access_token ? "got new token" : "FAILED", data.error || "");
+  return data;
 }
 
 export default async function handler(req, res) {
   const cookies = parseCookies(req.headers.cookie);
   let access = cookies.whoop_access;
   const refresh = cookies.whoop_refresh;
+
+  console.log("[whoop] access cookie:", access ? `present (${access.length} chars)` : "MISSING", "| refresh cookie:", refresh ? `present (${refresh.length} chars)` : "MISSING");
 
   if (!access && !refresh) return res.status(401).json({ error: "not_authenticated" });
 
@@ -79,6 +84,8 @@ export default async function handler(req, res) {
   try {
     let { recRes, sleepRes, cycleRes } = await fetchWhoop(access);
 
+    console.log("[whoop] API status — recovery:", recRes.status, "sleep:", sleepRes.status, "cycle:", cycleRes.status);
+
     // Auto-refresh on 401 — token expired but refresh cookie still valid
     if ((recRes.status === 401 || sleepRes.status === 401 || cycleRes.status === 401) && refresh) {
       const newTokens = await refreshToken(refresh);
@@ -95,7 +102,10 @@ export default async function handler(req, res) {
       }
     }
 
-    if (recRes.status === 401) return res.status(401).json({ error: "token_expired" });
+    if (recRes.status === 401) {
+      console.log("[whoop] still 401 after refresh attempt — token fully expired");
+      return res.status(401).json({ error: "token_expired", reconnect: true });
+    }
 
     const [recData, sleepData, cycleData] = await Promise.all([
       recRes.json(), sleepRes.json(), cycleRes.json(),
