@@ -258,10 +258,17 @@ const AIChat = ({ whoopData, currentWeek, recentActivities, onPlanChange, userNa
   const handlePlanChange = async (planChange, action) => {
     if (action === "accept") {
       setMessages(prev => prev.map(m => m.planChange === planChange ? { ...m, planChangeStatus:"applying" } : m));
-      await onPlanChange(planChange);
-      const count = planChange.type === "remap_week" ? (planChange.days?.length || 0) : 1;
-      setMessages(prev => prev.map(m => m.planChange === planChange ? { ...m, planChangeStatus:"accepted" } : m));
-      setMessages(prev => [...prev, { role:"assistant", content:`✓ **Plan updated** — ${count} session${count>1?"s":""} modified.`, planChange:null }]);
+      console.log("[AIChat] APPLY TO PLAN — sending to onPlanChange:", JSON.stringify(planChange));
+      try {
+        await onPlanChange(planChange);
+        const count = planChange.type === "remap_week" ? (planChange.days?.length || 0) : 1;
+        setMessages(prev => prev.map(m => m.planChange === planChange ? { ...m, planChangeStatus:"accepted" } : m));
+        setMessages(prev => [...prev, { role:"assistant", content:`✓ **Plan updated** — ${count} session${count>1?"s":""} modified.`, planChange:null }]);
+      } catch (e) {
+        console.error("[AIChat] APPLY failed:", e);
+        setMessages(prev => prev.map(m => m.planChange === planChange ? { ...m, planChangeStatus:null } : m));
+        setMessages(prev => [...prev, { role:"assistant", content:`Failed to update plan: ${e.message}. Try again.`, planChange:null }]);
+      }
     } else {
       setMessages(prev => prev.map(m => m.planChange === planChange ? { ...m, planChangeStatus:"rejected" } : m));
     }
@@ -424,7 +431,11 @@ const AIChat = ({ whoopData, currentWeek, recentActivities, onPlanChange, userNa
       {attachment && (
         <div style={{ padding:"0 20px 8px", display:"flex", alignItems:"center", gap:8, flexShrink:0 }}>
           <div style={{ background:C.card2, border:`1px solid ${C.border}`, borderRadius:8, padding:"6px 10px", display:"flex", alignItems:"center", gap:8, flex:1, minWidth:0 }}>
-            <span style={{ fontSize:13 }}>{attachment.media_type.startsWith("image/") ? "🖼" : "📄"}</span>
+            {attachment.media_type?.startsWith("image/") ? (
+              <img src={`data:${attachment.media_type};base64,${attachment.data}`} alt="" style={{ width:28, height:28, borderRadius:4, objectFit:"cover", flexShrink:0 }} />
+            ) : (
+              <span style={{ fontSize:13 }}>📄</span>
+            )}
             <span style={{ fontFamily:C.fm, fontSize:9, color:C.muted, letterSpacing:1, flex:1, overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>{attachment.name}</span>
             <button onClick={() => { setAttachment(null); if (fileInputRef.current) fileInputRef.current.value = ""; }} style={{ background:"none", border:"none", color:C.muted, cursor:"pointer", padding:0, fontSize:14, flexShrink:0, lineHeight:1 }}>×</button>
           </div>
@@ -452,7 +463,7 @@ const AIChat = ({ whoopData, currentWeek, recentActivities, onPlanChange, userNa
           placeholder="Ask your coach anything..."
           style={{ flex:1, background:C.card, border:`1px solid ${C.cyan}22`, borderRadius:12, padding:"12px 16px", color:C.text, fontFamily:C.fs, fontSize:14, outline:"none", resize:"none", overflow:"hidden", lineHeight:"1.5", maxHeight:120, ...C.glass }}
         />
-        {/* TODO: Re-add when image upload is verified working end-to-end */}
+        <button onClick={() => fileInputRef.current?.click()} style={{ width:36, height:36, background: attachment ? `${C.green}22` : C.card2, border:`1px solid ${attachment ? C.green+"44" : C.border}`, borderRadius:10, cursor:"pointer", color: attachment ? C.green : C.muted, fontSize:16, flexShrink:0, display:"flex", alignItems:"center", justifyContent:"center" }} title="Attach image or PDF">📎</button>
         <button onClick={toggleVoice} style={{ width:36, height:36, background: isRecording ? `${C.red}22` : C.card2, border:`1px solid ${isRecording ? C.red+"44" : C.border}`, borderRadius:10, cursor:"pointer", color: isRecording ? C.red : C.muted, fontSize:16, flexShrink:0, display:"flex", alignItems:"center", justifyContent:"center" }} title={isRecording ? "Stop recording" : "Voice input"}>
           {isRecording ? <span className="pulse" style={{ fontSize:14 }}>●</span> : "🎙"}
         </button>
@@ -596,10 +607,15 @@ const SessionModal = ({ name, dayData, sess, weekId, onClose, onSessSwitch, sund
     const ordered = editBlocks.map((b,i) => ({ ...b, order:i }));
     const update = { [blocksKey]: ordered, note: editNote };
     try {
+      // weekId is the UUID from training_weeks; training_days.week_id is the slug
+      // Look up the slug first, then update training_days
+      const { data: weekRow } = await supabase
+        .from("training_weeks").select("week_id").eq("id", weekId).single();
+      const wkSlug = weekRow?.week_id || weekId;
       const { error } = await supabase
         .from("training_days")
         .update(update)
-        .eq("week_id", weekId)
+        .eq("week_id", wkSlug)
         .eq("day_name", dayData.day);
       if (error) throw error;
       setToast("✓ Saved");

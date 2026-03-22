@@ -133,6 +133,8 @@ Rules for plan_change JSON:
 - "day" MUST be 3-letter uppercase: MON, TUE, WED, THU, FRI, SAT, SUN
 - "changes" keys: am_session, pm_session, am_session_custom, pm_session_custom, note
 - Use remap_week when the user approves changes to 2+ days (e.g. full week restructure)
+- When the user asks to restructure a full week or sends a training architecture, you MUST generate a remap_week plan_change that includes ALL 7 days. Never generate a modify_day for a full week request.
+- For a full week remap, gather all session preferences in one <clarifying_questions> block before generating anything. Ask about: strength format, cardio format, HYROX format, recovery preference.
 - Never expose technical concepts (UUIDs, database IDs, slugs) to the user
 
 When suggesting adding a new supplement:
