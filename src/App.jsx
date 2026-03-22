@@ -647,6 +647,7 @@ export default function App() {
   const [labContext, setLabContext] = useState("");
   const [labTargetDay, setLabTargetDay] = useState(null);
   const [cqSelections, setCqSelections] = useState({});
+  const dataFetched = useRef(false);
 
   // ── Auth state ──────────────────────────────────────────────────────────────
   const [session, setSession]       = useState(null);
@@ -666,14 +667,21 @@ export default function App() {
       }
     });
 
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
-      setSession(session);
-      if (session) {
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, newSession) => {
+      setSession(newSession);
+      if (newSession) {
         supabase
-          .from("user_profiles").select("*").eq("user_id", session.user.id).single()
-          .then(({ data }) => { setProfile(data || null); setAuthLoading(false); });
+          .from("user_profiles").select("*").eq("user_id", newSession.user.id).single()
+          .then(({ data }) => {
+            setProfile(prev => {
+              if (prev?.user_id === data?.user_id) return prev;
+              return data || null;
+            });
+            setAuthLoading(false);
+          });
       } else {
         setProfile(null);
+        dataFetched.current = false;
         setAuthLoading(false);
       }
     });
@@ -681,13 +689,14 @@ export default function App() {
     return () => subscription.unsubscribe();
   }, []);
 
-  // Data fetches — only run once the user is authenticated and has a profile
+  // Data fetches — only run once per session when profile is first loaded
   useEffect(() => {
-    if (!profile) return;
+    if (!profile || dataFetched.current) return;
+    dataFetched.current = true;
+
     const params = new URLSearchParams(window.location.search);
     if (params.get("connected") === "true") window.history.replaceState({}, "", "/");
 
-    // Check persistent wearable connections from profile
     if (profile.connected_wearables?.whoop) {
       setWhoopConnected(true);
     }
