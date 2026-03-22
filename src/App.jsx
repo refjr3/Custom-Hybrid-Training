@@ -9,12 +9,16 @@ const supabase = createClient(
 );
 
 const C = {
-  bg:"#000000", surface:"#111111", card:"#1a1a1a", card2:"#222222",
-  border:"#2a2a2a", text:"#ffffff", muted:"#888888", light:"#555555",
-  red:"#FF3C00", green:"#00D4A0", yellow:"#FFD600", blue:"#0088FF",
+  bg:"#0A0A0A", surface:"#111111",
+  card:"rgba(255,255,255,0.03)", card2:"rgba(255,255,255,0.06)",
+  cardSolid:"#141414",
+  border:"rgba(255,255,255,0.08)", text:"#ffffff", muted:"#888888", light:"#555555",
+  red:"#FF3B30", green:"#00D4A0", yellow:"#FFD600", blue:"#0088FF", cyan:"#00F3FF",
   ff:"'Bebas Neue','Arial Black',sans-serif",
   fm:"'Space Mono',monospace",
   fs:"'Inter',-apple-system,sans-serif",
+  glass:{ backdropFilter:"blur(12px)", WebkitBackdropFilter:"blur(12px)" },
+  radius:16,
 };
 
 const HR_ZONES = [
@@ -98,7 +102,7 @@ const Ring = ({ score, size=120, stroke=10, color, label, sublabel }) => {
 };
 
 const StatPill = ({ label, value, color }) => (
-  <div style={{ background:C.card, borderRadius:12, padding:"10px 14px", flex:1, textAlign:"center" }}>
+  <div style={{ background:C.card, borderRadius:C.radius, padding:"10px 14px", flex:1, textAlign:"center", border:`1px solid ${C.border}`, ...C.glass }}>
     <div style={{ fontFamily:C.fm, fontSize:7, color:C.muted, letterSpacing:2, marginBottom:4 }}>{label}</div>
     <div style={{ fontFamily:C.ff, fontSize:20, color: color || C.text }}>{value}</div>
   </div>
@@ -110,7 +114,7 @@ const TodayCard = ({ name, onTap }) => {
   if (!w) return null;
   const accent = getAccent(name);
   return (
-    <div onClick={onTap} style={{ background:C.card, borderRadius:16, overflow:"hidden", cursor:"pointer", border:`1px solid ${C.border}` }}>
+    <div onClick={onTap} style={{ background:C.card, borderRadius:C.radius, overflow:"hidden", cursor:"pointer", border:`1px solid ${C.border}`, ...C.glass }}>
       <div style={{ padding:"14px 16px 12px", borderBottom:`1px solid ${C.border}` }}>
         <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center" }}>
           <div style={{ background:`${accent}22`, border:`1px solid ${accent}44`, borderRadius:20, padding:"3px 10px", fontFamily:C.fm, fontSize:8, color:accent, letterSpacing:2 }}>{w.type}</div>
@@ -142,7 +146,13 @@ const renderMarkdown = (text) => {
   });
 };
 
-const AIChat = ({ whoopData, currentWeek, recentActivities, onPlanChange, userName }) => {
+const PERSONAS = [
+  { id:"grinder",   label:"THE GRINDER",   sub:"Push through · Motivational", color:"#FF3B30" },
+  { id:"scientist", label:"THE SCIENTIST", sub:"Data-driven · Clinical", color:"#00F3FF" },
+  { id:"sage",      label:"THE SAGE",      sub:"Mindful · RPE-based", color:"#00D4A0" },
+];
+
+const AIChat = ({ whoopData, currentWeek, recentActivities, onPlanChange, userName, persona, onPersonaChange }) => {
   const [messages, setMessages] = useState([
     { role:"assistant", content:`Hey ${userName || "there"} — I have your WHOOP data, training plan, and biomarkers loaded. What do you need?`, planChange:null }
   ]);
@@ -150,6 +160,7 @@ const AIChat = ({ whoopData, currentWeek, recentActivities, onPlanChange, userNa
   const [loading, setLoading] = useState(false);
   const [expanded, setExpanded] = useState(false);
   const [attachment, setAttachment] = useState(null);
+  const [showPersonas, setShowPersonas] = useState(false);
   const messagesEndRef = useRef(null);
   const textareaRef = useRef(null);
   const fileInputRef = useRef(null);
@@ -202,7 +213,7 @@ const AIChat = ({ whoopData, currentWeek, recentActivities, onPlanChange, userNa
     return (
       <div style={{ position:"fixed", bottom:80, left:"50%", transform:"translateX(-50%)", width:"calc(100% - 40px)", maxWidth:440, zIndex:150 }}>
         <button onClick={() => setExpanded(true)}
-          style={{ width:"100%", padding:"14px 20px", background:C.card, border:`1px solid ${C.border}`, borderRadius:16, display:"flex", alignItems:"center", gap:12, cursor:"pointer", boxShadow:"0 4px 20px rgba(0,0,0,0.5)" }}>
+          style={{ width:"100%", padding:"14px 20px", background:C.card, border:`1px solid ${C.border}`, borderRadius:C.radius, display:"flex", alignItems:"center", gap:12, cursor:"pointer", boxShadow:"0 4px 20px rgba(0,0,0,0.5)", ...C.glass }}>
           <div style={{ width:32, height:32, borderRadius:"50%", background:`${C.green}22`, border:`1px solid ${C.green}44`, display:"flex", alignItems:"center", justifyContent:"center", flexShrink:0 }}>
             <span style={{ fontSize:14 }}>✦</span>
           </div>
@@ -217,19 +228,34 @@ const AIChat = ({ whoopData, currentWeek, recentActivities, onPlanChange, userNa
   }
 
   return (
-    <div style={{ position:"fixed", inset:0, zIndex:150, background:"rgba(0,0,0,0.95)", display:"flex", flexDirection:"column", maxWidth:480, margin:"0 auto" }}>
+    <div style={{ position:"fixed", inset:0, zIndex:150, background:"rgba(10,10,10,0.95)", display:"flex", flexDirection:"column", maxWidth:480, margin:"0 auto" }}>
       <div style={{ padding:"16px 20px", borderBottom:`1px solid ${C.border}`, display:"flex", justifyContent:"space-between", alignItems:"center", flexShrink:0 }}>
         <div style={{ display:"flex", alignItems:"center", gap:12 }}>
-          <div style={{ width:36, height:36, borderRadius:"50%", background:`${C.green}22`, border:`1px solid ${C.green}44`, display:"flex", alignItems:"center", justifyContent:"center" }}>
+          <button onClick={() => setShowPersonas(p => !p)} style={{ width:36, height:36, borderRadius:"50%", background:`${C.green}22`, border:`1px solid ${C.green}44`, display:"flex", alignItems:"center", justifyContent:"center", cursor:"pointer" }}>
             <span style={{ fontSize:16 }}>✦</span>
-          </div>
+          </button>
           <div>
             <div style={{ fontFamily:C.ff, fontSize:16, color:C.text, letterSpacing:1 }}>AI COACH</div>
-            <div style={{ fontFamily:C.fm, fontSize:7, color:C.green, letterSpacing:2 }}>● LIVE · WHOOP {whoopData?.recovery?.score ?? "--"}% · Claude</div>
+            <div style={{ fontFamily:C.fm, fontSize:7, color:C.green, letterSpacing:2 }}>● {(PERSONAS.find(p => p.id === persona)?.label || "THE GRINDER")} · WHOOP {whoopData?.recovery?.score ?? "--"}%</div>
           </div>
         </div>
-        <button onClick={() => setExpanded(false)} style={{ background:C.card, border:"none", color:C.muted, width:32, height:32, borderRadius:"50%", cursor:"pointer", fontSize:14 }}>✕</button>
+        <button onClick={() => setExpanded(false)} style={{ background:C.cardSolid, border:"none", color:C.muted, width:32, height:32, borderRadius:"50%", cursor:"pointer", fontSize:14 }}>✕</button>
       </div>
+      {showPersonas && (
+        <div style={{ padding:"12px 20px", borderBottom:`1px solid ${C.border}`, display:"flex", gap:8 }}>
+          {PERSONAS.map(p => (
+            <button key={p.id} onClick={() => { onPersonaChange(p.id); setShowPersonas(false); }}
+              style={{
+                flex:1, padding:"10px 6px", borderRadius:10, cursor:"pointer", textAlign:"center",
+                background: persona === p.id ? `${p.color}15` : C.cardSolid,
+                border:`1px solid ${persona === p.id ? p.color+"55" : C.border}`,
+              }}>
+              <div style={{ fontFamily:C.ff, fontSize:11, color: persona === p.id ? p.color : C.text, letterSpacing:1 }}>{p.label}</div>
+              <div style={{ fontFamily:C.fm, fontSize:6, color:C.muted, letterSpacing:1, marginTop:2 }}>{p.sub}</div>
+            </button>
+          ))}
+        </div>
+      )}
       <div style={{ flex:1, overflowY:"auto", padding:"16px 20px", display:"flex", flexDirection:"column", gap:12 }}>
         {messages.map((m, i) => (
           <div key={i} style={{ display:"flex", flexDirection:"column", alignItems: m.role==="user" ? "flex-end" : "flex-start" }}>
@@ -372,7 +398,7 @@ const SessionModal = ({ name, dayData, sess, weekId, onClose, onSessSwitch, sund
   const customContent = sess === "am" ? dayData?.am_session_custom : dayData?.pm_session_custom;
   const showCustom = !!(customContent && dayData?.ai_modified);
   return (
-    <div style={{ position:"fixed", inset:0, zIndex:200, background:"rgba(0,0,0,0.97)", overflowY:"auto" }}>
+    <div style={{ position:"fixed", inset:0, zIndex:200, background:"rgba(10,10,10,0.97)", overflowY:"auto" }}>
       <div style={{ maxWidth:480, margin:"0 auto", minHeight:"100vh", display:"flex", flexDirection:"column" }}>
         <div style={{ padding:"20px 20px 16px", borderBottom:`1px solid ${C.border}`, display:"flex", justifyContent:"space-between", alignItems:"flex-start", position:"sticky", top:0, background:C.bg, zIndex:10 }}>
           <div>
@@ -476,6 +502,11 @@ export default function App() {
   const [planLoading, setPlanLoading] = useState(true);
   const [supplements, setSupplements] = useState([]);
   const [suppsLoading, setSuppsLoading] = useState(true);
+  const [synthesisNote, setSynthesisNote] = useState(null);
+  const [bloodworkUploading, setBloodworkUploading] = useState(false);
+  const [bloodworkResult, setBloodworkResult] = useState(null);
+  const bloodworkInputRef = useRef(null);
+  const [coachPersona, setCoachPersona] = useState("grinder");
 
   // ── Auth state ──────────────────────────────────────────────────────────────
   const [session, setSession]       = useState(null);
@@ -519,6 +550,9 @@ export default function App() {
     // Check persistent wearable connections from profile
     if (profile.connected_wearables?.whoop) {
       setWhoopConnected(true);
+    }
+    if (profile.coach_persona) {
+      setCoachPersona(profile.coach_persona);
     }
 
     fetchWhoopData();
@@ -595,6 +629,51 @@ export default function App() {
     }
   };
 
+  // Morning Synthesis: runs once per calendar day after WHOOP + plan data load
+  useEffect(() => {
+    if (!whoopData || planBlocks.length === 0 || !session?.access_token) return;
+    const today = new Date().toISOString().slice(0, 10);
+    if (localStorage.getItem("synthesis_date") === today) return;
+
+    const dayNames = ["SUN","MON","TUE","WED","THU","FRI","SAT"];
+    const todayDay = dayNames[new Date().getDay()];
+    const currentBlock = planBlocks[0];
+    const currentWeek = currentBlock?.weeks?.[0];
+    const todayData = currentWeek?.days?.find(d => d.day === todayDay);
+    if (!todayData || !currentWeek) {
+      localStorage.setItem("synthesis_date", today);
+      return;
+    }
+
+    const recoveryScore = whoopData?.recovery?.score;
+    const sessionName = todayData.am;
+
+    fetch("/api/synthesis/morning", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "Authorization": `Bearer ${session.access_token}`,
+      },
+      body: JSON.stringify({
+        recovery_score: recoveryScore,
+        session_name: sessionName,
+        week_id: currentWeek.id,
+        day: todayDay,
+      }),
+    })
+      .then(r => r.json())
+      .then(data => {
+        localStorage.setItem("synthesis_date", today);
+        if (data.modified) {
+          setSynthesisNote(data.note);
+          fetchPlan(session.access_token);
+        }
+      })
+      .catch(() => {
+        localStorage.setItem("synthesis_date", today);
+      });
+  }, [whoopData, planBlocks]);
+
   const handlePlanChange = async (planChange) => {
     const token = session?.access_token;
     try {
@@ -636,6 +715,46 @@ export default function App() {
       console.log("[handlePlanChange] fetchPlan complete");
     } catch (e) {
       console.log("[handlePlanChange] caught error:", e.message);
+    }
+  };
+
+  const handlePersonaChange = async (newPersona) => {
+    setCoachPersona(newPersona);
+    try {
+      await supabase
+        .from("user_profiles")
+        .update({ coach_persona: newPersona })
+        .eq("user_id", session.user.id);
+    } catch (_) {}
+  };
+
+  const handleBloodworkUpload = async (file) => {
+    if (!file || !session?.access_token) return;
+    setBloodworkUploading(true);
+    setBloodworkResult(null);
+    try {
+      const reader = new FileReader();
+      reader.onload = async () => {
+        const base64 = reader.result.split(",")[1];
+        const res = await fetch("/api/bloodwork/extract", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            "Authorization": `Bearer ${session.access_token}`,
+          },
+          body: JSON.stringify({
+            attachment: { data: base64, media_type: file.type, name: file.name },
+          }),
+        });
+        const data = await res.json();
+        setBloodworkResult(data);
+        if (data.inserted) fetchBiomarkers();
+        setBloodworkUploading(false);
+      };
+      reader.readAsDataURL(file);
+    } catch (e) {
+      setBloodworkResult({ error: e.message });
+      setBloodworkUploading(false);
     }
   };
 
@@ -695,10 +814,10 @@ export default function App() {
 
           <div style={{ padding:"8px 20px 20px" }}>
             {!whoopConnected && !whoopLoading ? (
-              <div style={{ background:C.card, borderRadius:20, padding:"28px 20px", textAlign:"center", border:`1px solid ${C.border}` }}>
+              <div style={{ background:C.card, borderRadius:C.radius, padding:"28px 20px", textAlign:"center", border:`1px solid ${C.border}`, ...C.glass }}>
                 <div style={{ fontFamily:C.ff, fontSize:20, color:C.muted, marginBottom:8 }}>WHOOP NOT CONNECTED</div>
                 <div style={{ fontFamily:C.fm, fontSize:9, color:C.muted, letterSpacing:2, marginBottom:16 }}>Connect to see live recovery data</div>
-                <a href="/api/auth/login" style={{ display:"inline-block", background:C.green, color:"#000", padding:"12px 28px", fontFamily:C.ff, fontSize:14, letterSpacing:3, textDecoration:"none", borderRadius:8 }}>CONNECT WHOOP</a>
+                <a href="/api/auth/login" style={{ display:"inline-block", background:C.green, color:"#000", padding:"14px 28px", height:48, boxSizing:"border-box", fontFamily:C.ff, fontSize:14, letterSpacing:2, textDecoration:"none", borderRadius:10, textTransform:"uppercase" }}>CONNECT WHOOP</a>
               </div>
             ) : whoopLoading ? (
               <div style={{ display:"flex", justifyContent:"center", alignItems:"center", height:200 }}>
@@ -714,7 +833,7 @@ export default function App() {
                   <Ring score={Math.round((strain/21)*100)} size={80} stroke={8} color="#FF7700" label="STRAIN" sublabel={`${strain}`} />
                   <Ring score={Math.min(Math.round((sleepHours/9)*100),100)} size={80} stroke={8} color={C.muted} label="HRS" sublabel={`${sleepHours}h`} />
                 </div>
-                <div style={{ background:`${rc}15`, border:`1px solid ${rc}33`, borderRadius:14, padding:"12px 16px", marginBottom:16 }}>
+                <div style={{ background:`${rc}15`, border:`1px solid ${rc}33`, borderRadius:C.radius, padding:"12px 16px", marginBottom:16, ...C.glass }}>
                   <div style={{ fontFamily:C.fm, fontSize:8, color:rc, letterSpacing:3, fontWeight:700, marginBottom:4 }}>● {whoopLabel(rec)} DAY</div>
                   <div style={{ fontFamily:C.fs, fontSize:13, color:C.text, lineHeight:1.5 }}>{whoopMsg(rec)}</div>
                   <div style={{ fontFamily:C.fm, fontSize:8, color:C.muted, marginTop:6 }}>HRV {hrv}ms · RHR {rhr}bpm · Sleep {sleepEff}% efficiency</div>
@@ -727,6 +846,18 @@ export default function App() {
               </>
             )}
           </div>
+
+          {synthesisNote && (
+            <div style={{ padding:"0 20px 16px" }}>
+              <div style={{ background:"#FF770015", border:"1px solid #FF770033", borderRadius:14, padding:"14px 16px" }}>
+                <div style={{ display:"flex", alignItems:"center", gap:8, marginBottom:6 }}>
+                  <span style={{ fontSize:14 }}>⚡</span>
+                  <div style={{ fontFamily:C.fm, fontSize:8, color:"#FF7700", letterSpacing:3, fontWeight:700 }}>ADAPTIVE COACHING</div>
+                </div>
+                <div style={{ fontFamily:C.fs, fontSize:13, color:C.text, lineHeight:1.5 }}>{synthesisNote}</div>
+              </div>
+            </div>
+          )}
 
           <div style={{ padding:"0 20px 20px" }}>
             <div style={{ fontFamily:C.fm, fontSize:8, color:C.muted, letterSpacing:3, marginBottom:12 }}>TODAY · {todayDayName}</div>
@@ -836,7 +967,7 @@ export default function App() {
             })}
           </div>
           {dayData && (
-            <div style={{ margin:"16px 20px", background:C.card, borderRadius:16, overflow:"hidden", border:`1px solid ${C.border}` }}>
+            <div style={{ margin:"16px 20px", background:C.card, borderRadius:C.radius, overflow:"hidden", border:`1px solid ${C.border}`, ...C.glass }}>
               {dayData.isSunday && (
                 <div style={{ padding:"14px 16px", borderBottom:`1px solid ${C.border}` }}>
                   <div style={{ fontFamily:C.fm, fontSize:8, color:C.muted, letterSpacing:3, marginBottom:10 }}>CHOOSE SESSION</div>
@@ -917,7 +1048,7 @@ export default function App() {
                     <div style={{ fontFamily:C.fm, fontSize:8, color, letterSpacing:3 }}>{group}</div>
                   </div>
                   {items.map((item) => (
-                    <div key={item.id} style={{ background:C.card, borderRadius:14, padding:"14px 16px", marginBottom:8, borderLeft:`3px solid ${color}44` }}>
+                    <div key={item.id} style={{ background:C.card, borderRadius:C.radius, padding:"14px 16px", marginBottom:8, borderLeft:`3px solid ${color}44`, border:`1px solid ${C.border}`, ...C.glass }}>
                       <div style={{ display:"flex", justifyContent:"space-between", alignItems:"flex-start", marginBottom:6 }}>
                         <div style={{ fontFamily:C.ff, fontSize:16, letterSpacing:0.5, color:C.text }}>{item.name}</div>
                         <div style={{ background:`${color}22`, border:`1px solid ${color}44`, borderRadius:20, padding:"3px 10px", fontFamily:C.fm, fontSize:8, color, letterSpacing:1, flexShrink:0, marginLeft:8 }}>{item.dose}</div>
@@ -935,8 +1066,26 @@ export default function App() {
 
       {nav === "stats" && (
         <div style={{ padding:"20px" }}>
-          <div style={{ fontFamily:C.ff, fontSize:28, letterSpacing:2, marginBottom:4 }}>MY STATS<span style={{ color:C.green }}>.</span></div>
-          <div style={{ fontFamily:C.fm, fontSize:8, color:C.muted, letterSpacing:3, marginBottom:20 }}>BODY COMPOSITION + BLOOD PANEL</div>
+          <div style={{ display:"flex", justifyContent:"space-between", alignItems:"flex-start", marginBottom:20 }}>
+            <div>
+              <div style={{ fontFamily:C.ff, fontSize:28, letterSpacing:2, marginBottom:4 }}>MY STATS<span style={{ color:C.green }}>.</span></div>
+              <div style={{ fontFamily:C.fm, fontSize:8, color:C.muted, letterSpacing:3 }}>BODY COMPOSITION + BLOOD PANEL</div>
+            </div>
+            <div>
+              <input ref={bloodworkInputRef} type="file" accept="image/*,.pdf" style={{ display:"none" }} onChange={e => { if (e.target.files?.[0]) handleBloodworkUpload(e.target.files[0]); }} />
+              <button onClick={() => bloodworkInputRef.current?.click()} disabled={bloodworkUploading}
+                style={{ padding:"10px 16px", background: bloodworkUploading ? C.card2 : C.green, color: bloodworkUploading ? C.muted : "#000", border:"none", borderRadius:10, cursor: bloodworkUploading ? "default" : "pointer", fontFamily:C.ff, fontSize:12, letterSpacing:2 }}>
+                {bloodworkUploading ? "ANALYZING..." : "UPLOAD LABS"}
+              </button>
+            </div>
+          </div>
+          {bloodworkResult && (
+            <div style={{ background: bloodworkResult.inserted ? `${C.green}15` : `${C.red}15`, border:`1px solid ${bloodworkResult.inserted ? C.green+"33" : C.red+"33"}`, borderRadius:10, padding:"12px 14px", marginBottom:16 }}>
+              <div style={{ fontFamily:C.fm, fontSize:8, color: bloodworkResult.inserted ? C.green : C.red, letterSpacing:2 }}>
+                {bloodworkResult.inserted ? `✓ ${bloodworkResult.count} MARKERS EXTRACTED` : bloodworkResult.error || "NO MARKERS FOUND"}
+              </div>
+            </div>
+          )}
           {["DXA","BLOOD"].map(cat => {
             const items = biomarkers.filter(b => b.category === cat);
             if (!items.length) return null;
@@ -952,7 +1101,7 @@ export default function App() {
                 </div>
                 <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:8 }}>
                   {items.map((b,i) => (
-                    <div key={i} style={{ background:C.card, borderRadius:14, padding:"14px", border: b.flag==="HIGH"||b.flag==="LOW" ? `1px solid ${C.red}33` : `1px solid ${C.border}` }}>
+                    <div key={i} style={{ background:C.card, borderRadius:C.radius, padding:"14px", border: b.flag==="HIGH"||b.flag==="LOW" ? `1px solid ${C.red}33` : `1px solid ${C.border}`, ...C.glass }}>
                       <div style={{ fontFamily:C.fm, fontSize:7, color:C.muted, letterSpacing:2, marginBottom:6 }}>{b.label}</div>
                       <div style={{ fontFamily:C.ff, fontSize:18, color: b.flag==="HIGH"||b.flag==="LOW" ? C.red : b.flag==="OPTIMAL"||b.flag==="GOOD" ? C.green : C.text }}>{b.value}{b.unit ? ` ${b.unit}` : ""}</div>
                       {b.flag && <div style={{ fontFamily:C.fm, fontSize:7, color: b.flag==="HIGH"||b.flag==="LOW" ? C.red : b.flag==="OPTIMAL"||b.flag==="GOOD" ? C.green : C.muted, marginTop:4, letterSpacing:1 }}>● {b.flag}</div>}
@@ -965,7 +1114,7 @@ export default function App() {
           <div>
             <div style={{ fontFamily:C.fm, fontSize:8, color:"#aaa", letterSpacing:3, marginBottom:10 }}>HR ZONES · LTHR 165–170 BPM</div>
             {HR_ZONES.map((z, i) => (
-              <div key={i} style={{ display:"flex", alignItems:"center", gap:12, padding:"12px 14px", background:C.card, borderRadius:12, marginBottom:6, borderLeft:`3px solid ${z.color}` }}>
+              <div key={i} style={{ display:"flex", alignItems:"center", gap:12, padding:"12px 14px", background:C.card, borderRadius:12, marginBottom:6, borderLeft:`3px solid ${z.color}`, border:`1px solid ${C.border}`, ...C.glass }}>
                 <div style={{ fontFamily:C.ff, fontSize:16, color:z.color, minWidth:32 }}>{z.zone}</div>
                 <div style={{ flex:1 }}>
                   <div style={{ fontFamily:C.ff, fontSize:14, color:C.text }}>{z.name}</div>
@@ -978,17 +1127,17 @@ export default function App() {
         </div>
       )}
 
-      <div style={{ position:"fixed", bottom:0, left:"50%", transform:"translateX(-50%)", width:"100%", maxWidth:480, background:C.bg, borderTop:`1px solid ${C.border}`, display:"flex", zIndex:100 }}>
+      <div style={{ position:"fixed", bottom:0, left:"50%", transform:"translateX(-50%)", width:"100%", maxWidth:480, background:C.bg, borderTop:`1px solid ${C.border}`, display:"flex", zIndex:100, ...C.glass }}>
         {[["today","⚡","TODAY"],["plan","📅","PLAN"],["supps","💊","SUPPS"],["stats","📊","STATS"]].map(([id,icon,label]) => (
-          <button key={id} onClick={() => setNav(id)} style={{ flex:1, padding:"12px 4px 20px", background:"transparent", border:"none", cursor:"pointer", display:"flex", flexDirection:"column", alignItems:"center", gap:4 }}>
+          <button key={id} onClick={() => setNav(id)} style={{ flex:1, padding:"10px 4px 22px", background:"transparent", border:"none", cursor:"pointer", display:"flex", flexDirection:"column", alignItems:"center", gap:3 }}>
             <div style={{ fontSize:18 }}>{icon}</div>
-            <div style={{ fontFamily:C.fm, fontSize:7, letterSpacing:2, color: nav===id ? C.green : C.muted, fontWeight: nav===id ? 700 : 400 }}>{label}</div>
-            {nav===id && <div style={{ width:4, height:4, borderRadius:"50%", background:C.green, marginTop:2 }} />}
+            <div style={{ fontFamily:C.fm, fontSize:7, letterSpacing:2, color: nav===id ? C.cyan : C.muted, fontWeight: nav===id ? 700 : 400, textTransform:"uppercase" }}>{label}</div>
+            {nav===id && <div style={{ width:4, height:4, borderRadius:"50%", background:C.cyan, marginTop:1 }} />}
           </button>
         ))}
       </div>
 
-      <AIChat whoopData={whoopData} currentWeek={week} recentActivities={recentActivities} onPlanChange={handlePlanChange} userName={profile?.name} />
+      <AIChat whoopData={whoopData} currentWeek={week} recentActivities={recentActivities} onPlanChange={handlePlanChange} userName={profile?.name} persona={coachPersona} onPersonaChange={handlePersonaChange} />
 
       {selDay && (
         <SessionModal name={modalName} dayData={dayData} sess={sess} weekId={weekId} onClose={() => setSelDay(null)} onSessSwitch={setSess} sundayChoice={sundayChoice} setSundayChoice={setSundayChoice} />
