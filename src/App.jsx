@@ -179,6 +179,7 @@ const AIChat = ({ whoopData, currentWeek, recentActivities, onPlanChange, userNa
   const [showPersonas, setShowPersonas] = useState(false);
   const [isRecording, setIsRecording] = useState(false);
   const [chatCqSelections, setChatCqSelections] = useState({});
+  const [pendingReview, setPendingReview] = useState(null);
   const recognitionRef = useRef(null);
   const messagesEndRef = useRef(null);
   const textareaRef = useRef(null);
@@ -394,14 +395,14 @@ const AIChat = ({ whoopData, currentWeek, recentActivities, onPlanChange, userNa
                 <div style={{ fontFamily:C.fm, fontSize:7, color:C.green, letterSpacing:3, marginBottom:6 }}>PROPOSED CHANGE</div>
                 <div style={{ fontFamily:C.ff, fontSize:14, color:C.text, marginBottom:4 }}>{m.planChange.description}</div>
                 <div style={{ display:"flex", gap:8, marginTop:10 }}>
-                  <button onClick={() => handlePlanChange(m.planChange, "accept")} style={{ flex:1, padding:"10px", background:C.green, color:"#000", border:"none", borderRadius:8, cursor:"pointer", fontFamily:C.ff, fontSize:12, letterSpacing:2 }}>ACCEPT</button>
-                  <button onClick={() => handlePlanChange(m.planChange, "reject")} style={{ flex:1, padding:"10px", background:"transparent", color:C.muted, border:`1px solid ${C.border}`, borderRadius:8, cursor:"pointer", fontFamily:C.ff, fontSize:12, letterSpacing:2 }}>REJECT</button>
+                  <button onClick={() => setPendingReview({ planChange:m.planChange, msgIdx:i })} style={{ flex:1, padding:"10px", background:C.green, color:"#000", border:"none", borderRadius:8, cursor:"pointer", fontFamily:C.ff, fontSize:12, letterSpacing:2 }}>REVIEW CHANGES</button>
+                  <button onClick={() => handlePlanChange(m.planChange, "reject")} style={{ flex:1, padding:"10px", background:"transparent", color:C.muted, border:`1px solid ${C.border}`, borderRadius:8, cursor:"pointer", fontFamily:C.ff, fontSize:12, letterSpacing:2 }}>DISMISS</button>
                 </div>
               </div>
             )}
             {m.planChange && m.planChangeStatus && (
-              <div style={{ fontFamily:C.fm, fontSize:8, color: m.planChangeStatus==="accepted" ? C.green : C.muted, letterSpacing:2, marginTop:4 }}>
-                {m.planChangeStatus === "accepted" ? "✓ CHANGE ACCEPTED" : "✕ CHANGE REJECTED"}
+              <div style={{ fontFamily:C.fm, fontSize:8, color: m.planChangeStatus==="accepted" ? C.green : m.planChangeStatus==="applying" ? C.cyan : C.muted, letterSpacing:2, marginTop:4 }}>
+                {m.planChangeStatus === "accepted" ? "✓ APPLIED TO PLAN" : m.planChangeStatus === "applying" ? "APPLYING..." : "✕ DISMISSED"}
               </div>
             )}
           </div>
@@ -451,12 +452,46 @@ const AIChat = ({ whoopData, currentWeek, recentActivities, onPlanChange, userNa
           placeholder="Ask your coach anything..."
           style={{ flex:1, background:C.card, border:`1px solid ${C.cyan}22`, borderRadius:12, padding:"12px 16px", color:C.text, fontFamily:C.fs, fontSize:14, outline:"none", resize:"none", overflow:"hidden", lineHeight:"1.5", maxHeight:120, ...C.glass }}
         />
-        <button onClick={() => fileInputRef.current?.click()} style={{ width:36, height:36, background: attachment ? `${C.green}22` : C.card2, border:`1px solid ${attachment ? C.green+"44" : C.border}`, borderRadius:10, cursor:"pointer", color: attachment ? C.green : C.muted, fontSize:16, flexShrink:0, display:"flex", alignItems:"center", justifyContent:"center" }} title="Attach image or PDF">📎</button>
+        {/* TODO: Re-add when image upload is verified working end-to-end */}
         <button onClick={toggleVoice} style={{ width:36, height:36, background: isRecording ? `${C.red}22` : C.card2, border:`1px solid ${isRecording ? C.red+"44" : C.border}`, borderRadius:10, cursor:"pointer", color: isRecording ? C.red : C.muted, fontSize:16, flexShrink:0, display:"flex", alignItems:"center", justifyContent:"center" }} title={isRecording ? "Stop recording" : "Voice input"}>
           {isRecording ? <span className="pulse" style={{ fontSize:14 }}>●</span> : "🎙"}
         </button>
         <button onClick={sendMessage} disabled={loading || (!input.trim() && !attachment)} style={{ width:48, height:48, background: (input.trim() || attachment) ? C.green : C.card, border:"none", borderRadius:12, cursor: (input.trim() || attachment) ? "pointer" : "default", color: (input.trim() || attachment) ? "#000" : C.muted, fontSize:18, flexShrink:0 }}>↑</button>
       </div>
+      {pendingReview && (
+        <div style={{ position:"fixed", inset:0, zIndex:300, background:"rgba(10,10,10,0.97)", display:"flex", flexDirection:"column", maxWidth:480, margin:"0 auto" }}>
+          <div style={{ padding:"20px", borderBottom:`1px solid ${C.border}`, display:"flex", justifyContent:"space-between", alignItems:"center" }}>
+            <div style={{ fontFamily:C.ff, fontSize:20, color:C.cyan, letterSpacing:2 }}>REVIEW CHANGES</div>
+            <button onClick={() => setPendingReview(null)} style={{ background:C.cardSolid, border:"none", color:C.muted, width:32, height:32, borderRadius:"50%", cursor:"pointer", fontSize:14 }}>✕</button>
+          </div>
+          <div style={{ flex:1, overflowY:"auto", padding:"20px" }}>
+            {(() => {
+              const pc = pendingReview.planChange;
+              const days = pc.type === "remap_week" ? (pc.days || []) : [{ day:pc.day, changes:pc.changes }];
+              return days.map((d, di) => (
+                <div key={di} style={{ background:C.card, borderRadius:C.radius, padding:"14px 16px", marginBottom:10, border:`1px solid ${C.border}`, ...C.glass }}>
+                  <div style={{ fontFamily:C.fm, fontSize:7, color:C.muted, letterSpacing:3, marginBottom:8 }}>{d.day || "SESSION"}</div>
+                  <div style={{ display:"flex", gap:12 }}>
+                    <div style={{ flex:1 }}>
+                      <div style={{ fontFamily:C.fm, fontSize:6, color:C.muted, letterSpacing:2, marginBottom:4 }}>CURRENT</div>
+                      <div style={{ fontFamily:C.fs, fontSize:12, color:C.muted, lineHeight:1.5 }}>{d.changes?.am_session || d.changes?.note || "Current session"}</div>
+                    </div>
+                    <div style={{ width:1, background:C.border }} />
+                    <div style={{ flex:1 }}>
+                      <div style={{ fontFamily:C.fm, fontSize:6, color:C.cyan, letterSpacing:2, marginBottom:4 }}>PROPOSED</div>
+                      <div style={{ fontFamily:C.fs, fontSize:12, color:C.cyan, lineHeight:1.5 }}>{pc.description}</div>
+                    </div>
+                  </div>
+                </div>
+              ));
+            })()}
+          </div>
+          <div style={{ padding:"16px 20px 24px" }}>
+            <button onClick={async () => { await handlePlanChange(pendingReview.planChange, "accept"); setPendingReview(null); }} style={{ width:"100%", padding:"16px", background:C.green, color:"#000", border:"none", borderRadius:12, cursor:"pointer", fontFamily:C.ff, fontSize:16, letterSpacing:3, marginBottom:10 }}>APPLY TO PLAN</button>
+            <button onClick={() => { handlePlanChange(pendingReview.planChange, "reject"); setPendingReview(null); }} style={{ width:"100%", padding:"10px", background:"transparent", color:C.muted, border:"none", cursor:"pointer", fontFamily:C.fm, fontSize:9, letterSpacing:2 }}>CANCEL</button>
+          </div>
+        </div>
+      )}
     </div>
   );
 };
@@ -512,13 +547,237 @@ const renderCustomSession = (md, accent) => {
   return <div style={{ display:"flex", flexDirection:"column", gap:0 }}>{out}</div>;
 };
 
-const SessionModal = ({ name, dayData, sess, weekId, onClose, onSessSwitch, sundayChoice, setSundayChoice }) => {
+const SESSION_TYPES = ["ZONE 2","THRESHOLD","HYROX","STRENGTH","TEMPO","VO2 MAX","RECOVERY","MOBILITY","RACE"];
+const BLOCK_TYPES = ["FOR TIME","AMRAP","EMOM","INTERVALS","GENERAL"];
+const uid = () => crypto.randomUUID ? crypto.randomUUID() : Math.random().toString(36).slice(2);
+
+const SessionModal = ({ name, dayData, sess, weekId, onClose, onSessSwitch, sundayChoice, setSundayChoice, supabase, session: authSession, onSaved }) => {
+  const [editMode, setEditMode] = useState(false);
+  const [editName, setEditName] = useState("");
+  const [editType, setEditType] = useState("");
+  const [editDuration, setEditDuration] = useState("");
+  const [editNote, setEditNote] = useState("");
+  const [editBlocks, setEditBlocks] = useState([]);
+  const [expandedBlock, setExpandedBlock] = useState(null);
+  const [saving, setSaving] = useState(false);
+  const [toast, setToast] = useState(null);
+  const [dragIdx, setDragIdx] = useState(null);
+
   if (!name && !dayData?.isSunday && !dayData?.isRaceDay) return null;
   const w = name ? WL[name] : null;
   const accent = name ? getAccent(name) : C.muted;
-  // Custom AI-generated content takes priority over WL steps when ai_modified is true
   const customContent = sess === "am" ? dayData?.am_session_custom : dayData?.pm_session_custom;
   const showCustom = !!(customContent && dayData?.ai_modified);
+
+  const enterEdit = () => {
+    setEditName(name || "");
+    setEditType(w?.type || "");
+    setEditDuration(w?.duration?.replace(/[^0-9]/g,"") || "");
+    setEditNote(dayData?.note2a || w?.note || "");
+    const existing = sess === "am" ? dayData?.am_session_blocks : dayData?.pm_session_blocks;
+    if (existing && existing.length > 0) {
+      setEditBlocks(JSON.parse(JSON.stringify(existing)));
+    } else if (w?.steps) {
+      setEditBlocks([{
+        id:uid(), type:"GENERAL", duration:null, rounds:null, order:0,
+        exercises: w.steps.filter(s => !s.startsWith("—")).map((s,i) => ({ id:uid(), name:s, sets:null, reps:null, note:null })),
+        is_ai_generated: !!dayData?.ai_modified, is_modified:false,
+      }]);
+    } else {
+      setEditBlocks([]);
+    }
+    setEditMode(true);
+  };
+
+  const saveEdit = async () => {
+    if (!supabase || !authSession?.access_token || !dayData) return;
+    setSaving(true);
+    const blocksKey = sess === "am" ? "am_session_blocks" : "pm_session_blocks";
+    const ordered = editBlocks.map((b,i) => ({ ...b, order:i }));
+    const update = { [blocksKey]: ordered, note: editNote };
+    try {
+      const { error } = await supabase
+        .from("training_days")
+        .update(update)
+        .eq("week_id", weekId)
+        .eq("day_name", dayData.day);
+      if (error) throw error;
+      setToast("✓ Saved");
+      setTimeout(() => { setToast(null); setEditMode(false); if (onSaved) onSaved(); }, 1200);
+    } catch (e) {
+      setToast("Save failed: " + e.message);
+      setTimeout(() => setToast(null), 3000);
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const addBlock = () => {
+    setEditBlocks(prev => [...prev, {
+      id:uid(), type:"GENERAL", duration:20, rounds:null, order:prev.length,
+      exercises:[{ id:uid(), name:"New exercise", sets:3, reps:"10", note:null }],
+      is_ai_generated:false, is_modified:false,
+    }]);
+  };
+
+  const dupBlock = (idx) => {
+    const b = editBlocks[idx];
+    const nb = { ...JSON.parse(JSON.stringify(b)), id:uid(), is_ai_generated:false };
+    setEditBlocks(prev => [...prev.slice(0,idx+1), nb, ...prev.slice(idx+1)]);
+  };
+
+  const delBlock = (idx) => setEditBlocks(prev => prev.filter((_,i) => i !== idx));
+
+  const updateBlock = (idx, updates) => {
+    setEditBlocks(prev => prev.map((b,i) => {
+      if (i !== idx) return b;
+      const modified = b.is_ai_generated ? true : b.is_modified;
+      return { ...b, ...updates, is_modified:modified };
+    }));
+  };
+
+  const addExercise = (blockIdx) => {
+    updateBlock(blockIdx, {
+      exercises: [...editBlocks[blockIdx].exercises, { id:uid(), name:"", sets:3, reps:"10", note:null }],
+    });
+  };
+
+  const updateExercise = (blockIdx, exIdx, updates) => {
+    const exs = editBlocks[blockIdx].exercises.map((e,i) => i === exIdx ? { ...e, ...updates } : e);
+    updateBlock(blockIdx, { exercises:exs });
+  };
+
+  const delExercise = (blockIdx, exIdx) => {
+    updateBlock(blockIdx, { exercises:editBlocks[blockIdx].exercises.filter((_,i) => i !== exIdx) });
+  };
+
+  const handleDragStart = (idx) => setDragIdx(idx);
+  const handleDragOver = (e, idx) => { e.preventDefault(); };
+  const handleDrop = (idx) => {
+    if (dragIdx === null || dragIdx === idx) return;
+    setEditBlocks(prev => {
+      const arr = [...prev];
+      const [moved] = arr.splice(dragIdx, 1);
+      arr.splice(idx, 0, moved);
+      return arr;
+    });
+    setDragIdx(null);
+  };
+
+  const inputStyle = { padding:"10px 12px", background:C.cardSolid, border:`1px solid ${C.border}`, borderRadius:8, color:C.text, fontFamily:C.fs, fontSize:13, outline:"none", width:"100%", boxSizing:"border-box" };
+
+  if (editMode) {
+    return (
+      <div style={{ position:"fixed", inset:0, zIndex:200, background:C.bg, overflowY:"auto" }}>
+        <div style={{ maxWidth:480, margin:"0 auto", minHeight:"100vh", display:"flex", flexDirection:"column" }}>
+          <div style={{ padding:"16px 20px", borderBottom:`1px solid ${C.border}`, display:"flex", justifyContent:"space-between", alignItems:"center", position:"sticky", top:0, background:C.bg, zIndex:10 }}>
+            <div style={{ fontFamily:C.ff, fontSize:18, color:C.cyan, letterSpacing:2 }}>EDIT SESSION</div>
+            <div style={{ display:"flex", gap:8 }}>
+              <button onClick={() => setEditMode(false)} style={{ padding:"8px 14px", background:"transparent", border:`1px solid ${C.border}`, borderRadius:8, cursor:"pointer", fontFamily:C.ff, fontSize:11, color:C.muted, letterSpacing:2 }}>CANCEL</button>
+              <button onClick={saveEdit} disabled={saving} style={{ padding:"8px 14px", background:C.green, border:"none", borderRadius:8, cursor:"pointer", fontFamily:C.ff, fontSize:11, color:"#000", letterSpacing:2 }}>{saving ? "..." : "SAVE"}</button>
+            </div>
+          </div>
+
+          <div style={{ padding:"16px 20px", display:"flex", flexDirection:"column", gap:14 }}>
+            <div>
+              <div style={{ fontFamily:C.fm, fontSize:7, color:C.muted, letterSpacing:3, marginBottom:4 }}>SESSION NAME</div>
+              <input value={editName} onChange={e => setEditName(e.target.value)} style={inputStyle} />
+            </div>
+            <div>
+              <div style={{ fontFamily:C.fm, fontSize:7, color:C.muted, letterSpacing:3, marginBottom:6 }}>TYPE</div>
+              <div style={{ display:"flex", flexWrap:"wrap", gap:6 }}>
+                {SESSION_TYPES.map(t => (
+                  <button key={t} onClick={() => setEditType(t)} style={{ padding:"5px 10px", borderRadius:16, cursor:"pointer", background: editType===t ? `${C.cyan}22` : C.cardSolid, border:`1px solid ${editType===t ? C.cyan : C.border}`, fontFamily:C.fm, fontSize:8, color: editType===t ? C.cyan : C.muted, letterSpacing:1 }}>{t}</button>
+                ))}
+              </div>
+            </div>
+            <div style={{ display:"flex", gap:10 }}>
+              <div style={{ flex:1 }}>
+                <div style={{ fontFamily:C.fm, fontSize:7, color:C.muted, letterSpacing:3, marginBottom:4 }}>DURATION</div>
+                <div style={{ display:"flex", alignItems:"center", gap:6 }}>
+                  <input type="number" value={editDuration} onChange={e => setEditDuration(e.target.value)} style={{ ...inputStyle, width:80 }} />
+                  <span style={{ fontFamily:C.fm, fontSize:9, color:C.muted }}>min</span>
+                </div>
+              </div>
+            </div>
+            <div>
+              <div style={{ fontFamily:C.fm, fontSize:7, color:C.muted, letterSpacing:3, marginBottom:4 }}>NOTE</div>
+              <textarea value={editNote} onChange={e => setEditNote(e.target.value)} rows={2} style={{ ...inputStyle, resize:"vertical" }} />
+            </div>
+          </div>
+
+          <div style={{ padding:"0 20px" }}>
+            <div style={{ fontFamily:C.fm, fontSize:7, color:C.muted, letterSpacing:3, marginBottom:10 }}>WORKOUT BLOCKS</div>
+            {editBlocks.map((block, bi) => (
+              <div key={block.id} draggable onDragStart={() => handleDragStart(bi)} onDragOver={e => handleDragOver(e, bi)} onDrop={() => handleDrop(bi)}
+                style={{ background:C.card, borderRadius:12, padding:"12px", marginBottom:8, border:`1px solid ${dragIdx===bi ? C.cyan+"55" : C.border}`, ...C.glass }}>
+                <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:8 }}>
+                  <div style={{ display:"flex", alignItems:"center", gap:8 }}>
+                    <span style={{ cursor:"grab", color:C.light, fontSize:14 }}>⠿</span>
+                    <div style={{ fontFamily:C.ff, fontSize:14, color:C.text, letterSpacing:1 }}>{block.type}</div>
+                    {block.is_ai_generated && !block.is_modified && <span style={{ fontFamily:C.fm, fontSize:6, color:C.cyan, letterSpacing:2, background:`${C.cyan}15`, padding:"2px 6px", borderRadius:8 }}>AI</span>}
+                    {block.is_modified && <span style={{ fontFamily:C.fm, fontSize:6, color:C.yellow, letterSpacing:2, background:`${C.yellow}15`, padding:"2px 6px", borderRadius:8 }}>MODIFIED</span>}
+                  </div>
+                  <div style={{ display:"flex", gap:4 }}>
+                    <button onClick={() => setExpandedBlock(expandedBlock === bi ? null : bi)} style={{ background:"none", border:"none", color:C.muted, cursor:"pointer", fontSize:13, padding:4 }}>✏️</button>
+                    <button onClick={() => dupBlock(bi)} style={{ background:"none", border:"none", color:C.muted, cursor:"pointer", fontSize:13, padding:4 }}>📋</button>
+                    <button onClick={() => delBlock(bi)} style={{ background:"none", border:"none", color:C.red, cursor:"pointer", fontSize:13, padding:4 }}>🗑</button>
+                  </div>
+                </div>
+
+                {expandedBlock !== bi && (
+                  <div style={{ display:"flex", flexDirection:"column", gap:2 }}>
+                    {block.exercises.slice(0,4).map((ex,ei) => (
+                      <div key={ei} style={{ fontFamily:C.fs, fontSize:11, color:C.muted, lineHeight:1.4 }}>
+                        {ex.name}{ex.sets ? ` · ${ex.sets}×${ex.reps||""}` : ""}{ex.note ? ` — ${ex.note}` : ""}
+                      </div>
+                    ))}
+                    {block.exercises.length > 4 && <div style={{ fontFamily:C.fm, fontSize:9, color:C.light }}>+{block.exercises.length-4} more</div>}
+                  </div>
+                )}
+
+                {expandedBlock === bi && (
+                  <div style={{ marginTop:8, display:"flex", flexDirection:"column", gap:8 }}>
+                    <div style={{ display:"flex", gap:6 }}>
+                      {BLOCK_TYPES.map(bt => (
+                        <button key={bt} onClick={() => updateBlock(bi, { type:bt })} style={{ padding:"4px 8px", borderRadius:12, cursor:"pointer", background:block.type===bt ? `${C.cyan}22` : C.cardSolid, border:`1px solid ${block.type===bt ? C.cyan : C.border}`, fontFamily:C.fm, fontSize:7, color:block.type===bt ? C.cyan : C.muted }}>{bt}</button>
+                      ))}
+                    </div>
+                    <div style={{ display:"flex", gap:8 }}>
+                      <div style={{ flex:1 }}>
+                        <div style={{ fontFamily:C.fm, fontSize:6, color:C.muted, letterSpacing:2, marginBottom:2 }}>DURATION</div>
+                        <input type="number" value={block.duration||""} onChange={e => updateBlock(bi,{duration:parseInt(e.target.value)||null})} style={{ ...inputStyle, fontSize:11 }} />
+                      </div>
+                      <div style={{ flex:1 }}>
+                        <div style={{ fontFamily:C.fm, fontSize:6, color:C.muted, letterSpacing:2, marginBottom:2 }}>ROUNDS</div>
+                        <input type="number" value={block.rounds||""} onChange={e => updateBlock(bi,{rounds:parseInt(e.target.value)||null})} style={{ ...inputStyle, fontSize:11 }} />
+                      </div>
+                    </div>
+                    {block.exercises.map((ex,ei) => (
+                      <div key={ex.id} style={{ display:"flex", gap:4, alignItems:"flex-start" }}>
+                        <div style={{ flex:2 }}><input value={ex.name} onChange={e => updateExercise(bi,ei,{name:e.target.value})} placeholder="Exercise" style={{ ...inputStyle, fontSize:11 }} /></div>
+                        <div style={{ width:40 }}><input type="number" value={ex.sets||""} onChange={e => updateExercise(bi,ei,{sets:parseInt(e.target.value)||null})} placeholder="S" style={{ ...inputStyle, fontSize:11, textAlign:"center" }} /></div>
+                        <div style={{ width:50 }}><input value={ex.reps||""} onChange={e => updateExercise(bi,ei,{reps:e.target.value})} placeholder="Reps" style={{ ...inputStyle, fontSize:11, textAlign:"center" }} /></div>
+                        <button onClick={() => delExercise(bi,ei)} style={{ background:"none", border:"none", color:C.red, cursor:"pointer", fontSize:11, padding:4, marginTop:6 }}>✕</button>
+                      </div>
+                    ))}
+                    <button onClick={() => addExercise(bi)} style={{ padding:"6px", background:"transparent", border:`1px dashed ${C.border}`, borderRadius:6, cursor:"pointer", fontFamily:C.fm, fontSize:8, color:C.muted, letterSpacing:2 }}>+ ADD EXERCISE</button>
+                  </div>
+                )}
+              </div>
+            ))}
+            <button onClick={addBlock} style={{ width:"100%", padding:"12px", background:"transparent", border:`1px dashed ${C.cyan}44`, borderRadius:12, cursor:"pointer", fontFamily:C.ff, fontSize:12, color:C.cyan, letterSpacing:2, marginBottom:20 }}>+ ADD BLOCK</button>
+          </div>
+        </div>
+        {toast && (
+          <div style={{ position:"fixed", bottom:40, left:"50%", transform:"translateX(-50%)", background:C.cardSolid, border:`1px solid ${C.green}44`, borderRadius:10, padding:"10px 20px", zIndex:300 }}>
+            <div style={{ fontFamily:C.fm, fontSize:9, color:C.green, letterSpacing:2 }}>{toast}</div>
+          </div>
+        )}
+      </div>
+    );
+  }
+
   return (
     <div style={{ position:"fixed", inset:0, zIndex:200, background:"rgba(10,10,10,0.97)", overflowY:"auto" }}>
       <div style={{ maxWidth:480, margin:"0 auto", minHeight:"100vh", display:"flex", flexDirection:"column" }}>
@@ -534,7 +793,10 @@ const SessionModal = ({ name, dayData, sess, weekId, onClose, onSessSwitch, sund
             )}
             {w && <div style={{ fontFamily:C.fm, fontSize:8, color:C.muted, marginTop:4 }}>{w.duration}</div>}
           </div>
-          <button onClick={onClose} style={{ background:C.card, border:"none", color:C.muted, width:36, height:36, borderRadius:"50%", cursor:"pointer", fontSize:16 }}>✕</button>
+          <div style={{ display:"flex", gap:6 }}>
+            <button onClick={enterEdit} style={{ background:C.card, border:`1px solid ${C.border}`, color:C.cyan, width:36, height:36, borderRadius:"50%", cursor:"pointer", fontSize:13, display:"flex", alignItems:"center", justifyContent:"center" }}>✏️</button>
+            <button onClick={onClose} style={{ background:C.card, border:"none", color:C.muted, width:36, height:36, borderRadius:"50%", cursor:"pointer", fontSize:16 }}>✕</button>
+          </div>
         </div>
         {dayData?.pm && (
           <div style={{ display:"flex", borderBottom:`1px solid ${C.border}` }}>
@@ -1901,7 +2163,7 @@ export default function App() {
       <AIChat whoopData={whoopData} currentWeek={week} recentActivities={recentActivities} onPlanChange={handlePlanChange} userName={profile?.name} persona={coachPersona} onPersonaChange={handlePersonaChange} proactiveBadge={proactiveBadge} />
 
       {selDay && (
-        <SessionModal name={modalName} dayData={dayData} sess={sess} weekId={weekId} onClose={() => setSelDay(null)} onSessSwitch={setSess} sundayChoice={sundayChoice} setSundayChoice={setSundayChoice} />
+        <SessionModal name={modalName} dayData={dayData} sess={sess} weekId={weekId} onClose={() => setSelDay(null)} onSessSwitch={setSess} sundayChoice={sundayChoice} setSundayChoice={setSundayChoice} supabase={supabase} session={session} onSaved={() => fetchPlan(session?.access_token)} />
       )}
 
       {labOpen && (

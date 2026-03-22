@@ -20,6 +20,30 @@ export default async function handler(req, res) {
 
   if (!type) return res.status(400).json({ error: "Missing type" });
 
+  const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+  async function resolveWeek(weekRef) {
+    if (!weekRef) return null;
+    // Try UUID first
+    if (UUID_RE.test(weekRef)) {
+      const { data } = await supabase
+        .from("training_weeks").select("id, week_id").eq("id", weekRef).eq("user_id", userId).single();
+      if (data) return data;
+    }
+    // Try week_id slug
+    {
+      const { data } = await supabase
+        .from("training_weeks").select("id, week_id").eq("week_id", weekRef).eq("user_id", userId).single();
+      if (data) return data;
+    }
+    // Try label (case-insensitive) — this is how the AI references weeks
+    {
+      const { data } = await supabase
+        .from("training_weeks").select("id, week_id").ilike("label", `%${weekRef}%`).eq("user_id", userId).single();
+      if (data) return data;
+    }
+    return null;
+  }
+
   // Valid workout names — must match WL keys in App.jsx exactly
   const VALID_WORKOUT_KEYS = new Set([
     "FOR TIME — Ultimate HYROX",
@@ -58,30 +82,7 @@ export default async function handler(req, res) {
 
       console.log("[plan/update] received:", JSON.stringify({ type, week_id, day: normalizedDay, changes, description }));
 
-      // Fix #3: probe without user_id filter first so we can distinguish
-      // "week doesn't exist at all" from "week exists but under a different user_id".
-      {
-        const { data: probe } = await supabase
-          .from("training_weeks").select("id, week_id, user_id").eq("id", week_id);
-        const { data: probe2 } = await supabase
-          .from("training_weeks").select("id, week_id, user_id").eq("week_id", week_id);
-        console.log("[plan/update] week probe (no user filter) by id:", JSON.stringify(probe));
-        console.log("[plan/update] week probe (no user filter) by slug:", JSON.stringify(probe2));
-      }
-
-      // Resolve week row — try UUID primary key first, fall back to text slug,
-      // both scoped to the authenticated user.
-      let weekRow = null;
-      {
-        const { data, error } = await supabase
-          .from("training_weeks").select("id, week_id").eq("id", week_id).eq("user_id", userId).single();
-        if (!error && data) weekRow = data;
-      }
-      if (!weekRow) {
-        const { data, error } = await supabase
-          .from("training_weeks").select("id, week_id").eq("week_id", week_id).eq("user_id", userId).single();
-        if (!error && data) weekRow = data;
-      }
+      const weekRow = await resolveWeek(week_id);
       if (!weekRow) {
         console.log("[plan/update] week not found for userId:", userId, "week_id value:", week_id);
         return res.status(404).json({ error: `Week not found: ${week_id}` });
@@ -160,17 +161,7 @@ export default async function handler(req, res) {
         return res.status(400).json({ error: "remap_week requires a non-empty days array" });
       }
 
-      let weekRow = null;
-      {
-        const { data } = await supabase
-          .from("training_weeks").select("id, week_id").eq("id", week_id).eq("user_id", userId).single();
-        if (data) weekRow = data;
-      }
-      if (!weekRow) {
-        const { data } = await supabase
-          .from("training_weeks").select("id, week_id").eq("week_id", week_id).eq("user_id", userId).single();
-        if (data) weekRow = data;
-      }
+      const weekRow = await resolveWeek(week_id);
       if (!weekRow) return res.status(404).json({ error: `Week not found: ${week_id}` });
 
       const results = [];
