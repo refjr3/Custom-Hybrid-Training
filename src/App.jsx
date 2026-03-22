@@ -168,7 +168,7 @@ const PERSONAS = [
   { id:"sage",      label:"THE SAGE",      sub:"Mindful · RPE-based", color:"#00D4A0" },
 ];
 
-const AIChat = ({ whoopData, currentWeek, recentActivities, onPlanChange, userName, persona, onPersonaChange, proactiveBadge }) => {
+const AIChat = ({ whoopData, currentWeek, recentActivities, onPlanChange, userName, persona, onPersonaChange, proactiveBadge, authToken }) => {
   const [messages, setMessages] = useState([
     { role:"assistant", content:`Hey ${userName || "there"} — I have your WHOOP data, training plan, and biomarkers loaded. What do you need?`, planChange:null }
   ]);
@@ -230,7 +230,7 @@ const AIChat = ({ whoopData, currentWeek, recentActivities, onPlanChange, userNa
       }
       const res = await fetch("/api/coach/chat", {
         method:"POST",
-        headers:{ "Content-Type":"application/json" },
+        headers:{ "Content-Type":"application/json", ...(authToken ? { "Authorization":`Bearer ${authToken}` } : {}) },
         body: JSON.stringify({
           message: userMsg,
           whoopData,
@@ -385,7 +385,7 @@ const AIChat = ({ whoopData, currentWeek, recentActivities, onPlanChange, userNa
                   setMessages(prev => [...prev, { role:"user", content:answers, planChange:null }]);
                   setLoading(true);
                   fetch("/api/coach/chat", {
-                    method:"POST", headers:{"Content-Type":"application/json"},
+                    method:"POST", headers:{"Content-Type":"application/json", ...(authToken ? {"Authorization":`Bearer ${authToken}`} : {})},
                     body: JSON.stringify({ message:answers, whoopData, currentWeek:{ id:currentWeek?.id, label:currentWeek?.label, subtitle:currentWeek?.subtitle }, recentActivities:recentActivities?.slice(0,5) }),
                   }).then(r=>r.json()).then(data => {
                     const cqs2 = parseClarifyingQuestions(data.message);
@@ -2176,7 +2176,7 @@ export default function App() {
         ))}
       </div>
 
-      <AIChat whoopData={whoopData} currentWeek={week} recentActivities={recentActivities} onPlanChange={handlePlanChange} userName={profile?.name} persona={coachPersona} onPersonaChange={handlePersonaChange} proactiveBadge={proactiveBadge} />
+      <AIChat whoopData={whoopData} currentWeek={week} recentActivities={recentActivities} onPlanChange={handlePlanChange} userName={profile?.name} persona={coachPersona} onPersonaChange={handlePersonaChange} proactiveBadge={proactiveBadge} authToken={session?.access_token} />
 
       {selDay && (
         <SessionModal name={modalName} dayData={dayData} sess={sess} weekId={weekId} onClose={() => setSelDay(null)} onSessSwitch={setSess} sundayChoice={sundayChoice} setSundayChoice={setSundayChoice} supabase={supabase} session={session} onSaved={() => fetchPlan(session?.access_token)} />
