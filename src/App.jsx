@@ -619,6 +619,7 @@ export default function App() {
   const [garminConnected, setGarminConnected] = useState(false);
   const [proactiveMessages, setProactiveMessages] = useState([]);
   const [proactiveBadge, setProactiveBadge] = useState(0);
+  const [weeklyReview, setWeeklyReview] = useState(null);
   const [unifiedMetrics, setUnifiedMetrics] = useState([]);
   const [labOpen, setLabOpen] = useState(false);
   const [labMessages, setLabMessages] = useState([]);
@@ -862,6 +863,12 @@ export default function App() {
 
       if (new Date().getDay() === 0) {
         try {
+          const currentWeekDays = (planBlocks[0]?.weeks?.[0]?.days) || [];
+          const planned = currentWeekDays.filter(d => d.am).length;
+          const completed = currentWeekDays.filter(d => {
+            const dd = d.date?.split(" ")[0];
+            return garminActivities.some(a => a.start_time?.startsWith(dd || "___"));
+          }).length;
           const res = await fetch("/api/coaching/proactive", {
             method: "POST",
             headers: { "Content-Type": "application/json", "Authorization": `Bearer ${session.access_token}` },
@@ -872,12 +879,19 @@ export default function App() {
                 hrv: whoopData?.recovery?.hrv,
                 strain: whoopData?.strain?.score,
                 sleep: whoopData?.sleep?.score,
-                activities: garminActivities.slice(0, 5).map(a => ({ type: a.activity_type, distance: a.distance_meters, duration: a.duration_seconds })),
+                sessions_planned: planned,
+                sessions_completed: completed,
+                compliance: planned > 0 ? Math.round((completed/planned)*100) : 0,
+                activities: garminActivities.slice(0, 7).map(a => ({ type: a.activity_type, distance: a.distance_meters, duration: a.duration_seconds, name: a.name })),
               },
             }),
           });
           const data = await res.json();
-          if (data.messages?.length) msgs.push(...data.messages);
+          if (data.messages?.length) {
+            const reviewMsg = data.messages.find(m => m.content);
+            if (reviewMsg) setWeeklyReview(reviewMsg.content);
+            msgs.push(...data.messages);
+          }
         } catch (_) {}
       }
 
@@ -1163,6 +1177,18 @@ export default function App() {
                   </div>
                 );
               })()}
+            </div>
+          )}
+
+          {weeklyReview && new Date().getDay() === 0 && (
+            <div style={{ padding:"0 20px 16px" }}>
+              <div style={{ background:`${C.cyan}06`, border:`1px solid ${C.cyan}22`, borderRadius:C.radius, padding:"16px 18px", ...C.glass }}>
+                <div style={{ display:"flex", alignItems:"center", gap:8, marginBottom:10 }}>
+                  <span style={{ fontSize:16 }}>📊</span>
+                  <div style={{ fontFamily:C.ff, fontSize:16, color:C.cyan, letterSpacing:2 }}>WEEKLY REVIEW</div>
+                </div>
+                <div style={{ fontFamily:C.fs, fontSize:13, color:C.text, lineHeight:1.7 }}>{renderMarkdown(weeklyReview)}</div>
+              </div>
             </div>
           )}
 
