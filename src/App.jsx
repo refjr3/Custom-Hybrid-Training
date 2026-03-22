@@ -178,6 +178,7 @@ const AIChat = ({ whoopData, currentWeek, recentActivities, onPlanChange, userNa
   const [attachment, setAttachment] = useState(null);
   const [showPersonas, setShowPersonas] = useState(false);
   const [isRecording, setIsRecording] = useState(false);
+  const [chatCqSelections, setChatCqSelections] = useState({});
   const recognitionRef = useRef(null);
   const messagesEndRef = useRef(null);
   const textareaRef = useRef(null);
@@ -233,7 +234,8 @@ const AIChat = ({ whoopData, currentWeek, recentActivities, onPlanChange, userNa
         }),
       });
       const data = await res.json();
-      setMessages(prev => [...prev, { role:"assistant", content: data.message || "Something went wrong.", planChange: data.planChange || null }]);
+      const cqs = parseClarifyingQuestions(data.message);
+      setMessages(prev => [...prev, { role:"assistant", content: data.message || "Something went wrong.", planChange: data.planChange || null, clarifyingQuestions: cqs }]);
     } catch (e) {
       setMessages(prev => [...prev, { role:"assistant", content:"Connection error. Try again.", planChange:null }]);
     } finally {
@@ -323,6 +325,56 @@ const AIChat = ({ whoopData, currentWeek, recentActivities, onPlanChange, userNa
               )}
               {m.content && <div style={{ fontFamily:C.fs, fontSize:13, lineHeight:1.6 }}>{renderMarkdown(m.content)}</div>}
             </div>
+            {m.clarifyingQuestions && !m.cqSubmitted && (
+              <div style={{ maxWidth:"90%", marginTop:8, width:"100%" }}>
+                {m.clarifyingQuestions.map((q, qi) => {
+                  const key = `chat_${i}_${qi}`;
+                  const selected = chatCqSelections[key] || [];
+                  return (
+                    <div key={qi} style={{ background:C.card, borderRadius:12, padding:"12px 14px", marginBottom:6, border:`1px solid ${C.border}`, ...C.glass }}>
+                      <div style={{ fontFamily:C.fs, fontSize:13, color:C.text, marginBottom:10, lineHeight:1.4 }}>{q.question}</div>
+                      <div style={{ display:"flex", flexWrap:"wrap", gap:6 }}>
+                        {q.options.map((opt, oi) => {
+                          const on = selected.includes(opt);
+                          return (
+                            <button key={oi} onClick={() => {
+                              setChatCqSelections(prev => {
+                                const cur = prev[key] || [];
+                                return { ...prev, [key]: on ? cur.filter(x => x !== opt) : [...cur, opt] };
+                              });
+                            }} style={{
+                              padding:"6px 12px", borderRadius:20, cursor:"pointer",
+                              background: on ? `${C.cyan}22` : C.cardSolid,
+                              border: `1px solid ${on ? C.cyan : C.border}`,
+                              fontFamily:C.fm, fontSize:10, color: on ? C.cyan : C.muted, letterSpacing:1,
+                            }}>{opt}</button>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  );
+                })}
+                <button onClick={() => {
+                  const answers = m.clarifyingQuestions.map((q, qi) => {
+                    const sel = chatCqSelections[`chat_${i}_${qi}`] || [];
+                    return `${q.question.replace("?","")}:  ${sel.join(", ") || "Not specified"}`;
+                  }).join(". ");
+                  setMessages(prev => prev.map((mm, mi) => mi === i ? {...mm, cqSubmitted:true} : mm));
+                  setMessages(prev => [...prev, { role:"user", content:answers, planChange:null }]);
+                  setLoading(true);
+                  fetch("/api/coach/chat", {
+                    method:"POST", headers:{"Content-Type":"application/json"},
+                    body: JSON.stringify({ message:answers, whoopData, currentWeek:{ id:currentWeek?.id, label:currentWeek?.label, subtitle:currentWeek?.subtitle }, recentActivities:recentActivities?.slice(0,5) }),
+                  }).then(r=>r.json()).then(data => {
+                    const cqs2 = parseClarifyingQuestions(data.message);
+                    setMessages(prev => [...prev, { role:"assistant", content:data.message||"Something went wrong.", planChange:data.planChange||null, clarifyingQuestions:cqs2 }]);
+                  }).catch(() => {
+                    setMessages(prev => [...prev, { role:"assistant", content:"Connection error. Try again.", planChange:null }]);
+                  }).finally(() => setLoading(false));
+                }} style={{ width:"100%", padding:"12px", background:C.cyan, color:"#000", border:"none", borderRadius:10, cursor:"pointer", fontFamily:C.ff, fontSize:13, letterSpacing:2, marginTop:4 }}>CONFIRM →</button>
+              </div>
+            )}
+            {m.cqSubmitted && <div style={{ fontFamily:C.fm, fontSize:8, color:C.green, letterSpacing:2, marginTop:4 }}>✓ ANSWERS SENT</div>}
             {m.planChange && !m.planChangeStatus && (
               <div style={{ maxWidth:"85%", marginTop:8, background:C.card2, borderRadius:12, padding:"12px 14px", border:`1px solid ${C.green}44` }}>
                 <div style={{ fontFamily:C.fm, fontSize:7, color:C.green, letterSpacing:3, marginBottom:6 }}>PROPOSED CHANGE</div>
