@@ -405,12 +405,15 @@ export default function PlanBuilder({
   const current = steps[step] || steps[0];
   const atLastStep = step === steps.length - 1;
 
+  console.log("[PlanBuilder] render - current step:", current?.key, "sports:", sports);
+
   if (!open) return null;
 
   const toggleSport = (sportId) => {
     setSports((prev) => {
       const exists = prev.includes(sportId);
       const next = exists ? prev.filter((s) => s !== sportId) : [...prev, sportId];
+      console.log("[PlanBuilder] sports after toggle:", next);
       return next;
     });
   };
@@ -476,6 +479,7 @@ export default function PlanBuilder({
 
   const canContinue = () => {
     if (current.key === "goal") {
+      console.log("[PlanBuilder] canContinue check - sports:", sports, "length:", sports.length);
       return sports.length > 0;
     }
     if (current.key === "timeline") {
