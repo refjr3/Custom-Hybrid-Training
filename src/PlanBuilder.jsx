@@ -75,6 +75,40 @@ const EQUIPMENT_OPTIONS = [
   "Cycling",
 ];
 
+const RACE_DATABASE = [
+  { name: "HYROX World Championships", date: "2026-06-14", sport: "hyrox" },
+  { name: "HYROX Miami", date: "2026-04-04", sport: "hyrox" },
+  { name: "HYROX Chicago", date: "2026-03-22", sport: "hyrox" },
+  { name: "HYROX New York City", date: "2026-01-18", sport: "hyrox" },
+  { name: "HYROX Dallas", date: "2026-02-08", sport: "hyrox" },
+  { name: "HYROX Los Angeles", date: "2026-06-06", sport: "hyrox" },
+  { name: "HYROX London", date: "2026-05-10", sport: "hyrox" },
+  { name: "Boston Marathon", date: "2026-04-20", sport: "marathon" },
+  { name: "Chicago Marathon", date: "2026-10-11", sport: "marathon" },
+  { name: "NYC Marathon", date: "2026-11-01", sport: "marathon" },
+  { name: "Berlin Marathon", date: "2026-09-27", sport: "marathon" },
+  { name: "London Marathon", date: "2026-04-26", sport: "marathon" },
+  { name: "Tokyo Marathon", date: "2026-03-01", sport: "marathon" },
+  { name: "Marine Corps Marathon", date: "2026-10-25", sport: "marathon" },
+  { name: "Paris Marathon", date: "2026-04-12", sport: "marathon" },
+  { name: "Rotterdam Marathon", date: "2026-04-12", sport: "marathon" },
+  { name: "Sydney Marathon", date: "2026-09-20", sport: "marathon" },
+  { name: "IRONMAN World Championship", date: "2026-10-10", sport: "ironman" },
+  { name: "IRONMAN Texas", date: "2026-04-25", sport: "ironman" },
+  { name: "IRONMAN Lake Placid", date: "2026-07-26", sport: "ironman" },
+  { name: "IRONMAN Florida", date: "2026-11-07", sport: "ironman" },
+  { name: "IRONMAN 70.3 World Championship", date: "2026-09-19", sport: "half_ironman" },
+  { name: "IRONMAN 70.3 Miami", date: "2026-03-08", sport: "half_ironman" },
+  { name: "IRONMAN 70.3 Oceanside", date: "2026-04-04", sport: "half_ironman" },
+  { name: "IRONMAN 70.3 Eagleman", date: "2026-06-14", sport: "half_ironman" },
+  { name: "IRONMAN 70.3 Mont-Tremblant", date: "2026-06-28", sport: "half_ironman" },
+  { name: "IRONMAN 70.3 St. George", date: "2026-05-02", sport: "half_ironman" },
+  { name: "Olympic Tri Nationals", date: "2026-08-08", sport: "olympic_tri" },
+  { name: "NYC Triathlon", date: "2026-07-19", sport: "olympic_tri" },
+  { name: "Chicago Triathlon", date: "2026-08-30", sport: "olympic_tri" },
+  { name: "Escape from Alcatraz Triathlon", date: "2026-06-07", sport: "olympic_tri" },
+];
+
 const DEFAULT_PHASES = [
   { id: "base", name: "BASE", weeks: 4 },
   { id: "build", name: "BUILD", weeks: 6 },
@@ -334,6 +368,15 @@ export default function PlanBuilder({
           is_primary: typeof r.is_primary === "boolean" ? r.is_primary : idx === 0,
         }))
       : [];
+    if (initialRaces.length === 0 && initialSports.length > 0) {
+      initialRaces.push({
+        id: uid(),
+        sport: initialSports[0],
+        name: "",
+        date: "",
+        is_primary: true,
+      });
+    }
     if (initialRaces.length > 0 && !initialRaces.some((r) => r.is_primary)) {
       initialRaces[0].is_primary = true;
     }
@@ -639,6 +682,11 @@ Generate:
                   </Chip>
                 ))}
               </div>
+              {sports.length === 0 && (
+                <div style={{ padding: "0 12px 12px", fontFamily: C.fm, fontSize: 8, color: C.light, letterSpacing: 1 }}>
+                  Select at least one sport to continue
+                </div>
+              )}
             </div>
             {sports.length === 0 && (
               <div style={{ fontFamily: C.fs, fontSize: 12, color: C.muted, letterSpacing: 0.5 }}>
@@ -692,11 +740,10 @@ Generate:
                       <option key={s.id} value={s.id}>{s.label}</option>
                     ))}
                   </select>
-                  <input
-                    value={race.name}
-                    onChange={(e) => updateRace(race.id, { name: e.target.value })}
-                    placeholder="Race name"
-                    style={input}
+                  <RaceLookup
+                    sport={race.sport}
+                    value={race}
+                    onChange={(updated) => updateRace(race.id, updated)}
                   />
                   <input
                     type="date"
