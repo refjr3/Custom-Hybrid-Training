@@ -1174,10 +1174,18 @@ export default function App() {
   }, []);
 
   useEffect(() => {
-    const raw = localStorage.getItem(PLAN_BUILDER_DISMISS_KEY);
-    const ts = Number(raw);
-    if (Number.isFinite(ts) && ts > 0) {
-      setPlanBuilderDismissUntil(ts);
+    const rawUntil = localStorage.getItem(PLAN_BUILDER_DISMISS_KEY);
+    const until = Number(rawUntil);
+    if (Number.isFinite(until) && until > 0 && Date.now() < until) {
+      setPlanBuilderDismissUntil(until);
+      return;
+    }
+    const rawDismissed = localStorage.getItem("plan_builder_dismissed");
+    const dismissedAt = Number(rawDismissed);
+    if (Number.isFinite(dismissedAt) && (Date.now() - dismissedAt) < 24 * 60 * 60 * 1000) {
+      const untilTs = dismissedAt + 24 * 60 * 60 * 1000;
+      setPlanBuilderDismissUntil(untilTs);
+      localStorage.setItem(PLAN_BUILDER_DISMISS_KEY, String(untilTs));
     }
   }, []);
 
@@ -1676,6 +1684,7 @@ export default function App() {
     const until = Date.now() + (24 * 60 * 60 * 1000);
     setPlanBuilderDismissUntil(until);
     localStorage.setItem(PLAN_BUILDER_DISMISS_KEY, String(until));
+    localStorage.setItem("plan_builder_dismissed", String(Date.now()));
   };
 
   const openPlanBuilder = () => {
@@ -2035,7 +2044,7 @@ export default function App() {
         </div>
       )}
 
-      {nav === "plan" && !planLoading && planBlocks.length === 0 && (
+      {nav === "plan" && !planLoading && planBlocks.length === 0 && !planBuilderDismissed && (
         <div style={{ textAlign: "center", padding: "60px 24px" }}>
           <div style={{ color: "#888", letterSpacing: 3, fontSize: 11, marginBottom: 16 }}>NO TRAINING PLAN FOUND</div>
           <button
@@ -2044,12 +2053,13 @@ export default function App() {
           >
             BUILD MY PLAN
           </button>
-          <div
-            onClick={() => localStorage.setItem("plan_builder_dismissed", Date.now())}
-            style={{ color: "#444", fontSize: 12, marginTop: 16, cursor: "pointer" }}
+          <button
+            type="button"
+            onClick={dismissPlanBuilderFor24h}
+            style={{ display: "block", margin: "16px auto 0", background: "transparent", color: "#666", fontSize: 12, border: "none", cursor: "pointer", fontFamily: "inherit" }}
           >
-            I'll do it later
-          </div>
+            I&apos;ll do it later
+          </button>
         </div>
       )}
 

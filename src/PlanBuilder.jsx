@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState, useRef } from "react";
 import { createClient } from "@supabase/supabase-js";
 
 const supabase = createClient(
@@ -22,6 +22,36 @@ const C = {
   fm: "'Space Mono',monospace",
   fs: "'Inter',-apple-system,sans-serif",
 };
+
+const RACE_DATABASE = [
+  { name: "HYROX World Championship", date: "2026-06-14", sport: "hyrox" },
+  { name: "HYROX Miami", date: "2026-04-04", sport: "hyrox" },
+  { name: "HYROX New York City", date: "2026-01-18", sport: "hyrox" },
+  { name: "HYROX Dallas", date: "2026-02-08", sport: "hyrox" },
+  { name: "HYROX Chicago", date: "2026-03-22", sport: "hyrox" },
+  { name: "HYROX London", date: "2026-05-10", sport: "hyrox" },
+  { name: "HYROX Los Angeles", date: "2026-06-06", sport: "hyrox" },
+  { name: "Boston Marathon", date: "2026-04-20", sport: "marathon" },
+  { name: "Chicago Marathon", date: "2026-10-11", sport: "marathon" },
+  { name: "NYC Marathon", date: "2026-11-01", sport: "marathon" },
+  { name: "Berlin Marathon", date: "2026-09-27", sport: "marathon" },
+  { name: "London Marathon", date: "2026-04-26", sport: "marathon" },
+  { name: "Tokyo Marathon", date: "2026-03-01", sport: "marathon" },
+  { name: "Marine Corps Marathon", date: "2026-10-25", sport: "marathon" },
+  { name: "Ironman World Championship", date: "2026-10-10", sport: "ironman" },
+  { name: "IRONMAN World Champ Kona", date: "2026-10-10", sport: "ironman" },
+  { name: "IRONMAN Florida", date: "2026-11-07", sport: "ironman" },
+  { name: "IRONMAN Texas", date: "2026-04-25", sport: "ironman" },
+  { name: "IRONMAN Lake Placid", date: "2026-07-26", sport: "ironman" },
+  { name: "Ironman 70.3 Miami", date: "2026-03-15", sport: "half_ironman" },
+  { name: "IRONMAN 70.3 World Champ", date: "2026-09-19", sport: "half_ironman" },
+  { name: "IRONMAN 70.3 Oceanside", date: "2026-04-04", sport: "half_ironman" },
+  { name: "IRONMAN 70.3 Eagleman", date: "2026-06-14", sport: "half_ironman" },
+  { name: "IRONMAN 70.3 Mont-Tremblant", date: "2026-06-28", sport: "half_ironman" },
+  { name: "Olympic Tri Nationals", date: "2026-08-08", sport: "olympic_tri" },
+  { name: "NYC Triathlon", date: "2026-07-19", sport: "olympic_tri" },
+  { name: "Chicago Triathlon", date: "2026-08-30", sport: "olympic_tri" },
+];
 
 const SPORT_OPTIONS = [
   { id: "hyrox", label: "HYROX" },
@@ -154,6 +184,95 @@ function Chip({ active, onClick, children }) {
     >
       {children}
     </button>
+  );
+}
+
+function RaceLookup({ sport, value, onChange }) {
+  const [query, setQuery] = useState(value?.name || "");
+  const [open, setOpen] = useState(false);
+  const ref = useRef(null);
+
+  useEffect(() => {
+    setQuery(value?.name || "");
+  }, [value?.name]);
+
+  useEffect(() => {
+    const handler = (e) => {
+      if (ref.current && !ref.current.contains(e.target)) setOpen(false);
+    };
+    document.addEventListener("mousedown", handler);
+    return () => document.removeEventListener("mousedown", handler);
+  }, []);
+
+  const q = query.toLowerCase();
+  const results = RACE_DATABASE.filter(
+    (r) =>
+      (!sport || sport === "general" || r.sport === sport) &&
+      r.name.toLowerCase().includes(q)
+  ).slice(0, 8);
+
+  return (
+    <div ref={ref} style={{ position: "relative" }}>
+      <input
+        type="text"
+        value={query}
+        onChange={(e) => {
+          setQuery(e.target.value);
+          setOpen(true);
+          onChange({ ...value, name: e.target.value });
+        }}
+        onFocus={() => setOpen(true)}
+        placeholder="Search or type race name…"
+        style={{
+          ...input,
+          colorScheme: "dark",
+        }}
+      />
+      {open && query.length > 0 && results.length > 0 && (
+        <div
+          style={{
+            position: "absolute",
+            top: "100%",
+            left: 0,
+            right: 0,
+            zIndex: 50,
+            background: C.card2,
+            border: `1px solid ${C.border}`,
+            borderRadius: 8,
+            marginTop: 2,
+            maxHeight: 200,
+            overflowY: "auto",
+          }}
+        >
+          {results.map((r, i) => (
+            <button
+              key={i}
+              type="button"
+              onClick={() => {
+                onChange({ ...value, name: r.name, date: r.date });
+                setQuery(r.name);
+                setOpen(false);
+              }}
+              style={{
+                display: "block",
+                width: "100%",
+                padding: "8px 12px",
+                background: "transparent",
+                border: "none",
+                borderBottom: `1px solid ${C.border}`,
+                cursor: "pointer",
+                textAlign: "left",
+              }}
+            >
+              <div style={{ fontFamily: C.ff, fontSize: 13, color: C.text, letterSpacing: 1 }}>{r.name}</div>
+              <div style={{ fontFamily: C.fm, fontSize: 9, color: C.muted, letterSpacing: 1, marginTop: 1 }}>
+                {new Date(r.date + "T00:00:00").toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })}
+              </div>
+            </button>
+          ))}
+        </div>
+      )}
+    </div>
   );
 }
 
@@ -308,7 +427,7 @@ export default function PlanBuilder({
 
   const canContinue = () => {
     if (current.key === "goal") {
-      return noRaceYet || sports.length > 0;
+      return sports.length > 0;
     }
     if (current.key === "timeline") {
       return !!effectiveWeeks;
@@ -467,6 +586,11 @@ Generate:
                 ))}
               </div>
             </div>
+            {sports.length === 0 && (
+              <div style={{ fontFamily: C.fs, fontSize: 12, color: C.muted, letterSpacing: 0.5 }}>
+                Select at least one sport to continue
+              </div>
+            )}
 
             <button
               onClick={() => setNoRaceYet((v) => !v)}
@@ -491,11 +615,10 @@ Generate:
                 <div key={sportId} style={{ ...panel, padding: 12 }}>
                   <div style={{ fontFamily: C.fm, fontSize: 8, color: C.cyan, letterSpacing: 2, marginBottom: 8 }}>{sportLabel}</div>
                   <div style={{ display: "grid", gap: 8 }}>
-                    <input
-                      value={race.name}
-                      onChange={(e) => updateRace(sportId, { name: e.target.value })}
-                      placeholder="Race name"
-                      style={input}
+                    <RaceLookup
+                      sport={sportId}
+                      value={race}
+                      onChange={(updated) => updateRace(sportId, updated)}
                     />
                     <input
                       type="date"
