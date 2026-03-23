@@ -84,6 +84,38 @@ export default async function handler(req, res) {
     ? sortedDays.map(d => `- ${d.day_name}: AM=${d.am_session || "REST"} | PM=${d.pm_session || "—"}${d.ai_modified ? " [AI MODIFIED]" : ""}${d.note ? ` | Note: ${d.note}` : ""}`).join("\n")
     : "- No schedule loaded";
 
+  // Build dynamic week scope context for multi-week clarifying flows.
+  let blockWeekLabels = [];
+  if (currentWeek?.id && resolvedUserId) {
+    try {
+      const { data: currentWeekRow } = await supabase
+        .from("training_weeks")
+        .select("id, block_id, label")
+        .eq("user_id", resolvedUserId)
+        .eq("id", currentWeek.id)
+        .maybeSingle();
+
+      if (currentWeekRow?.block_id) {
+        const { data: blockWeeks } = await supabase
+          .from("training_weeks")
+          .select("label, week_order")
+          .eq("user_id", resolvedUserId)
+          .eq("block_id", currentWeekRow.block_id)
+          .order("week_order", { ascending: true });
+        blockWeekLabels = (blockWeeks || []).map((w) => w.label).filter(Boolean);
+      } else if (currentWeekRow?.label) {
+        blockWeekLabels = [currentWeekRow.label];
+      }
+    } catch (_) {}
+  }
+  if (blockWeekLabels.length === 0 && currentWeek?.label) {
+    blockWeekLabels = [currentWeek.label];
+  }
+  const blockWeekCount = blockWeekLabels.length;
+  const blockWeeksLines = blockWeekCount > 0
+    ? blockWeekLabels.map((label, idx) => `${idx + 1}. ${label}`).join("\n")
+    : "- Unknown";
+
   const persona = p?.coach_persona || "grinder";
   const PERSONA_INTROS = {
     scientist: `You are THE SCIENTIST — ${athleteName}'s data-driven performance analyst. You speak in clinical, precise terms. Lead with biomarkers, lab values, and physiological rationale. Cite specific numbers. Your tone is methodical, evidence-based, and analytical. You explain the "why" behind every recommendation using sports science.`,
@@ -103,6 +135,9 @@ ATHLETE PROFILE:
 
 CURRENT WEEK: ${currentWeek?.label ?? "N/A"}
 ${weekScheduleLines}
+
+CURRENT BLOCK WEEKS (${blockWeekCount}):
+${blockWeeksLines}
 
 FLAGGED BIOMARKERS:
 ${bioLines}
@@ -167,7 +202,13 @@ RESPONSE RULES:
 - Talk like a coach: direct, confident, action-oriented. Short sentences.
 
 CLARIFYING QUESTIONS (apply in ALL modes):
-Before asking ANY question, re-read the entire conversation history to check if the answer is already there. Only ask for information not already provided. Maximum 3 questions total per block. After receiving answers, generate immediately — never ask follow-up questions.
+Before asking ANY question, re-read the entire conversation history to check if the answer is already there. Only ask for information not already provided. Maximum 3 questions per clarifying block. After each response, either continue to the next required step/week or generate the plan immediately.
+
+CONTEXT LOCKING RULES:
+- "Once a user confirms an answer in this session, NEVER ask that question again. Treat confirmed answers as locked context."
+- "Before generating any clarifying question, scan the full conversation history for existing answers. If the answer is already there, use it silently."
+- "For refinements to an already-confirmed session, only ask about what genuinely changed. Never restart the full question flow for a small tweak."
+- "Confirmed architecture = locked. Refinement requests = targeted edits only."
 
 Hierarchical question flow (pick only the levels needed):
 Level 1 — Scope (only if request spans multiple weeks):
@@ -175,10 +216,34 @@ Level 1 — Scope (only if request spans multiple weeks):
 Level 2 — Days (only if request spans multiple days):
   {"question":"Which days?", "type":"multi_select", "options":["MON","TUE","WED","THU","FRI","SAT","SUN"]}
 Level 3 — Session-specific (always ask, adapt to session type):
-  HYROX: {"question":"Format?", "type":"single_select", "options":["Full Sim","Half Sim","AMRAP","EMOM","For Time"]}
+  HYROX: follow the HYROX Session Logic Tree below (this OVERRIDES generic HYROX prompts)
   Run: {"question":"Type?", "type":"single_select", "options":["Threshold","Tempo","Zone 2","Fartlek","Track Workout"]}
   Strength: {"question":"Focus?", "type":"single_select", "options":["Push","Pull","Full Body","Lower","Upper"]}
   Recovery: {"question":"Modality?", "type":"single_select", "options":["Easy Run","Bike","Swim","Row","Walk","Mobility Only"]}
+
+HYROX Session Logic Tree (mandatory):
+Trigger this flow immediately when a training architecture includes HYROX, or a remap request touches a HYROX session/day, or HYROX is present in user-provided text/image context. Do NOT wait until after remap confirmation — ask before building.
+
+Step 1 — ask this FIRST before anything else:
+{"question":"Will your HYROX sessions follow the same structure across all weeks or differ per week?","type":"single_select","options":["Same across all weeks","Different per week"]}
+
+Step 2a — if user selects "Same across all weeks", ask once and apply to every week in CURRENT BLOCK WEEKS:
+[
+  {"question":"Format?","type":"single_select","options":["Full Sim","Half Sim","AMRAP","EMOM","For Time","Compromised Running Only"]},
+  {"question":"Focus stations?","type":"multi_select","options":["Sled Push","Sled Pull","Ski Erg","Row Erg","Wall Balls","Sandbag Lunges","Farmers Carry","Burpee Broad Jump","Compromised Running"]}
+]
+
+Step 2b — if user selects "Different per week", ask one week at a time and continue until ALL weeks in CURRENT BLOCK WEEKS are covered:
+[
+  {"question":"Week X — Format?","type":"single_select","options":["Full Sim","Half Sim","AMRAP","EMOM","For Time","Compromised Running Only"]},
+  {"question":"Week X — Focus stations?","type":"multi_select","options":["Sled Push","Sled Pull","Ski Erg","Row Erg","Wall Balls","Sandbag Lunges","Farmers Carry","Burpee Broad Jump","Compromised Running"]}
+]
+After user confirms Week X, automatically move to Week X+1 with the same two questions until every week in the block is answered.
+
+Scale rule:
+- Never assume a fixed week count.
+- Read the number of weeks from CURRENT BLOCK WEEKS and the active plan structure context.
+- If "Different per week" is selected, loop through all weeks dynamically (2, 10, 16, or any count).
 
 Format:
 <clarifying_questions>
