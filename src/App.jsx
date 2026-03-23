@@ -1681,30 +1681,7 @@ export default function App() {
     setPlanBuilderOpen(true);
   };
 
-  const NoPlanState = ({ compact = false }) => {
-    if (compact) {
-      return (
-        <div style={{ padding: "20px 24px", display: "flex", justifyContent: "center" }}>
-          <button
-            onClick={openPlanBuilder}
-            style={{
-              padding: "10px 14px",
-              background: "transparent",
-              color: C.cyan,
-              border: `1px solid ${C.cyan}44`,
-              borderRadius: 10,
-              cursor: "pointer",
-              fontFamily: C.fm,
-              fontSize: 10,
-              letterSpacing: 2,
-            }}
-          >
-            BUILD MY PLAN
-          </button>
-        </div>
-      );
-    }
-
+  const NoPlanState = () => {
     return (
       <div style={{ display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", padding: "60px 24px", textAlign: "center" }}>
         <div style={{ fontFamily: C.ff, fontSize: 28, letterSpacing: 3, color: C.muted, marginBottom: 8 }}>
@@ -1751,6 +1728,53 @@ export default function App() {
     );
   };
 
+  const DismissedNoPlanState = () => (
+    <div style={{ margin: "20px", padding: "14px 16px", background: C.card, border: `1px solid ${C.border}`, borderRadius: 12 }}>
+      <div style={{ fontFamily: C.fm, fontSize: 8, color: C.muted, letterSpacing: 2, marginBottom: 8 }}>
+        PLAN BUILDER REMINDER DISMISSED FOR 24H
+      </div>
+      <div style={{ display: "flex", gap: 8 }}>
+        <button
+          onClick={openPlanBuilder}
+          style={{
+            flex: 1,
+            padding: "10px 12px",
+            background: "transparent",
+            color: C.cyan,
+            border: `1px solid ${C.cyan}44`,
+            borderRadius: 10,
+            cursor: "pointer",
+            fontFamily: C.fm,
+            fontSize: 10,
+            letterSpacing: 2,
+          }}
+        >
+          BUILD MY PLAN
+        </button>
+        <button
+          onClick={() => {
+            localStorage.removeItem(PLAN_BUILDER_DISMISS_KEY);
+            setPlanBuilderDismissUntil(0);
+          }}
+          style={{
+            flex: 1,
+            padding: "10px 12px",
+            background: "transparent",
+            color: C.muted,
+            border: `1px solid ${C.border}`,
+            borderRadius: 10,
+            cursor: "pointer",
+            fontFamily: C.fm,
+            fontSize: 10,
+            letterSpacing: 2,
+          }}
+        >
+          SHOW FULL STATE
+        </button>
+      </div>
+    </div>
+  );
+
   return (
     <div style={{ minHeight:"100vh", background:C.bg, color:C.text, fontFamily:C.fs, maxWidth:480, margin:"0 auto", paddingBottom:80 }}>
       {showEntrance && (
@@ -1767,7 +1791,7 @@ export default function App() {
 
       {nav === "today" && showNoPlanState && <NoPlanState />}
 
-      {nav === "today" && noPlanLoaded && planBuilderDismissed && <NoPlanState compact />}
+      {nav === "today" && noPlanLoaded && planBuilderDismissed && <DismissedNoPlanState />}
 
       {nav === "today" && !noPlanLoaded && (
         <div>
@@ -2029,7 +2053,7 @@ export default function App() {
 
       {nav === "plan" && showNoPlanState && <NoPlanState />}
 
-      {nav === "plan" && noPlanLoaded && planBuilderDismissed && <NoPlanState compact />}
+      {nav === "plan" && noPlanLoaded && planBuilderDismissed && <DismissedNoPlanState />}
 
       {nav === "plan" && !planLoading && planBlocks.length > 0 && (
         <div>
