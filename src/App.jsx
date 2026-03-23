@@ -2,6 +2,7 @@ import { useState, useEffect, useRef } from "react";
 import { createClient } from "@supabase/supabase-js";
 import AuthScreen from "./AuthScreen";
 import Onboarding from "./Onboarding";
+import PlanBuilder from "./PlanBuilder";
 
 const supabase = createClient(
   import.meta.env.VITE_SUPABASE_URL,
@@ -207,6 +208,8 @@ const createSessionId = () => {
     return v.toString(16);
   });
 };
+
+const PLAN_BUILDER_DISMISS_KEY = "plan_builder_dismiss_until";
 
 const makeInitialChatMessages = (userName) => ([
   { role:"assistant", content:`Hey ${userName || "there"} — I have your WHOOP data, training plan, and biomarkers loaded. What do you need?`, planChange:null }
@@ -750,6 +753,11 @@ const SessionModal = ({ name, dayData, sess, weekId, onClose, onSessSwitch, sund
   const accent = name ? getAccent(name) : C.muted;
   const customContent = sess === "am" ? dayData?.am_session_custom : dayData?.pm_session_custom;
   const showCustom = !!(customContent && dayData?.ai_modified);
+  const currentBlocks = sess === "am" ? dayData?.am_session_blocks : dayData?.pm_session_blocks;
+  const hasManualEdits = Array.isArray(currentBlocks) && currentBlocks.some((b) => b?.is_modified);
+  const sessionStatus = hasManualEdits
+    ? { label: "MODIFIED", color: C.yellow }
+    : { label: "AI GENERATED", color: C.cyan };
 
   const enterEdit = () => {
     setEditName(name || "");
@@ -776,7 +784,13 @@ const SessionModal = ({ name, dayData, sess, weekId, onClose, onSessSwitch, sund
     setSaving(true);
     const blocksKey = sess === "am" ? "am_session_blocks" : "pm_session_blocks";
     const ordered = editBlocks.map((b,i) => ({ ...b, order:i }));
-    const update = { [blocksKey]: ordered, note: editNote };
+    const manuallyEditedBlocks = ordered.map((b) => ({ ...b, is_modified: true, is_ai_generated: false }));
+    const update = {
+      [blocksKey]: manuallyEditedBlocks,
+      note: editNote,
+      ai_modified: false,
+      ai_modification_note: null,
+    };
     try {
       // weekId is the UUID from training_weeks; training_days.week_id is the slug
       // Look up the slug first, then update training_days
@@ -803,13 +817,13 @@ const SessionModal = ({ name, dayData, sess, weekId, onClose, onSessSwitch, sund
     setEditBlocks(prev => [...prev, {
       id:uid(), type:"GENERAL", duration:20, rounds:null, order:prev.length,
       exercises:[{ id:uid(), name:"New exercise", sets:3, reps:"10", note:null }],
-      is_ai_generated:false, is_modified:false,
+      is_ai_generated:false, is_modified:true,
     }]);
   };
 
   const dupBlock = (idx) => {
     const b = editBlocks[idx];
-    const nb = { ...JSON.parse(JSON.stringify(b)), id:uid(), is_ai_generated:false };
+    const nb = { ...JSON.parse(JSON.stringify(b)), id:uid(), is_ai_generated:false, is_modified:true };
     setEditBlocks(prev => [...prev.slice(0,idx+1), nb, ...prev.slice(idx+1)]);
   };
 
@@ -818,8 +832,7 @@ const SessionModal = ({ name, dayData, sess, weekId, onClose, onSessSwitch, sund
   const updateBlock = (idx, updates) => {
     setEditBlocks(prev => prev.map((b,i) => {
       if (i !== idx) return b;
-      const modified = b.is_ai_generated ? true : b.is_modified;
-      return { ...b, ...updates, is_modified:modified };
+      return { ...b, ...updates, is_modified:true };
     }));
   };
 
@@ -979,6 +992,24 @@ const SessionModal = ({ name, dayData, sess, weekId, onClose, onSessSwitch, sund
               <div style={{ fontFamily:C.ff, fontSize:24, color:C.muted }}>SUNDAY SESSION</div>
             )}
             {w && <div style={{ fontFamily:C.fm, fontSize:8, color:C.muted, marginTop:4 }}>{w.duration}</div>}
+            {!dayData?.isRaceDay && (name || customContent) && (
+              <div
+                style={{
+                  display: "inline-block",
+                  marginTop: 8,
+                  background: `${sessionStatus.color}22`,
+                  border: `1px solid ${sessionStatus.color}44`,
+                  borderRadius: 20,
+                  padding: "3px 10px",
+                  fontFamily: C.fm,
+                  fontSize: 7,
+                  color: sessionStatus.color,
+                  letterSpacing: 2,
+                }}
+              >
+                {sessionStatus.label}
+              </div>
+            )}
           </div>
           <div style={{ display:"flex", gap:6 }}>
             <button onClick={enterEdit} style={{ background:C.card, border:`1px solid ${C.border}`, color:C.cyan, width:36, height:36, borderRadius:"50%", cursor:"pointer", fontSize:13, display:"flex", alignItems:"center", justifyContent:"center" }}>✏️</button>
@@ -1093,6 +1124,8 @@ export default function App() {
   const [scenarioChanges, setScenarioChanges] = useState([]);
   const [showLabReview, setShowLabReview] = useState(false);
   const [labToast, setLabToast] = useState(null);
+  const [planBuilderOpen, setPlanBuilderOpen] = useState(false);
+  const [planBuilderDismissUntil, setPlanBuilderDismissUntil] = useState(0);
   const [labContext, setLabContext] = useState("");
   const [labTargetDay, setLabTargetDay] = useState(null);
   const [cqSelections, setCqSelections] = useState({});
@@ -1138,6 +1171,14 @@ export default function App() {
     });
 
     return () => subscription.unsubscribe();
+  }, []);
+
+  useEffect(() => {
+    const raw = localStorage.getItem(PLAN_BUILDER_DISMISS_KEY);
+    const ts = Number(raw);
+    if (Number.isFinite(ts) && ts > 0) {
+      setPlanBuilderDismissUntil(ts);
+    }
   }, []);
 
   // Data fetches — only run once per session when profile is first loaded
@@ -1626,6 +1667,89 @@ export default function App() {
   const todayAm  = todayDayData ? getEffAm(todayDayData) : null;
   const todayPm  = todayDayData?.pm || null;
   const flaggedBio = biomarkers.filter(b => b.flag === "HIGH" || b.flag === "LOW");
+  const noPlanLoaded = !planLoading && planBlocks.length === 0;
+  const planBuilderDismissed = noPlanLoaded && Date.now() < planBuilderDismissUntil;
+  const showNoPlanState = noPlanLoaded && !planBuilderDismissed;
+
+  const dismissPlanBuilderFor24h = () => {
+    const until = Date.now() + (24 * 60 * 60 * 1000);
+    setPlanBuilderDismissUntil(until);
+    localStorage.setItem(PLAN_BUILDER_DISMISS_KEY, String(until));
+  };
+
+  const openPlanBuilder = () => {
+    setPlanBuilderOpen(true);
+  };
+
+  const NoPlanState = ({ compact = false }) => {
+    if (compact) {
+      return (
+        <div style={{ padding: "20px 24px", display: "flex", justifyContent: "center" }}>
+          <button
+            onClick={openPlanBuilder}
+            style={{
+              padding: "10px 14px",
+              background: "transparent",
+              color: C.cyan,
+              border: `1px solid ${C.cyan}44`,
+              borderRadius: 10,
+              cursor: "pointer",
+              fontFamily: C.fm,
+              fontSize: 10,
+              letterSpacing: 2,
+            }}
+          >
+            BUILD MY PLAN
+          </button>
+        </div>
+      );
+    }
+
+    return (
+      <div style={{ display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", padding: "60px 24px", textAlign: "center" }}>
+        <div style={{ fontFamily: C.ff, fontSize: 28, letterSpacing: 3, color: C.muted, marginBottom: 8 }}>
+          NO TRAINING PLAN FOUND<span style={{ color: C.red }}>.</span>
+        </div>
+        <div style={{ fontFamily: C.fm, fontSize: 9, color: C.light, letterSpacing: 2, lineHeight: 1.8, marginBottom: 16 }}>
+          Build your personalized training structure now, or dismiss this reminder for 24 hours.
+        </div>
+        <div style={{ width: "100%", maxWidth: 320, display: "flex", flexDirection: "column", gap: 10 }}>
+          <button
+            onClick={openPlanBuilder}
+            style={{
+              padding: "12px 14px",
+              background: C.green,
+              color: "#000",
+              border: "none",
+              borderRadius: 10,
+              cursor: "pointer",
+              fontFamily: C.ff,
+              fontSize: 14,
+              letterSpacing: 2,
+            }}
+          >
+            BUILD MY PLAN
+          </button>
+          <button
+            onClick={dismissPlanBuilderFor24h}
+            style={{
+              padding: "10px 12px",
+              background: "transparent",
+              color: C.muted,
+              border: `1px solid ${C.border}`,
+              borderRadius: 10,
+              cursor: "pointer",
+              fontFamily: C.fm,
+              fontSize: 10,
+              letterSpacing: 2,
+            }}
+          >
+            I'LL DO IT LATER
+          </button>
+        </div>
+      </div>
+    );
+  };
 
   return (
     <div style={{ minHeight:"100vh", background:C.bg, color:C.text, fontFamily:C.fs, maxWidth:480, margin:"0 auto", paddingBottom:80 }}>
@@ -1641,7 +1765,11 @@ export default function App() {
         </div>
       )}
 
-      {nav === "today" && (
+      {nav === "today" && showNoPlanState && <NoPlanState />}
+
+      {nav === "today" && noPlanLoaded && planBuilderDismissed && <NoPlanState compact />}
+
+      {nav === "today" && !noPlanLoaded && (
         <div>
           <div style={{ padding:"16px 20px 12px", display:"flex", justifyContent:"space-between", alignItems:"center" }}>
             <div>
@@ -1899,14 +2027,9 @@ export default function App() {
         </div>
       )}
 
-      {nav === "plan" && !planLoading && planBlocks.length === 0 && (
-        <div style={{ display:"flex", flexDirection:"column", alignItems:"center", justifyContent:"center", padding:"60px 24px", textAlign:"center" }}>
-          <div style={{ fontFamily:C.ff, fontSize:28, letterSpacing:3, color:C.muted, marginBottom:8 }}>NO TRAINING PLAN FOUND<span style={{ color:C.red }}>.</span></div>
-          <div style={{ fontFamily:C.fm, fontSize:9, color:C.light, letterSpacing:2, lineHeight:1.8 }}>
-            Your plan hasn't been seeded yet.<br />Contact your coach to get started.
-          </div>
-        </div>
-      )}
+      {nav === "plan" && showNoPlanState && <NoPlanState />}
+
+      {nav === "plan" && noPlanLoaded && planBuilderDismissed && <NoPlanState compact />}
 
       {nav === "plan" && !planLoading && planBlocks.length > 0 && (
         <div>
@@ -2432,6 +2555,22 @@ export default function App() {
       </div>
 
       <AIChat whoopData={whoopData} currentWeek={week} recentActivities={recentActivities} onPlanChange={handlePlanChange} userName={profile?.name} persona={coachPersona} onPersonaChange={handlePersonaChange} proactiveBadge={proactiveBadge} authToken={session?.access_token} />
+
+      <PlanBuilder
+        open={planBuilderOpen}
+        profile={profile}
+        authToken={session?.access_token}
+        onClose={() => setPlanBuilderOpen(false)}
+        onGenerated={async ({ builderInputs }) => {
+          setPlanBuilderOpen(false);
+          localStorage.removeItem(PLAN_BUILDER_DISMISS_KEY);
+          setPlanBuilderDismissUntil(0);
+          setPlanLoading(true);
+          await fetchPlan(session?.access_token);
+          setNav("plan");
+          setProfile((prev) => (prev ? { ...prev, plan_builder: builderInputs } : prev));
+        }}
+      />
 
       {selDay && (
         <SessionModal name={modalName} dayData={dayData} sess={sess} weekId={weekId} onClose={() => setSelDay(null)} onSessSwitch={setSess} sundayChoice={sundayChoice} setSundayChoice={setSundayChoice} supabase={supabase} session={session} onSaved={() => fetchPlan(session?.access_token)} />

@@ -24,6 +24,22 @@ export default async function handler(req, res) {
     } catch (_) {}
   }
 
+  // Resolve current week row so we can map week UUID -> week slug for training_days.
+  let currentWeekRow = null;
+  if (currentWeek?.id && resolvedUserId) {
+    try {
+      const { data } = await supabase
+        .from("training_weeks")
+        .select("id, week_id, block_id, label")
+        .eq("user_id", resolvedUserId)
+        .eq("id", currentWeek.id)
+        .maybeSingle();
+      currentWeekRow = data || null;
+    } catch (_) {}
+  }
+
+  const currentWeekSlug = currentWeekRow?.week_id || null;
+
   // Fetch user profile, flagged biomarkers, and current week schedule in parallel
   const [profileResult, bioResult, weekDaysResult] = await Promise.all([
     resolvedUserId
@@ -32,8 +48,13 @@ export default async function handler(req, res) {
     resolvedUserId
       ? supabase.from("biomarkers").select("label,value,unit,flag").eq("user_id", resolvedUserId).in("flag", ["HIGH", "LOW"])
       : supabase.from("biomarkers").select("label,value,unit,flag").in("flag", ["HIGH", "LOW"]),
-    (currentWeek?.id && resolvedUserId)
-      ? supabase.from("training_days").select("day_name,am_session,pm_session,note,ai_modified").eq("user_id", resolvedUserId).eq("week_id", currentWeek.id).order("day_name")
+    (currentWeekSlug && resolvedUserId)
+      ? supabase
+          .from("training_days")
+          .select("day_name,am_session,pm_session,note,ai_modified,am_session_blocks,pm_session_blocks")
+          .eq("user_id", resolvedUserId)
+          .eq("week_id", currentWeekSlug)
+          .order("day_name")
       : Promise.resolve({ data: null }),
   ]);
 
@@ -80,33 +101,33 @@ export default async function handler(req, res) {
   // Build current week schedule for context
   const DAY_ORDER = ["MON","TUE","WED","THU","FRI","SAT","SUN"];
   const sortedDays = DAY_ORDER.map(d => weekDays.find(wd => wd.day_name === d)).filter(Boolean);
+  const hasManualBlockEdits = (blocks) => Array.isArray(blocks) && blocks.some((b) => b?.is_modified);
   const weekScheduleLines = sortedDays.length > 0
-    ? sortedDays.map(d => `- ${d.day_name}: AM=${d.am_session || "REST"} | PM=${d.pm_session || "—"}${d.ai_modified ? " [AI MODIFIED]" : ""}${d.note ? ` | Note: ${d.note}` : ""}`).join("\n")
+    ? sortedDays.map((d) => {
+        const manualAm = hasManualBlockEdits(d.am_session_blocks);
+        const manualPm = hasManualBlockEdits(d.pm_session_blocks);
+        const manualTag = manualAm || manualPm ? " [MANUALLY MODIFIED]" : "";
+        const aiTag = !manualTag && d.ai_modified ? " [AI MODIFIED]" : "";
+        const blockTag = manualTag ? " | Session blocks contain manual edits" : "";
+        return `- ${d.day_name}: AM=${d.am_session || "REST"} | PM=${d.pm_session || "—"}${manualTag}${aiTag}${blockTag}${d.note ? ` | Note: ${d.note}` : ""}`;
+      }).join("\n")
     : "- No schedule loaded";
 
   // Build dynamic week scope context for multi-week clarifying flows.
   let blockWeekLabels = [];
-  if (currentWeek?.id && resolvedUserId) {
+  if (currentWeekRow?.block_id && resolvedUserId) {
     try {
-      const { data: currentWeekRow } = await supabase
+      const { data: blockWeeks } = await supabase
         .from("training_weeks")
-        .select("id, block_id, label")
+        .select("label, week_order")
         .eq("user_id", resolvedUserId)
-        .eq("id", currentWeek.id)
-        .maybeSingle();
-
-      if (currentWeekRow?.block_id) {
-        const { data: blockWeeks } = await supabase
-          .from("training_weeks")
-          .select("label, week_order")
-          .eq("user_id", resolvedUserId)
-          .eq("block_id", currentWeekRow.block_id)
-          .order("week_order", { ascending: true });
-        blockWeekLabels = (blockWeeks || []).map((w) => w.label).filter(Boolean);
-      } else if (currentWeekRow?.label) {
-        blockWeekLabels = [currentWeekRow.label];
-      }
+        .eq("block_id", currentWeekRow.block_id)
+        .order("week_order", { ascending: true });
+      blockWeekLabels = (blockWeeks || []).map((w) => w.label).filter(Boolean);
     } catch (_) {}
+  }
+  if (blockWeekLabels.length === 0 && currentWeekRow?.label) {
+    blockWeekLabels = [currentWeekRow.label];
   }
   if (blockWeekLabels.length === 0 && currentWeek?.label) {
     blockWeekLabels = [currentWeek.label];
