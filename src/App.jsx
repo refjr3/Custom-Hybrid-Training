@@ -209,7 +209,7 @@ const createSessionId = () => {
   });
 };
 
-const PLAN_BUILDER_DISMISS_KEY = "plan_builder_dismiss_until";
+const PLAN_BUILDER_DISMISS_KEY = "plan_builder_dismissed";
 
 const makeInitialChatMessages = (userName) => ([
   { role:"assistant", content:`Hey ${userName || "there"} — I have your WHOOP data, training plan, and biomarkers loaded. What do you need?`, planChange:null }
@@ -1677,7 +1677,7 @@ export default function App() {
   const todayPm  = todayDayData?.pm || null;
   const flaggedBio = biomarkers.filter(b => b.flag === "HIGH" || b.flag === "LOW");
   const noPlanLoaded = !planLoading && planBlocks.length === 0;
-  const planBuilderDismissed = noPlanLoaded && Date.now() < planBuilderDismissUntil;
+  const planBuilderDismissed = noPlanLoaded && planBuilderDismissUntil > 0 && (Date.now() - planBuilderDismissUntil) < (24 * 60 * 60 * 1000);
   const showNoPlanState = noPlanLoaded && !planBuilderDismissed;
 
   const dismissPlanBuilderFor24h = () => {
@@ -1691,30 +1691,7 @@ export default function App() {
     setPlanBuilderOpen(true);
   };
 
-  const NoPlanState = ({ compact = false }) => {
-    if (compact) {
-      return (
-        <div style={{ padding: "20px 24px", display: "flex", justifyContent: "center" }}>
-          <button
-            onClick={openPlanBuilder}
-            style={{
-              padding: "10px 14px",
-              background: "transparent",
-              color: C.cyan,
-              border: `1px solid ${C.cyan}44`,
-              borderRadius: 10,
-              cursor: "pointer",
-              fontFamily: C.fm,
-              fontSize: 10,
-              letterSpacing: 2,
-            }}
-          >
-            BUILD MY PLAN
-          </button>
-        </div>
-      );
-    }
-
+  const NoPlanState = () => {
     return (
       <div style={{ display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", padding: "60px 24px", textAlign: "center" }}>
         <div style={{ fontFamily: C.ff, fontSize: 28, letterSpacing: 3, color: C.muted, marginBottom: 8 }}>
@@ -1761,6 +1738,38 @@ export default function App() {
     );
   };
 
+  const DismissedNoPlanState = () => (
+    <div style={{ margin: "20px", padding: "14px 16px", background: C.card, border: `1px solid ${C.border}`, borderRadius: 12 }}>
+      <div style={{ fontFamily: C.fm, fontSize: 8, color: C.muted, letterSpacing: 2, marginBottom: 8 }}>
+        PLAN BUILDER REMINDER DISMISSED FOR 24H
+      </div>
+      <div style={{ fontFamily: C.fs, fontSize: 12, color: C.light, lineHeight: 1.5 }}>
+        Build entry points are hidden until 24 hours have passed.
+      </div>
+    </div>
+  );
+
+  const PlanNoPlanScaffold = () => (
+    <div>
+      <div style={{ padding:"16px 20px 10px" }}>
+        <div style={{ fontFamily:C.fm, fontSize:8, color:C.muted, letterSpacing:3, marginBottom:10 }}>TRAINING BLOCK</div>
+        <div style={{ display:"flex", gap:6, overflowX:"auto", scrollbarWidth:"none" }}>
+          <button style={{ flexShrink:0, padding:"8px 16px", background:C.card, color:C.cyan, border:"none", borderBottom:`2px solid ${C.cyan}`, borderRadius:0, cursor:"default", fontFamily:C.ff, fontSize:12, letterSpacing:2 }}>
+            NO BLOCKS YET
+          </button>
+        </div>
+      </div>
+      <div style={{ display:"flex", overflowX:"auto", scrollbarWidth:"none", borderBottom:`1px solid ${C.border}`, paddingLeft:20 }}>
+        {["WEEK 1","WEEK 2","WEEK 3","WEEK 4"].map((w) => (
+          <button key={w} style={{ flexShrink:0, padding:"10px 14px", background:"transparent", color:C.muted, border:"none", borderBottom:"2px solid transparent", cursor:"default", fontFamily:C.fm, fontSize:7, letterSpacing:2, whiteSpace:"nowrap" }}>
+            {w}
+          </button>
+        ))}
+      </div>
+      {showNoPlanState ? <NoPlanState /> : <DismissedNoPlanState />}
+    </div>
+  );
+
   return (
     <div style={{ minHeight:"100vh", background:C.bg, color:C.text, fontFamily:C.fs, maxWidth:480, margin:"0 auto", paddingBottom:80 }}>
       {showEntrance && (
@@ -1777,9 +1786,9 @@ export default function App() {
 
       {nav === "today" && showNoPlanState && <NoPlanState />}
 
-      {nav === "today" && noPlanLoaded && planBuilderDismissed && <NoPlanState compact />}
+      {nav === "today" && noPlanLoaded && planBuilderDismissed && <DismissedNoPlanState />}
 
-      {nav === "today" && !noPlanLoaded && (
+      {nav === "today" && (
         <div>
           <div style={{ padding:"16px 20px 12px", display:"flex", justifyContent:"space-between", alignItems:"center" }}>
             <div>
@@ -2592,6 +2601,24 @@ export default function App() {
         open={planBuilderOpen}
         profile={profile}
         authToken={session?.access_token}
+        userId={session?.user?.id}
+        onSaveProfilePatch={async (patch) => {
+          if (!session?.user?.id) return;
+          const { error } = await supabase
+            .from("user_profiles")
+            .update(patch)
+            .eq("user_id", session.user.id);
+          if (error) {
+            // Some schemas may not include `sports`; retry with races only.
+            const { sports: _sports, ...racesOnlyPatch } = patch || {};
+            const retry = await supabase
+              .from("user_profiles")
+              .update(racesOnlyPatch)
+              .eq("user_id", session.user.id);
+            if (retry.error) throw new Error(retry.error.message || "Failed to save races");
+          }
+          setProfile((prev) => (prev ? { ...prev, ...patch } : prev));
+        }}
         onClose={() => setPlanBuilderOpen(false)}
         onGenerated={async ({ builderInputs }) => {
           setPlanBuilderOpen(false);

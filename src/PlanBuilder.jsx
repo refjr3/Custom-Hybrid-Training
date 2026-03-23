@@ -280,8 +280,10 @@ export default function PlanBuilder({
   open,
   profile,
   authToken,
+  userId,
   onClose,
   onGenerated,
+  onSaveProfilePatch,
 }) {
   const profileSports = useMemo(() => {
     if (Array.isArray(profile?.plan_builder?.sports) && profile.plan_builder.sports.length > 0) {
@@ -312,13 +314,29 @@ export default function PlanBuilder({
   const [equipment, setEquipment] = useState(["Running/Outdoor", "Bodyweight"]);
   const [generating, setGenerating] = useState(false);
   const [error, setError] = useState(null);
+  const PHASE_INFO = {
+    BASE: "Build your aerobic foundation and movement patterns",
+    BUILD: "Increase volume and sport-specific intensity",
+    PEAK: "Sharpen fitness with race-pace efforts",
+    TAPER: "Reduce volume to arrive fresh and fast on race day",
+    DELOAD: "Planned recovery week to absorb training stress",
+  };
 
   useEffect(() => {
     if (!open) return;
     const initialSports = profileSports;
     const initialRaces = Array.isArray(profile?.races)
-      ? profile.races.map((r) => ({ sport: r.sport || "general", name: r.name || "", date: r.date || "" }))
+      ? profile.races.map((r, idx) => ({
+          id: uid(),
+          sport: r.sport || initialSports[0] || "general",
+          name: r.name || "",
+          date: r.date || "",
+          is_primary: typeof r.is_primary === "boolean" ? r.is_primary : idx === 0,
+        }))
       : [];
+    if (initialRaces.length > 0 && !initialRaces.some((r) => r.is_primary)) {
+      initialRaces[0].is_primary = true;
+    }
     const firstRaceWithDate = initialRaces.find((r) => r.date);
     const impliedWeeks = firstRaceWithDate ? weeksUntil(firstRaceWithDate.date) : null;
 
@@ -345,10 +363,12 @@ export default function PlanBuilder({
 
   const selectedRaces = useMemo(() => {
     if (noRaceYet) return [];
-    return races.filter((r) => r?.sport && sports.includes(r.sport));
-  }, [races, sports, noRaceYet]);
+    return races.filter((r) => r?.sport);
+  }, [races, noRaceYet]);
 
   const primaryRace = useMemo(() => {
+    const preferred = selectedRaces.find((r) => r.is_primary);
+    if (preferred) return preferred;
     const withDate = selectedRaces.filter((r) => r.date);
     if (withDate.length === 0) return null;
     const sorted = [...withDate].sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
@@ -356,14 +376,14 @@ export default function PlanBuilder({
   }, [selectedRaces]);
 
   const raceWeeks = primaryRace?.date ? weeksUntil(primaryRace.date) : null;
-  const effectiveWeeks = raceWeeks || totalWeeks;
+  const effectiveWeeks = totalWeeks;
 
   useEffect(() => {
-    setPhases((prev) => normalizePhaseTotals(prev, effectiveWeeks));
-  }, [effectiveWeeks]);
+    if (raceWeeks) setTotalWeeks(raceWeeks);
+  }, [raceWeeks]);
 
   const steps = useMemo(() => {
-    const base = [
+    return [
       { key: "goal", title: "TRAINING GOAL", optional: hasGoalInProfile },
       { key: "timeline", title: "TIMELINE" },
       { key: "phases", title: "PHASE STRUCTURE" },
@@ -371,7 +391,6 @@ export default function PlanBuilder({
       { key: "equipment", title: "EQUIPMENT" },
       { key: "generate", title: "GENERATION" },
     ];
-    return hasGoalInProfile ? base.filter((s) => s.key !== "goal") : base;
   }, [hasGoalInProfile]);
 
   const current = steps[step] || steps[0];
@@ -383,45 +402,66 @@ export default function PlanBuilder({
     setSports((prev) => {
       const exists = prev.includes(sportId);
       const next = exists ? prev.filter((s) => s !== sportId) : [...prev, sportId];
-      setRaces((prevRaces) => {
-        const filtered = prevRaces.filter((r) => next.includes(r.sport));
-        for (const s of next) {
-          if (!filtered.some((r) => r.sport === s)) {
-            filtered.push({ sport: s, name: "", date: "" });
-          }
-        }
-        return filtered;
-      });
       return next;
     });
   };
 
-  const updateRace = (sportId, patch) => {
+  const updateRace = (raceId, patch) => {
     setRaces((prev) =>
-      prev.map((r) => (r.sport === sportId ? { ...r, ...patch } : r))
+      prev.map((r) => (r.id === raceId ? { ...r, ...patch } : r))
     );
   };
 
-  const updatePhase = (idx, patch) => {
+  const setPrimaryRace = (raceId) => {
+    setRaces((prev) => prev.map((r) => ({ ...r, is_primary: r.id === raceId })));
+  };
+
+  const addRaceCard = () => {
+    const defaultSport = sports[0] || profileSports[0] || "general";
+    setRaces((prev) => [
+      ...prev,
+      { id: uid(), sport: defaultSport, name: "", date: "", is_primary: prev.length === 0 },
+    ]);
+  };
+
+  const deleteRaceCard = (raceId) => {
+    setRaces((prev) => {
+      const next = prev.filter((r) => r.id !== raceId);
+      if (next.length > 0 && !next.some((r) => r.is_primary)) {
+        next[0].is_primary = true;
+      }
+      return next;
+    });
+  };
+
+  const updatePhaseWeeks = (idx, delta) => {
     setPhases((prev) => {
-      const next = prev.map((p, i) => (i === idx ? { ...p, ...patch } : p));
-      return normalizePhaseTotals(next, effectiveWeeks);
+      const next = prev.map((p, i) => {
+        if (i !== idx) return p;
+        return { ...p, weeks: Math.max(1, (Number(p.weeks) || 1) + delta) };
+      });
+      const sum = next.reduce((s, p) => s + (Number(p.weeks) || 0), 0);
+      setTotalWeeks(Math.max(1, sum));
+      return next;
     });
   };
 
   const addPhase = () => {
-    setPhases((prev) =>
-      normalizePhaseTotals(
-        [...prev, { id: uid(), name: `PHASE ${prev.length + 1}`, weeks: 1 }],
-        effectiveWeeks
-      )
-    );
+    setPhases((prev) => {
+      const next = [...prev, { id: uid(), name: `PHASE ${prev.length + 1}`, weeks: 1 }];
+      const sum = next.reduce((s, p) => s + (Number(p.weeks) || 0), 0);
+      setTotalWeeks(Math.max(1, sum));
+      return next;
+    });
   };
 
   const removePhase = (idx) => {
     setPhases((prev) => {
       if (prev.length <= 1) return prev;
-      return normalizePhaseTotals(prev.filter((_, i) => i !== idx), effectiveWeeks);
+      const next = prev.filter((_, i) => i !== idx);
+      const sum = next.reduce((s, p) => s + (Number(p.weeks) || 0), 0);
+      setTotalWeeks(Math.max(1, sum));
+      return next;
     });
   };
 
@@ -438,8 +478,17 @@ export default function PlanBuilder({
     return true;
   };
 
-  const next = () => {
+  const next = async () => {
     if (atLastStep) return;
+    if (current.key === "goal" && typeof onSaveProfilePatch === "function") {
+      const racesPayload = noRaceYet ? [] : races.map(({ id, ...rest }) => rest);
+      try {
+        await onSaveProfilePatch({ races: racesPayload, sports });
+      } catch (e) {
+        setError(e?.message || "Failed to save races");
+        return;
+      }
+    }
     setStep((s) => Math.min(s + 1, steps.length - 1));
   };
 
@@ -491,6 +540,7 @@ Generate:
 
       const profilePayload = {
         ...profile,
+        user_id: userId || profile?.user_id || null,
         sports: sports.length > 0 ? sports : profileSports,
         race_goal: (sports[0] || profile?.race_goal || "general"),
         races: noRaceYet ? [] : selectedRaces,
@@ -513,7 +563,11 @@ Generate:
           ...(token ? { Authorization: `Bearer ${token}` } : {}),
         },
         body: JSON.stringify({
+          user_id: userId || profile?.user_id || null,
           profile: profilePayload,
+          sports: profilePayload.sports,
+          target_race_date: profilePayload.target_race_date,
+          weeks_per_block: profilePayload.weeks_per_block,
           days_per_week: daysPerWeek,
           session_preference: sessionPreference,
           equipment,
@@ -628,8 +682,51 @@ Generate:
                     />
                   </div>
                 </div>
-              );
-            })}
+                <div style={{ display: "grid", gap: 8 }}>
+                  <select
+                    value={race.sport}
+                    onChange={(e) => updateRace(race.id, { sport: e.target.value })}
+                    style={input}
+                  >
+                    {SPORT_OPTIONS.map((s) => (
+                      <option key={s.id} value={s.id}>{s.label}</option>
+                    ))}
+                  </select>
+                  <input
+                    value={race.name}
+                    onChange={(e) => updateRace(race.id, { name: e.target.value })}
+                    placeholder="Race name"
+                    style={input}
+                  />
+                  <input
+                    type="date"
+                    value={race.date || ""}
+                    onChange={(e) => updateRace(race.id, { date: e.target.value })}
+                    style={{ ...input, colorScheme: "dark" }}
+                  />
+                </div>
+              </div>
+            ))}
+
+            {!noRaceYet && (
+              <button
+                onClick={addRaceCard}
+                style={{
+                  width: "100%",
+                  padding: "10px 12px",
+                  borderRadius: 10,
+                  border: `1px dashed ${C.cyan}55`,
+                  background: "transparent",
+                  color: C.cyan,
+                  cursor: "pointer",
+                  fontFamily: C.fm,
+                  fontSize: 10,
+                  letterSpacing: 2,
+                }}
+              >
+                + ADD RACE
+              </button>
+            )}
           </div>
         )}
 
@@ -640,6 +737,9 @@ Generate:
                 <div style={{ fontFamily: C.ff, fontSize: 24, color: C.green, letterSpacing: 1 }}>{raceWeeks} WEEKS</div>
                 <div style={{ fontFamily: C.fs, fontSize: 13, color: C.muted, marginTop: 6 }}>
                   {raceWeeks} weeks until {primaryRace?.name || "your race"}.
+                </div>
+                <div style={{ fontFamily: C.fm, fontSize: 8, color: C.light, letterSpacing: 1, marginTop: 8 }}>
+                  You can fine-tune total weeks in the next step.
                 </div>
               </div>
             ) : (
@@ -660,11 +760,44 @@ Generate:
         {current.key === "phases" && (
           <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
             <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-              <div style={{ fontFamily: C.fm, fontSize: 9, color: C.muted, letterSpacing: 2 }}>
-                TOTAL {effectiveWeeks} WEEKS
+              <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                <span style={{ fontFamily: C.fm, fontSize: 9, color: C.muted, letterSpacing: 2 }}>
+                  TOTAL WEEKS
+                </span>
+                <button
+                  onClick={() => {
+                    const nextTotal = Math.max(1, effectiveWeeks - 1);
+                    setTotalWeeks(nextTotal);
+                    setPhases((prev) => normalizePhaseTotals(prev, nextTotal));
+                  }}
+                  style={{ width: 24, height: 24, borderRadius: 8, border: `1px solid ${C.border}`, background: C.card2, color: C.muted, cursor: "pointer" }}
+                >
+                  −
+                </button>
+                <input
+                  type="number"
+                  min={1}
+                  value={effectiveWeeks}
+                  onChange={(e) => {
+                    const nextTotal = Math.max(1, Number(e.target.value) || 1);
+                    setTotalWeeks(nextTotal);
+                    setPhases((prev) => normalizePhaseTotals(prev, nextTotal));
+                  }}
+                  style={{ width: 68, ...input, padding: "6px 8px", textAlign: "center", fontFamily: C.ff, fontSize: 14 }}
+                />
+                <button
+                  onClick={() => {
+                    const nextTotal = effectiveWeeks + 1;
+                    setTotalWeeks(nextTotal);
+                    setPhases((prev) => normalizePhaseTotals(prev, nextTotal));
+                  }}
+                  style={{ width: 24, height: 24, borderRadius: 8, border: `1px solid ${C.border}`, background: C.card2, color: C.muted, cursor: "pointer" }}
+                >
+                  +
+                </button>
               </div>
               <button
-                onClick={() => setPhases(aiDistributePhases(phases.map((p) => p.name), effectiveWeeks))}
+                onClick={() => setPhases(aiDistributePhases(["BASE", "BUILD", "PEAK", "TAPER"], effectiveWeeks))}
                 style={{ background: "transparent", border: `1px solid ${C.cyan}55`, color: C.cyan, borderRadius: 999, padding: "6px 10px", cursor: "pointer", fontFamily: C.fm, fontSize: 10 }}
               >
                 LET AI DECIDE
@@ -674,13 +807,24 @@ Generate:
             {phases.map((p, idx) => (
               <div key={p.id} style={{ ...panel, padding: 10 }}>
                 <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-                  <input
-                    value={p.name}
-                    onChange={(e) => updatePhase(idx, { name: e.target.value.toUpperCase() })}
-                    style={{ ...input, flex: 1, padding: "8px 10px", fontFamily: C.fm, fontSize: 11, letterSpacing: 1 }}
-                  />
+                  <div style={{ flex: 1, display: "flex", alignItems: "center", gap: 6 }}>
+                    <input
+                      value={p.name}
+                      onChange={(e) => {
+                        const nextName = e.target.value.toUpperCase();
+                        setPhases((prev) => prev.map((row, i) => (i === idx ? { ...row, name: nextName } : row)));
+                      }}
+                      style={{ ...input, flex: 1, padding: "8px 10px", fontFamily: C.fm, fontSize: 11, letterSpacing: 1 }}
+                    />
+                    <span
+                      title={PHASE_INFO[p.name?.toUpperCase()] || "Custom phase"}
+                      style={{ fontFamily: C.fm, fontSize: 12, color: C.light, cursor: "help" }}
+                    >
+                      ⓘ
+                    </span>
+                  </div>
                   <button
-                    onClick={() => updatePhase(idx, { weeks: p.weeks - 1 })}
+                    onClick={() => updatePhaseWeeks(idx, -1)}
                     style={{ width: 28, height: 28, borderRadius: 8, border: `1px solid ${C.border}`, background: C.card2, color: C.muted, cursor: "pointer" }}
                   >
                     −
@@ -689,7 +833,7 @@ Generate:
                     {p.weeks}w
                   </div>
                   <button
-                    onClick={() => updatePhase(idx, { weeks: p.weeks + 1 })}
+                    onClick={() => updatePhaseWeeks(idx, 1)}
                     style={{ width: 28, height: 28, borderRadius: 8, border: `1px solid ${C.border}`, background: C.card2, color: C.muted, cursor: "pointer" }}
                   >
                     +

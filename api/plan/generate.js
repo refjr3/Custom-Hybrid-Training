@@ -288,7 +288,24 @@ export default async function handler(req, res) {
   if (authErr || !user) return res.status(401).json({ error: "Invalid token" });
   const userId = user.id;
 
+  const profileData = req.body?.profile || null;
+  let profile = profileData;
+  if (!profile) {
+    // Use defaults from request body when profile lookup is unavailable.
+    profile = {
+      sports: req.body?.sports || [],
+      target_race_date: req.body?.target_race_date,
+      weeks_per_block: req.body?.weeks_per_block || 4,
+      phases: req.body?.phases || ["Base", "Build", "Peak", "Taper"],
+    };
+  }
+  profile = {
+    ...profile,
+    user_id: req.body?.user_id || profile?.user_id || userId,
+  };
+
   // ── Check generation_status and decide whether to proceed ─────────────────
+  let genStatus = "pending";
   const { data: profileRow, error: profileErr } = await supabase
     .from("user_profiles")
     .select("generation_status")
@@ -296,12 +313,11 @@ export default async function handler(req, res) {
     .single();
 
   if (profileErr && profileErr.code !== "PGRST116") {
-    // PGRST116 = no rows — profile may not exist yet, allow through
-    console.error("[plan/generate] profile fetch error:", profileErr.message);
-    return res.status(500).json({ error: "Failed to read user profile", details: profileErr.message });
+    // Fallback path: continue with request-body profile defaults.
+    console.warn("[plan/generate] profile fetch failed, using request fallback:", profileErr.message);
+  } else {
+    genStatus = profileRow?.generation_status ?? "pending";
   }
-
-  const genStatus = profileRow?.generation_status ?? "pending";
 
   if (genStatus === "complete") {
     // Completed plan exists — honour idempotency, don't regenerate
@@ -333,9 +349,6 @@ export default async function handler(req, res) {
       return res.status(500).json({ error: "Failed to clear partial plan data", details: msg });
     }
   }
-
-  const profile = req.body?.profile;
-  if (!profile) return res.status(400).json({ error: "profile is required in request body" });
 
   const daysPerWeek = toDaysPerWeek(
     req.body?.days_per_week ?? profile?.days_per_week,
