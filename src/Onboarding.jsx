@@ -346,6 +346,10 @@ export default function Onboarding({ supabase, session, onComplete }) {
     setSaving(true);
     setError(null);
     try {
+      const { data: { session: liveSession } } = await supabase.auth.getSession();
+      if (!liveSession?.user?.id) throw new Error("No authenticated user");
+      const userId = liveSession.user.id;
+
       const lthrVal   = lthr ? parseInt(lthr, 10) : null;
       const zones     = calcZones(lthrVal);
       const htIn      = heightFt ? parseInt(heightFt, 10) * 12 + parseInt(heightIn || 0, 10) : null;
@@ -358,7 +362,7 @@ export default function Onboarding({ supabase, session, onComplete }) {
       const primaryGoal = raceGoals.length > 0 ? raceGoals[0] : null;
 
       const profileData = {
-        user_id:              session.user.id,
+        user_id:              userId,
         name:                 name.trim(),
         dob:                  dob || null,
         age:                  age ? parseInt(age, 10) : null,
@@ -399,7 +403,16 @@ export default function Onboarding({ supabase, session, onComplete }) {
       localStorage.removeItem("onboarding_whoop_redirect");
       onComplete(data);
     } catch (e) {
-      setError(e.message);
+      const msg = e?.message || "";
+      const isAuthMismatch =
+        msg.includes("No authenticated user") ||
+        msg.includes("user_profiles_user_id_fkey") ||
+        msg.includes("violates foreign key constraint");
+      if (isAuthMismatch) {
+        setError("Account setup failed — please try signing in again");
+      } else {
+        setError(msg || "Account setup failed — please try signing in again");
+      }
       setSaving(false);
     }
   };
