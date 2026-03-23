@@ -1102,6 +1102,7 @@ export default function App() {
   const [biomarkers, setBiomarkers] = useState([]);
   const [planBlocks, setPlanBlocks] = useState([]);
   const [planLoading, setPlanLoading] = useState(true);
+  const [showPlanBuilder, setShowPlanBuilder] = useState(false);
   const [supplements, setSupplements] = useState([]);
   const [suppsLoading, setSuppsLoading] = useState(true);
   const [synthesisNote, setSynthesisNote] = useState(null);
@@ -1294,6 +1295,7 @@ export default function App() {
       if (res.ok && hasDays) {
         setPlanBlocks(data.blocks);
       }
+      console.log("[fetchPlan] planBlocks.length after fetch:", data.blocks?.length ?? 0);
     } catch (e) {
       console.log("[fetchPlan] caught error:", e.message);
     } finally {
@@ -1929,6 +1931,13 @@ export default function App() {
             </div>
           )}
 
+          {planBlocks.length === 0 && !planLoading && (
+            <div style={{ padding: "0 20px 20px", textAlign: "center" }}>
+              <div style={{ color: "#888", letterSpacing: 3, fontSize: 11, marginBottom: 12 }}>NO TRAINING PLAN</div>
+              <button onClick={() => setShowPlanBuilder(true)} style={{ background: "#00F3FF", color: "#000", border: "none", borderRadius: 12, padding: "16px 32px", fontSize: 13, fontWeight: 700, letterSpacing: 2, cursor: "pointer" }}>BUILD MY PLAN</button>
+            </div>
+          )}
+
           <div style={{ padding:"0 20px 20px" }}>
             <div style={{ fontFamily:C.fm, fontSize:8, color:C.muted, letterSpacing:3, marginBottom:12 }}>TODAY · {todayDayName}</div>
             {todayDayData?.isRaceDay ? (
@@ -2027,9 +2036,23 @@ export default function App() {
         </div>
       )}
 
-      {nav === "plan" && showNoPlanState && <NoPlanState />}
-
-      {nav === "plan" && noPlanLoaded && planBuilderDismissed && <NoPlanState compact />}
+      {nav === "plan" && !planLoading && planBlocks.length === 0 && (
+        <div style={{ textAlign: "center", padding: "60px 24px" }}>
+          <div style={{ color: "#888", letterSpacing: 3, fontSize: 11, marginBottom: 16 }}>NO TRAINING PLAN FOUND</div>
+          <button
+            onClick={() => setShowPlanBuilder(true)}
+            style={{ background: "#00F3FF", color: "#000", border: "none", borderRadius: 12, padding: "16px 32px", fontSize: 13, fontWeight: 700, letterSpacing: 2, cursor: "pointer" }}
+          >
+            BUILD MY PLAN
+          </button>
+          <div
+            onClick={() => localStorage.setItem("plan_builder_dismissed", Date.now())}
+            style={{ color: "#444", fontSize: 12, marginTop: 16, cursor: "pointer" }}
+          >
+            I'll do it later
+          </div>
+        </div>
+      )}
 
       {nav === "plan" && !planLoading && planBlocks.length > 0 && (
         <div>
@@ -2772,6 +2795,15 @@ export default function App() {
         <div onClick={() => { setLabOpen(true); setLabToast(null); }} style={{ position:"fixed", bottom:90, left:"50%", transform:"translateX(-50%)", zIndex:200, background:C.cardSolid, border:`1px solid ${C.cyan}33`, borderRadius:12, padding:"10px 16px", cursor:"pointer", boxShadow:"0 4px 20px rgba(0,0,0,0.5)", maxWidth:380 }}>
           <div style={{ fontFamily:C.fm, fontSize:8, color:C.cyan, letterSpacing:1 }}>{labToast}</div>
         </div>
+      )}
+
+      {showPlanBuilder && (
+        <PlanBuilder
+          user={profile}
+          session={session}
+          onComplete={() => { setShowPlanBuilder(false); fetchPlan(session?.access_token); }}
+          onDismiss={() => setShowPlanBuilder(false)}
+        />
       )}
     </div>
   );
