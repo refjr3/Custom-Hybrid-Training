@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useState, useRef } from "react";
 import { createClient } from "@supabase/supabase-js";
 
 const supabase = createClient(
@@ -22,6 +22,36 @@ const C = {
   fm: "'Space Mono',monospace",
   fs: "'Inter',-apple-system,sans-serif",
 };
+
+const RACE_DATABASE = [
+  { name: "HYROX World Championship", date: "2026-06-14", sport: "hyrox" },
+  { name: "HYROX Miami", date: "2026-04-04", sport: "hyrox" },
+  { name: "HYROX New York City", date: "2026-01-18", sport: "hyrox" },
+  { name: "HYROX Dallas", date: "2026-02-08", sport: "hyrox" },
+  { name: "HYROX Chicago", date: "2026-03-22", sport: "hyrox" },
+  { name: "HYROX London", date: "2026-05-10", sport: "hyrox" },
+  { name: "HYROX Los Angeles", date: "2026-06-06", sport: "hyrox" },
+  { name: "Boston Marathon", date: "2026-04-20", sport: "marathon" },
+  { name: "Chicago Marathon", date: "2026-10-11", sport: "marathon" },
+  { name: "NYC Marathon", date: "2026-11-01", sport: "marathon" },
+  { name: "Berlin Marathon", date: "2026-09-27", sport: "marathon" },
+  { name: "London Marathon", date: "2026-04-26", sport: "marathon" },
+  { name: "Tokyo Marathon", date: "2026-03-01", sport: "marathon" },
+  { name: "Marine Corps Marathon", date: "2026-10-25", sport: "marathon" },
+  { name: "Ironman World Championship", date: "2026-10-10", sport: "ironman" },
+  { name: "IRONMAN World Champ Kona", date: "2026-10-10", sport: "ironman" },
+  { name: "IRONMAN Florida", date: "2026-11-07", sport: "ironman" },
+  { name: "IRONMAN Texas", date: "2026-04-25", sport: "ironman" },
+  { name: "IRONMAN Lake Placid", date: "2026-07-26", sport: "ironman" },
+  { name: "Ironman 70.3 Miami", date: "2026-03-15", sport: "half_ironman" },
+  { name: "IRONMAN 70.3 World Champ", date: "2026-09-19", sport: "half_ironman" },
+  { name: "IRONMAN 70.3 Oceanside", date: "2026-04-04", sport: "half_ironman" },
+  { name: "IRONMAN 70.3 Eagleman", date: "2026-06-14", sport: "half_ironman" },
+  { name: "IRONMAN 70.3 Mont-Tremblant", date: "2026-06-28", sport: "half_ironman" },
+  { name: "Olympic Tri Nationals", date: "2026-08-08", sport: "olympic_tri" },
+  { name: "NYC Triathlon", date: "2026-07-19", sport: "olympic_tri" },
+  { name: "Chicago Triathlon", date: "2026-08-30", sport: "olympic_tri" },
+];
 
 const SPORT_OPTIONS = [
   { id: "hyrox", label: "HYROX" },
@@ -201,41 +231,35 @@ function RaceLookup({ sport, value, onChange }) {
   }, [value?.name]);
 
   useEffect(() => {
-    const onDocClick = (e) => {
+    const handler = (e) => {
       if (ref.current && !ref.current.contains(e.target)) setOpen(false);
     };
-    document.addEventListener("mousedown", onDocClick);
-    return () => document.removeEventListener("mousedown", onDocClick);
+    document.addEventListener("mousedown", handler);
+    return () => document.removeEventListener("mousedown", handler);
   }, []);
 
-  const q = (query || "").toLowerCase();
-  const results = RACE_DATABASE
-    .filter((r) => (!sport || sport === "general" || r.sport === sport) && r.name.toLowerCase().includes(q))
-    .slice(0, 8);
+  const q = query.toLowerCase();
+  const results = RACE_DATABASE.filter(
+    (r) =>
+      (!sport || sport === "general" || r.sport === sport) &&
+      r.name.toLowerCase().includes(q)
+  ).slice(0, 8);
 
   return (
     <div ref={ref} style={{ position: "relative" }}>
       <input
+        type="text"
         value={query}
         onChange={(e) => {
-          const next = e.target.value;
-          setQuery(next);
+          setQuery(e.target.value);
           setOpen(true);
-          onChange({ ...value, name: next });
+          onChange({ ...value, name: e.target.value });
         }}
         onFocus={() => setOpen(true)}
-        placeholder="Search or type race name..."
+        placeholder="Search or type race name…"
         style={{
-          width: "100%",
-          padding: "11px 12px",
-          background: C.card2,
-          border: `1px solid ${C.border}`,
-          borderRadius: 8,
-          color: C.text,
-          fontFamily: C.fs,
-          fontSize: 13,
-          outline: "none",
-          boxSizing: "border-box",
+          ...input,
+          colorScheme: "dark",
         }}
       />
       {open && query.length > 0 && results.length > 0 && (
@@ -245,18 +269,19 @@ function RaceLookup({ sport, value, onChange }) {
             top: "100%",
             left: 0,
             right: 0,
-            zIndex: 20,
-            marginTop: 2,
+            zIndex: 50,
             background: C.card2,
             border: `1px solid ${C.border}`,
             borderRadius: 8,
-            maxHeight: 220,
+            marginTop: 2,
+            maxHeight: 200,
             overflowY: "auto",
           }}
         >
-          {results.map((r, idx) => (
+          {results.map((r, i) => (
             <button
-              key={`${r.name}-${idx}`}
+              key={i}
+              type="button"
               onClick={() => {
                 onChange({ ...value, name: r.name, date: r.date });
                 setQuery(r.name);
@@ -265,17 +290,17 @@ function RaceLookup({ sport, value, onChange }) {
               style={{
                 display: "block",
                 width: "100%",
-                textAlign: "left",
                 padding: "8px 12px",
                 background: "transparent",
                 border: "none",
                 borderBottom: `1px solid ${C.border}`,
                 cursor: "pointer",
+                textAlign: "left",
               }}
             >
               <div style={{ fontFamily: C.ff, fontSize: 13, color: C.text, letterSpacing: 1 }}>{r.name}</div>
-              <div style={{ fontFamily: C.fm, fontSize: 7, color: C.muted, letterSpacing: 1, marginTop: 2 }}>
-                {new Date(`${r.date}T00:00:00`).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })}
+              <div style={{ fontFamily: C.fm, fontSize: 9, color: C.muted, letterSpacing: 1, marginTop: 1 }}>
+                {new Date(r.date + "T00:00:00").toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })}
               </div>
             </button>
           ))}
@@ -663,6 +688,11 @@ Generate:
                 </div>
               )}
             </div>
+            {sports.length === 0 && (
+              <div style={{ fontFamily: C.fs, fontSize: 12, color: C.muted, letterSpacing: 0.5 }}>
+                Select at least one sport to continue
+              </div>
+            )}
 
             <button
               onClick={() => setNoRaceYet((v) => !v)}
@@ -680,43 +710,24 @@ Generate:
               {noRaceYet ? "✓" : "○"} NO RACE YET
             </button>
 
-            {!noRaceYet && races.map((race, idx) => (
-              <div key={race.id} style={{ ...panel, padding: 12 }}>
-                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 8 }}>
-                  <div style={{ fontFamily: C.fm, fontSize: 8, color: C.cyan, letterSpacing: 2 }}>RACE {idx + 1}</div>
-                  <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-                    <button
-                      onClick={() => setPrimaryRace(race.id)}
-                      style={{
-                        padding: "4px 8px",
-                        borderRadius: 999,
-                        border: `1px solid ${race.is_primary ? C.green : C.border}`,
-                        background: race.is_primary ? `${C.green}22` : C.card2,
-                        color: race.is_primary ? C.green : C.muted,
-                        cursor: "pointer",
-                        fontFamily: C.fm,
-                        fontSize: 9,
-                        letterSpacing: 1,
-                      }}
-                    >
-                      {race.is_primary ? "★ PRIMARY" : "SET PRIMARY"}
-                    </button>
-                    <button
-                      onClick={() => deleteRaceCard(race.id)}
-                      style={{
-                        width: 24,
-                        height: 24,
-                        borderRadius: 8,
-                        border: `1px solid ${C.red}44`,
-                        background: "transparent",
-                        color: C.red,
-                        cursor: "pointer",
-                        fontFamily: C.fm,
-                        fontSize: 11,
-                      }}
-                    >
-                      X
-                    </button>
+            {!noRaceYet && sports.map((sportId) => {
+              const race = races.find((r) => r.sport === sportId) || { name: "", date: "" };
+              const sportLabel = SPORT_OPTIONS.find((s) => s.id === sportId)?.label || sportId;
+              return (
+                <div key={sportId} style={{ ...panel, padding: 12 }}>
+                  <div style={{ fontFamily: C.fm, fontSize: 8, color: C.cyan, letterSpacing: 2, marginBottom: 8 }}>{sportLabel}</div>
+                  <div style={{ display: "grid", gap: 8 }}>
+                    <RaceLookup
+                      sport={sportId}
+                      value={race}
+                      onChange={(updated) => updateRace(sportId, updated)}
+                    />
+                    <input
+                      type="date"
+                      value={race.date || ""}
+                      onChange={(e) => updateRace(sportId, { date: e.target.value })}
+                      style={{ ...input, colorScheme: "dark" }}
+                    />
                   </div>
                 </div>
                 <div style={{ display: "grid", gap: 8 }}>
