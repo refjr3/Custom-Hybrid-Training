@@ -15,20 +15,22 @@ export default function PlanBuilder({ user, session, onComplete, onDismiss }) {
     setError(null);
     try {
       const { data: { session: authSession } } = await supabase.auth.getSession();
-      if (!authSession) throw new Error("Not authenticated");
+      if (!authSession?.access_token) {
+        setError("Session expired — please refresh the page");
+        setLoading(false);
+        return;
+      }
       const token = authSession.access_token;
-      const rebuildRes = await fetch("/api/plan/rebuild", {
+      const res = await fetch("/api/plan/generate", {
         method: "POST",
-        headers: { Authorization: `Bearer ${token}` },
+        headers: {
+          "Content-Type": "application/json",
+          "Authorization": `Bearer ${token}`,
+        },
+        body: JSON.stringify({ user_id: authSession.user.id, profile: user }),
       });
-      if (!rebuildRes.ok) throw new Error("Failed to clear existing plan");
-      const genRes = await fetch("/api/plan/generate", {
-        method: "POST",
-        headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
-        body: JSON.stringify({ profile: user }),
-      });
-      const data = await genRes.json().catch(() => ({}));
-      if (!genRes.ok) throw new Error(data.error || "Plan generation failed");
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(data.error || "Plan generation failed");
       onComplete();
     } catch (e) {
       setError(e.message);
@@ -37,23 +39,15 @@ export default function PlanBuilder({ user, session, onComplete, onDismiss }) {
     }
   };
 
-  const handleDismiss = (e) => {
-    e?.preventDefault?.();
-    onDismiss?.();
-  };
-
   return (
-    <div
-      role="dialog"
-      aria-modal="true"
-      onClick={handleDismiss}
-      style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.85)", zIndex: 2000, display: "flex", alignItems: "center", justifyContent: "center", padding: 24, cursor: "pointer" }}
-    >
-      <div onClick={(e) => e.stopPropagation()} style={{ background: "#1a1a1a", borderRadius: 16, padding: 32, maxWidth: 400, width: "100%", border: "1px solid #2a2a2a", cursor: "default" }}>
-        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 24 }}>
-          <div style={{ fontFamily: "'Bebas Neue','Arial Black',sans-serif", fontSize: 24, letterSpacing: 2 }}>BUILD YOUR PLAN</div>
-          <button type="button" onClick={handleDismiss} style={{ background: "transparent", border: "none", color: "#888", cursor: "pointer", fontSize: 24, lineHeight: 1, padding: 0 }}>×</button>
-        </div>
+    <>
+      <div onClick={onDismiss} style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.8)", zIndex: 999 }} />
+      <div style={{ position: "fixed", inset: 0, zIndex: 1000, display: "flex", alignItems: "center", justifyContent: "center", padding: 24, pointerEvents: "none" }}>
+        <div style={{ pointerEvents: "auto", background: "#1a1a1a", borderRadius: 16, padding: 32, maxWidth: 400, width: "100%", border: "1px solid #2a2a2a" }}>
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 24 }}>
+            <div style={{ fontFamily: "'Bebas Neue','Arial Black',sans-serif", fontSize: 24, letterSpacing: 2 }}>BUILD YOUR PLAN</div>
+            <button type="button" onClick={onDismiss} style={{ background: "transparent", border: "none", color: "#888", cursor: "pointer", fontSize: 24, lineHeight: 1, padding: 0 }}>×</button>
+          </div>
         <div style={{ fontFamily: "'Inter',-apple-system,sans-serif", fontSize: 14, color: "#888", lineHeight: 1.6, marginBottom: 24 }}>
           Generate a personalized training plan based on your profile and goals.
         </div>
@@ -70,9 +64,10 @@ export default function PlanBuilder({ user, session, onComplete, onDismiss }) {
           >
             {loading ? "BUILDING…" : "BUILD MY PLAN"}
           </button>
-          <button type="button" onClick={handleDismiss} style={{ padding: "16px 20px", background: "transparent", color: "#888", border: "1px solid #2a2a2a", borderRadius: 12, fontSize: 12, cursor: "pointer" }}>CANCEL</button>
+          <button type="button" onClick={onDismiss} style={{ padding: "16px 20px", background: "transparent", color: "#888", border: "1px solid #2a2a2a", borderRadius: 12, fontSize: 12, cursor: "pointer" }}>CANCEL</button>
         </div>
       </div>
-    </div>
+      </div>
+    </>
   );
 }
