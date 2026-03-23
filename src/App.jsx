@@ -292,8 +292,14 @@ const AIChat = ({ whoopData, currentWeek, recentActivities, onPlanChange, userNa
       try {
         const result = await onPlanChange(planChange);
         const count = result?.modifiedCount ?? (planChange.type === "remap_week" ? (planChange.days?.length || 0) : 1);
+        const confirmedWeeks = planChange.type === "remap_week" && result?.weeksUpdated
+          ? Object.entries(result.weeksUpdated)
+          : [];
+        const perWeekHint = confirmedWeeks.length > 0
+          ? `\n\n**Confirmed writes:** ${confirmedWeeks.map(([weekName, weekCount]) => `${weekName}: ${weekCount}`).join(", ")}`
+          : "";
         setMessages(prev => prev.map(m => m.planChange === planChange ? { ...m, planChangeStatus:"accepted" } : m));
-        setMessages(prev => [...prev, { role:"assistant", content:`✓ **Plan updated** — ${count} session${count>1?"s":""} modified.`, planChange:null }]);
+        setMessages(prev => [...prev, { role:"assistant", content:`✓ **Plan updated** — ${count} session${count>1?"s":""} modified.${perWeekHint}`, planChange:null }]);
       } catch (e) {
         console.error("[AIChat] APPLY failed:", e);
         setMessages(prev => prev.map(m => m.planChange === planChange ? { ...m, planChangeStatus:null } : m));
@@ -1363,6 +1369,7 @@ export default function App() {
       if (!res.ok) throw new Error(body.error || "Plan update failed — tap to retry");
 
       let modifiedCount = 0;
+      let confirmedWeeksUpdated = null;
       if (planChange.type === "remap_week") {
         const expectedWeekCounts = {};
         const fallbackWeekRef = planChange.week_id || "CURRENT WEEK";
@@ -1372,6 +1379,7 @@ export default function App() {
         }
 
         const weeksUpdated = body.weeks_updated || {};
+        confirmedWeeksUpdated = weeksUpdated;
         for (const [weekRef, expectedCount] of Object.entries(expectedWeekCounts)) {
           const actualCount = resolveActualWeekCount(weeksUpdated, weekRef);
           if (actualCount === 0) {
@@ -1396,7 +1404,7 @@ export default function App() {
       console.log("[handlePlanChange] update confirmed — calling fetchPlan");
       await fetchPlan(token);
       console.log("[handlePlanChange] fetchPlan complete");
-      return { modifiedCount };
+      return { modifiedCount, weeksUpdated: confirmedWeeksUpdated };
     } catch (e) {
       console.log("[handlePlanChange] caught error:", e.message);
       throw e;
