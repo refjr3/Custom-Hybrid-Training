@@ -296,7 +296,7 @@ const AIChat = ({ whoopData, currentWeek, recentActivities, onPlanChange, userNa
           ? Object.entries(result.weeksUpdated)
           : [];
         const perWeekHint = confirmedWeeks.length > 0
-          ? `\n\n**Confirmed writes:** ${confirmedWeeks.map(([weekName, weekCount]) => `${weekName}: ${weekCount}`).join(", ")}`
+          ? `\n\n**Confirmed writes:**\n${confirmedWeeks.map(([weekName, weekCount]) => `- ${weekName}: ${weekCount}`).join("\n")}`
           : "";
         setMessages(prev => prev.map(m => m.planChange === planChange ? { ...m, planChangeStatus:"accepted" } : m));
         setMessages(prev => [...prev, { role:"assistant", content:`✓ **Plan updated** — ${count} session${count>1?"s":""} modified.${perWeekHint}`, planChange:null }]);
