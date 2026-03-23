@@ -75,40 +75,6 @@ const EQUIPMENT_OPTIONS = [
   "Cycling",
 ];
 
-const RACE_DATABASE = [
-  { name: "HYROX World Championships", date: "2026-06-14", sport: "hyrox" },
-  { name: "HYROX Miami", date: "2026-04-04", sport: "hyrox" },
-  { name: "HYROX Chicago", date: "2026-03-22", sport: "hyrox" },
-  { name: "HYROX New York City", date: "2026-01-18", sport: "hyrox" },
-  { name: "HYROX Dallas", date: "2026-02-08", sport: "hyrox" },
-  { name: "HYROX Los Angeles", date: "2026-06-06", sport: "hyrox" },
-  { name: "HYROX London", date: "2026-05-10", sport: "hyrox" },
-  { name: "Boston Marathon", date: "2026-04-20", sport: "marathon" },
-  { name: "Chicago Marathon", date: "2026-10-11", sport: "marathon" },
-  { name: "NYC Marathon", date: "2026-11-01", sport: "marathon" },
-  { name: "Berlin Marathon", date: "2026-09-27", sport: "marathon" },
-  { name: "London Marathon", date: "2026-04-26", sport: "marathon" },
-  { name: "Tokyo Marathon", date: "2026-03-01", sport: "marathon" },
-  { name: "Marine Corps Marathon", date: "2026-10-25", sport: "marathon" },
-  { name: "Paris Marathon", date: "2026-04-12", sport: "marathon" },
-  { name: "Rotterdam Marathon", date: "2026-04-12", sport: "marathon" },
-  { name: "Sydney Marathon", date: "2026-09-20", sport: "marathon" },
-  { name: "IRONMAN World Championship", date: "2026-10-10", sport: "ironman" },
-  { name: "IRONMAN Texas", date: "2026-04-25", sport: "ironman" },
-  { name: "IRONMAN Lake Placid", date: "2026-07-26", sport: "ironman" },
-  { name: "IRONMAN Florida", date: "2026-11-07", sport: "ironman" },
-  { name: "IRONMAN 70.3 World Championship", date: "2026-09-19", sport: "half_ironman" },
-  { name: "IRONMAN 70.3 Miami", date: "2026-03-08", sport: "half_ironman" },
-  { name: "IRONMAN 70.3 Oceanside", date: "2026-04-04", sport: "half_ironman" },
-  { name: "IRONMAN 70.3 Eagleman", date: "2026-06-14", sport: "half_ironman" },
-  { name: "IRONMAN 70.3 Mont-Tremblant", date: "2026-06-28", sport: "half_ironman" },
-  { name: "IRONMAN 70.3 St. George", date: "2026-05-02", sport: "half_ironman" },
-  { name: "Olympic Tri Nationals", date: "2026-08-08", sport: "olympic_tri" },
-  { name: "NYC Triathlon", date: "2026-07-19", sport: "olympic_tri" },
-  { name: "Chicago Triathlon", date: "2026-08-30", sport: "olympic_tri" },
-  { name: "Escape from Alcatraz Triathlon", date: "2026-06-07", sport: "olympic_tri" },
-];
-
 const DEFAULT_PHASES = [
   { id: "base", name: "BASE", weeks: 4 },
   { id: "build", name: "BUILD", weeks: 6 },
@@ -730,30 +696,8 @@ Generate:
                     />
                   </div>
                 </div>
-                <div style={{ display: "grid", gap: 8 }}>
-                  <select
-                    value={race.sport}
-                    onChange={(e) => updateRace(race.id, { sport: e.target.value })}
-                    style={input}
-                  >
-                    {SPORT_OPTIONS.map((s) => (
-                      <option key={s.id} value={s.id}>{s.label}</option>
-                    ))}
-                  </select>
-                  <RaceLookup
-                    sport={race.sport}
-                    value={race}
-                    onChange={(updated) => updateRace(race.id, updated)}
-                  />
-                  <input
-                    type="date"
-                    value={race.date || ""}
-                    onChange={(e) => updateRace(race.id, { date: e.target.value })}
-                    style={{ ...input, colorScheme: "dark" }}
-                  />
-                </div>
-              </div>
-            ))}
+              );
+            })}
 
             {!noRaceYet && (
               <button
