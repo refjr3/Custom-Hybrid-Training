@@ -221,6 +221,9 @@ const AIChat = ({ whoopData, currentWeek, recentActivities, onPlanChange, userNa
   const [showPersonas, setShowPersonas] = useState(false);
   const [isRecording, setIsRecording] = useState(false);
   const [chatCqSelections, setChatCqSelections] = useState({});
+  const [answeredQuestionIds, setAnsweredQuestionIds] = useState(() => new Set());
+  const [answeredQuestionValues, setAnsweredQuestionValues] = useState({});
+  const [autoSubmittedQuestionBlocks, setAutoSubmittedQuestionBlocks] = useState(() => new Set());
   const [answeredQuestions, setAnsweredQuestions] = useState({});
   const [pendingReview, setPendingReview] = useState(null);
   const [chatSessionId, setChatSessionId] = useState(createSessionId);
@@ -259,6 +262,9 @@ const AIChat = ({ whoopData, currentWeek, recentActivities, onPlanChange, userNa
   const startFreshSession = () => {
     setMessages(makeInitialChatMessages(userName));
     setChatCqSelections({});
+    setAnsweredQuestionIds(new Set());
+    setAnsweredQuestionValues({});
+    setAutoSubmittedQuestionBlocks(new Set());
     setAnsweredQuestions({});
     setPendingReview(null);
     setInput("");
@@ -269,6 +275,57 @@ const AIChat = ({ whoopData, currentWeek, recentActivities, onPlanChange, userNa
     if (fileInputRef.current) fileInputRef.current.value = "";
     if (textareaRef.current) textareaRef.current.style.height = "auto";
   };
+
+  const submitClarifyingAnswers = (messageIndex, answers) => {
+    if (!answers?.trim()) return;
+    setMessages(prev => prev.map((mm, mi) => mi === messageIndex ? { ...mm, cqSubmitted:true } : mm));
+    setMessages(prev => [...prev, { role:"user", content:answers, planChange:null }]);
+    setLoading(true);
+    fetch("/api/coach/chat", {
+      method:"POST",
+      headers:{"Content-Type":"application/json", ...(authToken ? {"Authorization":`Bearer ${authToken}`} : {})},
+      body: JSON.stringify({
+        message: answers,
+        whoopData,
+        currentWeek:{ id:currentWeek?.id, label:currentWeek?.label, subtitle:currentWeek?.subtitle },
+        recentActivities:recentActivities?.slice(0,5),
+        session_id: chatSessionId,
+      }),
+    }).then(r=>r.json()).then(data => {
+      const cqs2 = parseClarifyingQuestions(data.message);
+      setMessages(prev => [...prev, { role:"assistant", content:data.message||"Something went wrong.", planChange:data.planChange||null, clarifyingQuestions:cqs2 }]);
+    }).catch(() => {
+      setMessages(prev => [...prev, { role:"assistant", content:"Connection error. Try again.", planChange:null }]);
+    }).finally(() => setLoading(false));
+  };
+
+  useEffect(() => {
+    if (loading) return;
+    for (let i = 0; i < messages.length; i++) {
+      const m = messages[i];
+      if (!m?.clarifyingQuestions || m.cqSubmitted) continue;
+      const msgKey = `chat_${i}`;
+      if (autoSubmittedQuestionBlocks.has(msgKey)) continue;
+      const normalizedAll = normalizeClarifyingQuestions(m.clarifyingQuestions);
+      if (normalizedAll.length === 0) continue;
+      const answered = answeredQuestions[msgKey] || [];
+      const remaining = normalizedAll.filter((q) => !answeredQuestionIds.has(q.id) || answered.includes(q.id));
+      if (remaining.length > 0) continue;
+
+      const answers = normalizedAll.map((q) => {
+        const sel = answeredQuestionValues[q.id] || [];
+        return `${q?.question?.replace("?","")}:  ${sel.join(", ") || "Not specified"}`;
+      }).join(". ");
+
+      setAutoSubmittedQuestionBlocks((prev) => {
+        const next = new Set(prev);
+        next.add(msgKey);
+        return next;
+      });
+      submitClarifyingAnswers(i, answers);
+      break;
+    }
+  }, [messages, loading, answeredQuestions, answeredQuestionIds, answeredQuestionValues, autoSubmittedQuestionBlocks]);
 
   const sendMessage = async () => {
     if ((!input.trim() && !attachment) || loading) return;
@@ -418,13 +475,14 @@ const AIChat = ({ whoopData, currentWeek, recentActivities, onPlanChange, userNa
             {m.clarifyingQuestions && !m.cqSubmitted && (
               <div style={{ maxWidth:"90%", marginTop:8, width:"100%" }}>
                 {(() => {
-                  const normalized = normalizeClarifyingQuestions(m.clarifyingQuestions);
+                  const normalizedAll = normalizeClarifyingQuestions(m.clarifyingQuestions);
                   const msgKey = `chat_${i}`;
+                  const answered = answeredQuestions[msgKey] || [];
+                  const normalized = normalizedAll.filter((q) => !answeredQuestionIds.has(q.id) || answered.includes(q.id));
                   const selectionsById = Object.fromEntries(
                     normalized.map((q) => [q.id, chatCqSelections[`${msgKey}_${q.id}`] || []])
                   );
                   const { byId, sequence } = getClarifyingFlow(normalized, selectionsById);
-                  const answered = answeredQuestions[msgKey] || [];
                   const nextQuestionId = sequence.find((qid) => !answered.includes(qid)) || null;
                   const activeQuestion = nextQuestionId ? byId.get(nextQuestionId) : null;
                   const activeSelection = activeQuestion ? (selectionsById[activeQuestion.id] || []) : [];
@@ -474,11 +532,18 @@ const AIChat = ({ whoopData, currentWeek, recentActivities, onPlanChange, userNa
                         <button
                           onClick={() => {
                             if (activeSelection.length === 0) return;
+                            const selectedNow = [...activeSelection];
                             setAnsweredQuestions((prev) => {
                               const cur = prev[msgKey] || [];
                               if (cur.includes(activeQuestion.id)) return prev;
                               return { ...prev, [msgKey]: [...cur, activeQuestion.id] };
                             });
+                            setAnsweredQuestionIds((prev) => {
+                              const next = new Set(prev);
+                              next.add(activeQuestion.id);
+                              return next;
+                            });
+                            setAnsweredQuestionValues((prev) => ({ ...prev, [activeQuestion.id]: selectedNow }));
                           }}
                           disabled={activeSelection.length === 0}
                           style={{ width:"100%", padding:"12px", background:activeSelection.length ? C.cyan : C.cardSolid, color:activeSelection.length ? "#000" : C.muted, border:"none", borderRadius:10, cursor:activeSelection.length ? "pointer" : "default", fontFamily:C.ff, fontSize:13, letterSpacing:2, marginTop:4 }}
@@ -494,18 +559,7 @@ const AIChat = ({ whoopData, currentWeek, recentActivities, onPlanChange, userNa
                             const sel = selectionsById[qid] || [];
                             return `${q?.question?.replace("?","")}:  ${sel.join(", ") || "Not specified"}`;
                           }).join(". ");
-                          setMessages(prev => prev.map((mm, mi) => mi === i ? {...mm, cqSubmitted:true} : mm));
-                          setMessages(prev => [...prev, { role:"user", content:answers, planChange:null }]);
-                          setLoading(true);
-                          fetch("/api/coach/chat", {
-                            method:"POST", headers:{"Content-Type":"application/json", ...(authToken ? {"Authorization":`Bearer ${authToken}`} : {})},
-                            body: JSON.stringify({ message:answers, whoopData, currentWeek:{ id:currentWeek?.id, label:currentWeek?.label, subtitle:currentWeek?.subtitle }, recentActivities:recentActivities?.slice(0,5), session_id: chatSessionId }),
-                          }).then(r=>r.json()).then(data => {
-                            const cqs2 = parseClarifyingQuestions(data.message);
-                            setMessages(prev => [...prev, { role:"assistant", content:data.message||"Something went wrong.", planChange:data.planChange||null, clarifyingQuestions:cqs2 }]);
-                          }).catch(() => {
-                            setMessages(prev => [...prev, { role:"assistant", content:"Connection error. Try again.", planChange:null }]);
-                          }).finally(() => setLoading(false));
+                          submitClarifyingAnswers(i, answers);
                         }} style={{ width:"100%", padding:"12px", background:C.cyan, color:"#000", border:"none", borderRadius:10, cursor:"pointer", fontFamily:C.ff, fontSize:13, letterSpacing:2, marginTop:4 }}>FINAL CONFIRM →</button>
                       )}
                     </>
