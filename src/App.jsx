@@ -1102,7 +1102,6 @@ export default function App() {
   const [biomarkers, setBiomarkers] = useState([]);
   const [planBlocks, setPlanBlocks] = useState([]);
   const [planLoading, setPlanLoading] = useState(true);
-  const [showPlanBuilder, setShowPlanBuilder] = useState(false);
   const [supplements, setSupplements] = useState([]);
   const [suppsLoading, setSuppsLoading] = useState(true);
   const [synthesisNote, setSynthesisNote] = useState(null);
@@ -1934,7 +1933,7 @@ export default function App() {
           {planBlocks.length === 0 && !planLoading && (
             <div style={{ padding: "0 20px 20px", textAlign: "center" }}>
               <div style={{ color: "#888", letterSpacing: 3, fontSize: 11, marginBottom: 12 }}>NO TRAINING PLAN</div>
-              <button onClick={() => setShowPlanBuilder(true)} style={{ background: "#00F3FF", color: "#000", border: "none", borderRadius: 12, padding: "16px 32px", fontSize: 13, fontWeight: 700, letterSpacing: 2, cursor: "pointer" }}>BUILD MY PLAN</button>
+              <button onClick={() => setPlanBuilderOpen(true)} style={{ background: "#00F3FF", color: "#000", border: "none", borderRadius: 12, padding: "16px 32px", fontSize: 13, fontWeight: 700, letterSpacing: 2, cursor: "pointer" }}>BUILD MY PLAN</button>
             </div>
           )}
 
@@ -2040,7 +2039,7 @@ export default function App() {
         <div style={{ textAlign: "center", padding: "60px 24px" }}>
           <div style={{ color: "#888", letterSpacing: 3, fontSize: 11, marginBottom: 16 }}>NO TRAINING PLAN FOUND</div>
           <button
-            onClick={() => setShowPlanBuilder(true)}
+            onClick={() => setPlanBuilderOpen(true)}
             style={{ background: "#00F3FF", color: "#000", border: "none", borderRadius: 12, padding: "16px 32px", fontSize: 13, fontWeight: 700, letterSpacing: 2, cursor: "pointer" }}
           >
             BUILD MY PLAN
@@ -2797,14 +2796,6 @@ export default function App() {
         </div>
       )}
 
-      {showPlanBuilder && (
-        <PlanBuilder
-          user={profile}
-          session={session}
-          onComplete={() => { setShowPlanBuilder(false); fetchPlan(session?.access_token); }}
-          onDismiss={() => setShowPlanBuilder(false)}
-        />
-      )}
     </div>
   );
 }
