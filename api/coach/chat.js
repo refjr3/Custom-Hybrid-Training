@@ -8,8 +8,11 @@ const supabase = createClient(
 export default async function handler(req, res) {
   if (req.method !== "POST") return res.status(405).json({ error: "Method not allowed" });
 
-  const { message, whoopData, currentWeek, recentActivities, attachment, user_id, scenarioChanges } = req.body;
+  const { message, whoopData, currentWeek, recentActivities, attachment, user_id, scenarioChanges, session_id } = req.body;
   if (!message && !attachment) return res.status(400).json({ error: "No message or attachment provided" });
+  if (!session_id) return res.status(400).json({ error: "session_id is required" });
+  const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+  if (!UUID_RE.test(session_id)) return res.status(400).json({ error: "session_id must be a valid UUID" });
 
   // Resolve authenticated user_id from token if available, fall back to body
   let resolvedUserId = user_id || null;
@@ -192,39 +195,41 @@ SCENARIO MODE RULES (when message starts with [SCENARIO MODE]):
 4. Every exercise must match available equipment or regenerate`;
 
   try {
-    // Fetch last 20 messages for conversation history, scoped to user
+    // Fetch last 20 messages for conversation history, scoped to this user + session only.
     let historyMessages = [];
     try {
       if (!resolvedUserId) {
         console.warn("[coach/chat] no user_id for history fetch — skipping");
-      }
-      const historyQuery = supabase
-        .from("ai_messages")
-        .select("role, content")
-        .order("created_at", { ascending: false })
-        .limit(20);
-      if (resolvedUserId) historyQuery.eq("user_id", resolvedUserId);
-      historyQuery.neq("role", "proactive");
-      const { data, error: histErr } = await historyQuery;
-      if (histErr) console.error("[coach/chat] history fetch error:", histErr.message);
-      if (data && data.length > 0) {
-        const reversed = data.reverse();
-        const validated = [];
-        let expectedRole = "user";
-        for (const m of reversed) {
-          if (m.role === expectedRole) {
-            validated.push(m);
-            expectedRole = expectedRole === "user" ? "assistant" : "user";
+      } else {
+        const historyQuery = supabase
+          .from("ai_messages")
+          .select("role, content")
+          .eq("user_id", resolvedUserId)
+          .eq("session_id", session_id)
+          .neq("role", "proactive")
+          .order("created_at", { ascending: false })
+          .limit(20);
+        const { data, error: histErr } = await historyQuery;
+        if (histErr) console.error("[coach/chat] history fetch error:", histErr.message);
+        if (data && data.length > 0) {
+          const reversed = data.reverse();
+          const validated = [];
+          let expectedRole = "user";
+          for (const m of reversed) {
+            if (m.role === expectedRole) {
+              validated.push(m);
+              expectedRole = expectedRole === "user" ? "assistant" : "user";
+            }
           }
+          if (validated.length > 0 && validated[validated.length - 1].role === "user") {
+            validated.pop();
+          }
+          historyMessages = validated;
         }
-        if (validated.length > 0 && validated[validated.length - 1].role === "user") {
-          validated.pop();
-        }
-        historyMessages = validated;
       }
     } catch (e) {}
 
-    console.log(`[coach/chat] user=${resolvedUserId?.slice(0,8) || "anon"} history=${historyMessages.length} msgs`);
+    console.log(`[coach/chat] user=${resolvedUserId?.slice(0,8) || "anon"} session=${session_id.slice(0,8)} history=${historyMessages.length} msgs`);
 
     const now = new Date();
     const dayNames = ["Sunday","Monday","Tuesday","Wednesday","Thursday","Friday","Saturday"];
@@ -309,8 +314,8 @@ User message: ${message || "(see attached file)"}`;
     // Persist messages scoped to user
     if (resolvedUserId) {
       const { error: insertErr } = await supabase.from("ai_messages").insert([
-        { user_id: resolvedUserId, role: "user", content: message || `[attachment: ${attachment?.name}]` },
-        { user_id: resolvedUserId, role: "assistant", content: cleanText },
+        { user_id: resolvedUserId, session_id, role: "user", content: message || `[attachment: ${attachment?.name}]` },
+        { user_id: resolvedUserId, session_id, role: "assistant", content: cleanText },
       ]);
       if (insertErr) {
         console.error("[coach/chat] failed to save messages:", insertErr.message);
