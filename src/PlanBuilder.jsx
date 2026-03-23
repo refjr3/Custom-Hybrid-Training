@@ -1,4 +1,10 @@
 import { useEffect, useMemo, useState } from "react";
+import { createClient } from "@supabase/supabase-js";
+
+const supabase = createClient(
+  import.meta.env.VITE_SUPABASE_URL,
+  import.meta.env.VITE_SUPABASE_ANON_KEY
+);
 
 const C = {
   bg: "#000000",
@@ -374,6 +380,17 @@ export default function PlanBuilder({
     setGenerating(true);
     setError(null);
     try {
+      let token = authToken;
+      if (!token) {
+        const { data: { session: authSession } } = await supabase.auth.getSession();
+        if (!authSession?.access_token) {
+          setError("Session expired — please refresh the page");
+          setGenerating(false);
+          return;
+        }
+        token = authSession.access_token;
+      }
+
       const sportSummary = sports.length > 0 ? sports.join(", ") : (profileSports.join(", ") || "general");
       const phaseSummary = phases.map((p) => `${p.name} ${p.weeks} wks`).join(" -> ");
       const primaryRaceName = primaryRace?.name || profile?.target_race_name || "TBD";
@@ -424,7 +441,7 @@ Generate:
         method: "POST",
         headers: {
           "Content-Type": "application/json",
-          ...(authToken ? { Authorization: `Bearer ${authToken}` } : {}),
+          ...(token ? { Authorization: `Bearer ${token}` } : {}),
         },
         body: JSON.stringify({
           user_id: userId || profile?.user_id || null,

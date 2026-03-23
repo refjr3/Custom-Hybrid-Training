@@ -1294,6 +1294,7 @@ export default function App() {
       if (res.ok && hasDays) {
         setPlanBlocks(data.blocks);
       }
+      console.log("[fetchPlan] planBlocks.length after fetch:", data.blocks?.length ?? 0);
     } catch (e) {
       console.log("[fetchPlan] caught error:", e.message);
     } finally {
@@ -1935,6 +1936,13 @@ export default function App() {
                 </div>
                 <div style={{ fontFamily:C.fs, fontSize:13, color:C.text, lineHeight:1.5 }}>{synthesisNote}</div>
               </div>
+            </div>
+          )}
+
+          {planBlocks.length === 0 && !planLoading && (
+            <div style={{ padding: "0 20px 20px", textAlign: "center" }}>
+              <div style={{ color: "#888", letterSpacing: 3, fontSize: 11, marginBottom: 12 }}>NO TRAINING PLAN</div>
+              <button onClick={() => setPlanBuilderOpen(true)} style={{ background: "#00F3FF", color: "#000", border: "none", borderRadius: 12, padding: "16px 32px", fontSize: 13, fontWeight: 700, letterSpacing: 2, cursor: "pointer" }}>BUILD MY PLAN</button>
             </div>
           )}
 
@@ -2798,6 +2806,7 @@ export default function App() {
           <div style={{ fontFamily:C.fm, fontSize:8, color:C.cyan, letterSpacing:1 }}>{labToast}</div>
         </div>
       )}
+
     </div>
   );
 }
