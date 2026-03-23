@@ -1729,17 +1729,6 @@ export default function App() {
     );
   };
 
-  const DismissedNoPlanState = () => (
-    <div style={{ margin: "20px", padding: "14px 16px", background: C.card, border: `1px solid ${C.border}`, borderRadius: 12 }}>
-      <div style={{ fontFamily: C.fm, fontSize: 8, color: C.muted, letterSpacing: 2, marginBottom: 8 }}>
-        PLAN BUILDER REMINDER DISMISSED FOR 24H
-      </div>
-      <div style={{ fontFamily: C.fs, fontSize: 12, color: C.light, lineHeight: 1.5 }}>
-        Build entry points are hidden until 24 hours have passed.
-      </div>
-    </div>
-  );
-
   const PlanNoPlanScaffold = () => (
     <div>
       <div style={{ padding:"16px 20px 10px" }}>
@@ -1757,7 +1746,7 @@ export default function App() {
           </button>
         ))}
       </div>
-      {showNoPlanState ? <NoPlanState /> : <DismissedNoPlanState />}
+      {showNoPlanState ? <NoPlanState /> : null}
     </div>
   );
 
@@ -1776,8 +1765,6 @@ export default function App() {
       )}
 
       {nav === "today" && showNoPlanState && <NoPlanState />}
-
-      {nav === "today" && noPlanLoaded && planBuilderDismissed && <DismissedNoPlanState />}
 
       {nav === "today" && (
         <div>
