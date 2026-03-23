@@ -116,6 +116,153 @@ export default async function handler(req, res) {
     ? blockWeekLabels.map((label, idx) => `${idx + 1}. ${label}`).join("\n")
     : "- Unknown";
 
+  const DAY_ABBREVS = ["MON","TUE","WED","THU","FRI","SAT","SUN"];
+  const DAY_PATTERNS = [
+    { rx: /\bMON(?:DAY)?\b/gi, day: "MON" },
+    { rx: /\bTUE(?:S|SDAY)?\b/gi, day: "TUE" },
+    { rx: /\bWED(?:NESDAY)?\b/gi, day: "WED" },
+    { rx: /\bTHU(?:R|RSDAY)?\b/gi, day: "THU" },
+    { rx: /\bFRI(?:DAY)?\b/gi, day: "FRI" },
+    { rx: /\bSAT(?:URDAY)?\b/gi, day: "SAT" },
+    { rx: /\bSUN(?:DAY)?\b/gi, day: "SUN" },
+  ];
+  const unique = (arr) => [...new Set(arr)];
+  const parseQuestionPairs = (text) => {
+    if (!text) return [];
+    const pairs = [];
+    const re = /([^:\n]{3,140})\s*:\s*([^\n.]+)/g;
+    let m;
+    while ((m = re.exec(text)) !== null) {
+      pairs.push({ question: m[1].trim(), answer: m[2].trim() });
+    }
+    return pairs;
+  };
+  const extractDaysFromText = (text) => {
+    if (!text) return [];
+    const found = [];
+    for (const p of DAY_PATTERNS) {
+      if (p.rx.test(text)) found.push(p.day);
+      p.rx.lastIndex = 0;
+    }
+    return unique(found);
+  };
+
+  // Fetch full session history first so we can derive knowledge state before prompting.
+  let historyMessages = [];
+  let rawHistoryMessages = [];
+  try {
+    if (!resolvedUserId) {
+      console.warn("[coach/chat] no user_id for history fetch — skipping");
+    } else {
+      const historyQuery = supabase
+        .from("ai_messages")
+        .select("role, content")
+        .eq("user_id", resolvedUserId)
+        .eq("session_id", session_id)
+        .neq("role", "proactive")
+        .order("created_at", { ascending: false })
+        .limit(100);
+      const { data, error: histErr } = await historyQuery;
+      if (histErr) console.error("[coach/chat] history fetch error:", histErr.message);
+      if (data && data.length > 0) {
+        rawHistoryMessages = data.reverse();
+        const validated = [];
+        let expectedRole = "user";
+        for (const m of rawHistoryMessages) {
+          if (m.role === expectedRole) {
+            validated.push(m);
+            expectedRole = expectedRole === "user" ? "assistant" : "user";
+          }
+        }
+        if (validated.length > 0 && validated[validated.length - 1].role === "user") {
+          validated.pop();
+        }
+        historyMessages = validated;
+      }
+    }
+  } catch (_) {}
+
+  const userHistoryTexts = rawHistoryMessages
+    .filter((m) => m.role === "user")
+    .map((m) => String(m.content || ""))
+    .filter(Boolean);
+  const allUserTexts = [...userHistoryTexts, String(message || "")].filter(Boolean);
+
+  const sessionKnowledge = {
+    provided: {},
+    confirmed: {},
+    unknown: [],
+  };
+
+  const userJoined = allUserTexts.join("\n");
+  const architectureProvided =
+    !!attachment ||
+    /architecture|weekly structure|training block|training plan|week\s*\d|monday|tuesday|wednesday|thursday|friday|saturday|sunday/i.test(userJoined);
+  const hyroxDays = unique(
+    allUserTexts
+      .filter((t) => /hyrox/i.test(t))
+      .flatMap((t) => extractDaysFromText(t))
+  );
+  const weekCountFromText = (() => {
+    const match = userJoined.match(/\b(\d{1,2})\s+weeks?\b/i);
+    return match ? Number(match[1]) : null;
+  })();
+
+  sessionKnowledge.provided = {
+    architecture_provided: architectureProvided,
+    hyrox_days: hyroxDays,
+    weekly_structure_known: architectureProvided || hyroxDays.length > 0,
+    week_count: blockWeekCount || weekCountFromText || null,
+    block_weeks: blockWeekLabels,
+    attachment_provided: !!attachment,
+  };
+
+  const confirmedScope = { value: null };
+  const confirmedFormats = {};
+  const confirmedFocus = {};
+
+  for (const text of userHistoryTexts) {
+    for (const pair of parseQuestionPairs(text)) {
+      const q = pair.question.toLowerCase();
+      const ans = pair.answer;
+      if (q.includes("same structure across all weeks") || q.includes("differ per week")) {
+        confirmedScope.value = ans;
+      }
+      if (q.includes("format")) {
+        const w = q.match(/week\s*([0-9]{1,2})/i);
+        if (w?.[1]) {
+          confirmedFormats[`week_${w[1]}`] = ans;
+        } else {
+          confirmedFormats.all_weeks = ans;
+        }
+      }
+      if (q.includes("focus")) {
+        const values = ans.split(",").map((s) => s.trim()).filter(Boolean);
+        const w = q.match(/week\s*([0-9]{1,2})/i);
+        if (w?.[1]) {
+          confirmedFocus[`week_${w[1]}`] = values;
+        } else {
+          confirmedFocus.all_weeks = values;
+        }
+      }
+    }
+  }
+
+  sessionKnowledge.confirmed = {
+    scope: confirmedScope.value,
+    format_per_week: confirmedFormats,
+    focus_per_week: confirmedFocus,
+  };
+
+  const hasScope = !!sessionKnowledge.confirmed.scope;
+  const hasFormat = !!confirmedFormats.all_weeks || Object.keys(confirmedFormats).length >= Math.max(blockWeekCount, 1);
+  const hasFocus = !!confirmedFocus.all_weeks || Object.keys(confirmedFocus).length >= Math.max(blockWeekCount, 1);
+  if (!hasScope) sessionKnowledge.unknown.push("scope (same/different)");
+  if (!hasFormat) sessionKnowledge.unknown.push("format per week");
+  if (!hasFocus) sessionKnowledge.unknown.push("focus per week");
+
+  const sessionKnowledgeText = JSON.stringify(sessionKnowledge, null, 2);
+
   const persona = p?.coach_persona || "grinder";
   const PERSONA_INTROS = {
     scientist: `You are THE SCIENTIST — ${athleteName}'s data-driven performance analyst. You speak in clinical, precise terms. Lead with biomarkers, lab values, and physiological rationale. Cite specific numbers. Your tone is methodical, evidence-based, and analytical. You explain the "why" behind every recommendation using sports science.`,
@@ -143,6 +290,16 @@ FLAGGED BIOMARKERS:
 ${bioLines}
 
 SUPPLEMENTS ON STACK: ${suppLine}
+
+SESSION KNOWLEDGE STATE (derived from conversation history + provided inputs):
+\`\`\`json
+${sessionKnowledgeText}
+\`\`\`
+
+Use this state as the source of truth.
+- Only ask clarifying questions for items that remain in "unknown".
+- Never re-ask items in "confirmed".
+- Never ask for details already inferable from "provided".
 
 COACHING RULES:
 1. Never suggest zero strength days — minimum 2/week
@@ -203,6 +360,16 @@ RESPONSE RULES:
 
 CLARIFYING QUESTIONS (apply in ALL modes):
 Before asking ANY question, re-read the entire conversation history to check if the answer is already there. Only ask for information not already provided. Maximum 3 questions per clarifying block. After each response, either continue to the next required step/week or generate the plan immediately.
+- At the start of each response, mentally build a list of everything already known from this conversation. Never ask about anything on that list.
+- If a question was answered in a previous message — even 10 messages ago — treat that answer as locked and use it silently.
+- Track confirmed answers with a mental checklist: scope (same/different), format per week, focus per week. Once checked, never ask again.
+- Before asking any question, check: is this answer already visible in what the user provided? If yes, do not ask.
+- If the user provided training architecture, NEVER ask:
+  - how many sessions per week
+  - which days have HYROX
+  - what the weekly structure looks like
+  - how many weeks exist
+- Only ask session-specific details that cannot be inferred from architecture: format (AMRAP/EMOM/For Time), focus stations, intensity level.
 
 CONTEXT LOCKING RULES:
 - "Once a user confirms an answer in this session, NEVER ask that question again. Treat confirmed answers as locked context."
@@ -260,40 +427,6 @@ SCENARIO MODE RULES (when message starts with [SCENARIO MODE]):
 4. Every exercise must match available equipment or regenerate`;
 
   try {
-    // Fetch last 20 messages for conversation history, scoped to this user + session only.
-    let historyMessages = [];
-    try {
-      if (!resolvedUserId) {
-        console.warn("[coach/chat] no user_id for history fetch — skipping");
-      } else {
-        const historyQuery = supabase
-          .from("ai_messages")
-          .select("role, content")
-          .eq("user_id", resolvedUserId)
-          .eq("session_id", session_id)
-          .neq("role", "proactive")
-          .order("created_at", { ascending: false })
-          .limit(20);
-        const { data, error: histErr } = await historyQuery;
-        if (histErr) console.error("[coach/chat] history fetch error:", histErr.message);
-        if (data && data.length > 0) {
-          const reversed = data.reverse();
-          const validated = [];
-          let expectedRole = "user";
-          for (const m of reversed) {
-            if (m.role === expectedRole) {
-              validated.push(m);
-              expectedRole = expectedRole === "user" ? "assistant" : "user";
-            }
-          }
-          if (validated.length > 0 && validated[validated.length - 1].role === "user") {
-            validated.pop();
-          }
-          historyMessages = validated;
-        }
-      }
-    } catch (e) {}
-
     console.log(`[coach/chat] user=${resolvedUserId?.slice(0,8) || "anon"} session=${session_id.slice(0,8)} history=${historyMessages.length} msgs`);
 
     const now = new Date();
