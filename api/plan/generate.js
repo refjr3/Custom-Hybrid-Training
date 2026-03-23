@@ -76,12 +76,92 @@ function deloadInstruction(pref, weeksPerBlock) {
   return `Week ${Math.floor(weeksPerBlock / 2)} of each block is a light deload week: is_deload=true. Other weeks are full volume.`;
 }
 
-function buildPrompt(profile, planStart) {
+function toPositiveInt(value, fallback) {
+  const n = Number(value);
+  if (!Number.isFinite(n)) return fallback;
+  return Math.max(1, Math.round(n));
+}
+
+function toDaysPerWeek(value, fallback = 5) {
+  const n = Number(value);
+  if (!Number.isFinite(n)) return fallback;
+  return Math.max(1, Math.min(7, Math.round(n)));
+}
+
+function normalizeSessionPreference(value) {
+  const v = String(value || "").toLowerCase();
+  if (v === "am") return "AM";
+  if (v === "pm") return "PM";
+  return "Both";
+}
+
+function normalizeEquipment(value) {
+  if (!Array.isArray(value)) return [];
+  return [...new Set(value.map((x) => String(x || "").trim()).filter(Boolean))];
+}
+
+function buildPhaseStructure({ customPhases, totalWeeks, legacyPhases, legacyWeeksPerBlock }) {
+  const rebalanceToTotal = (rows, targetTotal) => {
+    const next = rows.map((r) => ({ ...r, weeks: Math.max(1, toPositiveInt(r.weeks, 1)) }));
+    let sum = next.reduce((s, r) => s + r.weeks, 0);
+    if (sum > targetTotal) {
+      let remove = sum - targetTotal;
+      for (let i = next.length - 1; i >= 0 && remove > 0; i--) {
+        const canTake = Math.max(0, next[i].weeks - 1);
+        const take = Math.min(canTake, remove);
+        next[i].weeks -= take;
+        remove -= take;
+      }
+    } else if (sum < targetTotal) {
+      let add = targetTotal - sum;
+      let i = 0;
+      while (add > 0) {
+        next[i % next.length].weeks += 1;
+        add -= 1;
+        i += 1;
+      }
+    }
+    return next;
+  };
+
+  const cleanedCustom = Array.isArray(customPhases)
+    ? customPhases
+        .map((p, idx) => ({
+          name: String(p?.name || `PHASE ${idx + 1}`).trim().toUpperCase(),
+          weeks: toPositiveInt(p?.weeks, 1),
+        }))
+        .filter((p) => p.name)
+    : [];
+
+  if (cleanedCustom.length > 0) {
+    const target = toPositiveInt(totalWeeks, cleanedCustom.reduce((s, p) => s + p.weeks, 0));
+    return rebalanceToTotal(cleanedCustom, target);
+  }
+
+  const weeks = toPositiveInt(totalWeeks, toPositiveInt(legacyPhases, 3) * toPositiveInt(legacyWeeksPerBlock, 6));
+  const defaultNames = ["BASE", "BUILD", "PEAK", "TAPER"];
+  const weights = [30, 40, 20, 10];
+  const rows = defaultNames.map((name, idx) => ({
+    name,
+    weeks: Math.max(1, Math.round((weeks * weights[idx]) / 100)),
+  }));
+
+  return rebalanceToTotal(rows, weeks);
+}
+
+function buildPrompt(profile, planStart, builder = {}) {
   const {
     name, sports = [], experience_level, target_race_name, target_race_date,
     weekly_training_hours, dob, lthr, z2_min, z2_max,
     weeks_per_block = 6, phases = 3, deload_preference = "every_block",
   } = profile;
+  const {
+    totalWeeks,
+    daysPerWeek,
+    sessionPreference,
+    equipment,
+    phaseStructure,
+  } = builder;
 
   const ageYears = dob
     ? Math.floor((Date.now() - new Date(dob).getTime()) / (365.25 * 24 * 60 * 60 * 1000))
@@ -92,23 +172,48 @@ function buildPrompt(profile, planStart) {
   const threshMin = Math.round(lthrVal * 0.95);
   const threshMax = Math.round(lthrVal * 1.05);
 
+  const sportLabel = sports.length > 0 ? sports.join(", ") : "hybrid";
+  const raceName = target_race_name || "target event";
+  const raceDate = target_race_date || "TBD";
+  const totalWeeksValue = toPositiveInt(
+    totalWeeks,
+    phaseStructure.reduce((sum, p) => sum + p.weeks, 0) || (phases * weeks_per_block)
+  );
+  const daysPerWeekValue = toDaysPerWeek(daysPerWeek, 5);
+  const sessionPrefValue = normalizeSessionPreference(sessionPreference);
+  const equipmentList = equipment.length > 0 ? equipment : ["Running/Outdoor", "Bodyweight"];
+  const phaseStructureLabel = phaseStructure.map((p) => `${p.name} ${p.weeks} wks`).join(" -> ");
+  const phaseCount = phaseStructure.length;
+
   const validKeyList = [...VALID_WORKOUT_KEYS].map(k => `  "${k}"`).join("\n");
   const planStartStr = fmtDate(planStart);
+  const blockRules = phaseStructure.map((p, idx) => `${String(idx + 1).padStart(2, "0")} ${p.name}: ${p.weeks} weeks`).join("\n");
 
   // Show one minimal example week so Claude understands the exact JSON shape
   const exampleDay = `{"day_name":"MON","am_session":"ZONE 2 — Easy Aerobic","pm_session":null,"note":"45 min easy Z2.","is_sunday":false}`;
 
-  return `Generate a ${phases}-phase periodized training plan for ${name || "the athlete"}.
+  return `Generate a ${totalWeeksValue}-week training plan for a ${sportLabel} athlete.
+Race: ${raceName} on ${raceDate} (${totalWeeksValue} weeks away)
+Experience: ${experience_level ?? "intermediate"}
+Training days per week: ${daysPerWeekValue}
+Session preference: ${sessionPrefValue}
+Available equipment: ${equipmentList.join(", ")}
+Phase structure: ${phaseStructureLabel}
+Deload: ${deload_preference}
+LTHR: ${lthrVal} bpm
+Z2: ${z2MinVal}-${z2MaxVal} bpm
 
 ATHLETE:
-- Sports: ${sports.join(", ") || "hybrid"}
-- Experience: ${experience_level ?? "intermediate"}
-- Weekly hours: ${weekly_training_hours ?? 8}h
+- Name: ${name || "the athlete"}
+- Sports: ${sportLabel}
+- Weekly hours target: ${weekly_training_hours ?? 8}h
 - Z2 zone: ${z2MinVal}–${z2MaxVal} bpm | Threshold: ${threshMin}–${threshMax} bpm
-- Race: ${target_race_name ?? "target event"}${target_race_date ? ` on ${target_race_date}` : ""}
+- Race: ${raceName}${target_race_date ? ` on ${target_race_date}` : ""}
 
 PLAN STRUCTURE:
-- ${phases} blocks, ${weeks_per_block} weeks per block (${phases * weeks_per_block} total weeks)
+- Total weeks: ${totalWeeksValue}
+- Blocks/phases (${phaseCount}):
+${blockRules}
 - Plan starts: ${planStartStr}
 - Deload rule: ${deloadInstruction(deload_preference, weeks_per_block)}
 
@@ -116,6 +221,13 @@ SPORT FOCUS: ${sportFocus(sports)}
 
 VALID SESSION KEYS — use ONLY these exact strings for am_session / pm_session, or null:
 ${validKeyList}
+
+Generate:
+- First 4 weeks in full detail with complete workouts
+- Remaining weeks as outlines with session types only
+- Every session must use only the available equipment listed
+- Respect the training days per week — never schedule more sessions than specified
+- Output as structured JSON matching the training_days schema
 
 Return ONLY a JSON object — no markdown fences, no explanation. Shape:
 {
@@ -145,14 +257,23 @@ Return ONLY a JSON object — no markdown fences, no explanation. Shape:
 }
 
 RULES:
-1. Exactly ${phases} blocks, each exactly ${weeks_per_block} weeks, each week exactly 7 days (MON TUE WED THU FRI SAT SUN — in that order).
-2. am_session and pm_session must be null or one of the valid keys above. No other strings allowed.
-3. Sunday: is_sunday=true, use "SUNDAY — Mobility Protocol" or "SUNDAY — Plyo & Core".
-4. Rest days: am_session=null, pm_session=null, note="Rest day."
-5. Final block: taper/peak phase approaching the race date.
-6. block_id must be a unique slug prefixed with a zero-padded number (e.g. "01_base", "02_build", "03_peak").
-7. Notes: max 60 characters each.
-8. Scale session count to roughly ${weekly_training_hours ?? 8} hours/week of total training.`;
+1. Exactly ${phaseCount} blocks and each block must match this exact duration map:
+${blockRules}
+2. Each week must have exactly 7 days (MON TUE WED THU FRI SAT SUN — in that order).
+3. Keep training-day count <= ${daysPerWeekValue} per week (non-rest days). Never exceed this cap.
+4. Session preference must be respected:
+   - AM: use am_session for planned sessions; keep pm_session null.
+   - PM: use pm_session for planned sessions; keep am_session null.
+   - Both: may use AM or PM, but still keep weekly total sessions <= ${daysPerWeekValue}.
+5. am_session and pm_session must be null or one of the valid keys above. No other strings allowed.
+6. Sunday: is_sunday=true, use "SUNDAY — Mobility Protocol" or "SUNDAY — Plyo & Core".
+7. Rest days: am_session=null, pm_session=null, note="Rest day."
+8. Final block should trend into peak/taper toward the race.
+9. block_id must be a unique slug prefixed with a zero-padded number (e.g. "01_base", "02_build", "03_peak").
+10. Notes: max 60 characters each.
+11. Never prescribe equipment not listed in: ${equipmentList.join(", ")}.
+12. Scale workload to roughly ${weekly_training_hours ?? 8} hours/week.
+13. Weeks 1-4 should include richer notes; later weeks can be concise session-type outlines.`;
 }
 
 // ── Handler ───────────────────────────────────────────────────────────────────
@@ -216,6 +337,35 @@ export default async function handler(req, res) {
   const profile = req.body?.profile;
   if (!profile) return res.status(400).json({ error: "profile is required in request body" });
 
+  const daysPerWeek = toDaysPerWeek(
+    req.body?.days_per_week ?? profile?.days_per_week,
+    5
+  );
+  const sessionPreference = normalizeSessionPreference(
+    req.body?.session_preference ?? profile?.session_preference
+  );
+  const equipment = normalizeEquipment(
+    req.body?.equipment ?? profile?.equipment
+  );
+  const totalWeeks = toPositiveInt(
+    req.body?.total_weeks ?? profile?.total_weeks,
+    toPositiveInt(profile?.phases, 3) * toPositiveInt(profile?.weeks_per_block, 6)
+  );
+  const phaseStructure = buildPhaseStructure({
+    customPhases: req.body?.phases ?? profile?.custom_phases,
+    totalWeeks,
+    legacyPhases: profile?.phases,
+    legacyWeeksPerBlock: profile?.weeks_per_block,
+  });
+
+  const builderContext = {
+    totalWeeks,
+    daysPerWeek,
+    sessionPreference,
+    equipment,
+    phaseStructure,
+  };
+
   // Mark generation as in_progress
   await supabase
     .from("user_profiles")
@@ -237,7 +387,7 @@ export default async function handler(req, res) {
         model:      "claude-sonnet-4-6",
         max_tokens: 8192,
         system:     "You are a JSON-only training plan generator. Output only valid JSON — no markdown fences, no prose, no explanation.",
-        messages:   [{ role: "user", content: buildPrompt(profile, planStart) }],
+        messages:   [{ role: "user", content: buildPrompt(profile, planStart, builderContext) }],
       }),
     });
 
