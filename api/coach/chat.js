@@ -8,8 +8,11 @@ const supabase = createClient(
 export default async function handler(req, res) {
   if (req.method !== "POST") return res.status(405).json({ error: "Method not allowed" });
 
-  const { message, whoopData, currentWeek, recentActivities, attachment, user_id, scenarioChanges } = req.body;
+  const { message, whoopData, currentWeek, recentActivities, attachment, user_id, scenarioChanges, session_id } = req.body;
   if (!message && !attachment) return res.status(400).json({ error: "No message or attachment provided" });
+  if (!session_id) return res.status(400).json({ error: "session_id is required" });
+  const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+  if (!UUID_RE.test(session_id)) return res.status(400).json({ error: "session_id must be a valid UUID" });
 
   // Resolve authenticated user_id from token if available, fall back to body
   let resolvedUserId = user_id || null;
@@ -21,6 +24,22 @@ export default async function handler(req, res) {
     } catch (_) {}
   }
 
+  // Resolve current week row so we can map week UUID -> week slug for training_days.
+  let currentWeekRow = null;
+  if (currentWeek?.id && resolvedUserId) {
+    try {
+      const { data } = await supabase
+        .from("training_weeks")
+        .select("id, week_id, block_id, label")
+        .eq("user_id", resolvedUserId)
+        .eq("id", currentWeek.id)
+        .maybeSingle();
+      currentWeekRow = data || null;
+    } catch (_) {}
+  }
+
+  const currentWeekSlug = currentWeekRow?.week_id || null;
+
   // Fetch user profile, flagged biomarkers, and current week schedule in parallel
   const [profileResult, bioResult, weekDaysResult] = await Promise.all([
     resolvedUserId
@@ -29,8 +48,13 @@ export default async function handler(req, res) {
     resolvedUserId
       ? supabase.from("biomarkers").select("label,value,unit,flag").eq("user_id", resolvedUserId).in("flag", ["HIGH", "LOW"])
       : supabase.from("biomarkers").select("label,value,unit,flag").in("flag", ["HIGH", "LOW"]),
-    (currentWeek?.id && resolvedUserId)
-      ? supabase.from("training_days").select("day_name,am_session,pm_session,note,ai_modified").eq("user_id", resolvedUserId).eq("week_id", currentWeek.id).order("day_name")
+    (currentWeekSlug && resolvedUserId)
+      ? supabase
+          .from("training_days")
+          .select("day_name,am_session,pm_session,note,ai_modified,am_session_blocks,pm_session_blocks")
+          .eq("user_id", resolvedUserId)
+          .eq("week_id", currentWeekSlug)
+          .order("day_name")
       : Promise.resolve({ data: null }),
   ]);
 
@@ -77,9 +101,188 @@ export default async function handler(req, res) {
   // Build current week schedule for context
   const DAY_ORDER = ["MON","TUE","WED","THU","FRI","SAT","SUN"];
   const sortedDays = DAY_ORDER.map(d => weekDays.find(wd => wd.day_name === d)).filter(Boolean);
+  const hasManualBlockEdits = (blocks) => Array.isArray(blocks) && blocks.some((b) => b?.is_modified);
   const weekScheduleLines = sortedDays.length > 0
-    ? sortedDays.map(d => `- ${d.day_name}: AM=${d.am_session || "REST"} | PM=${d.pm_session || "—"}${d.ai_modified ? " [AI MODIFIED]" : ""}${d.note ? ` | Note: ${d.note}` : ""}`).join("\n")
+    ? sortedDays.map((d) => {
+        const manualAm = hasManualBlockEdits(d.am_session_blocks);
+        const manualPm = hasManualBlockEdits(d.pm_session_blocks);
+        const manualTag = manualAm || manualPm ? " [MANUALLY MODIFIED]" : "";
+        const aiTag = !manualTag && d.ai_modified ? " [AI MODIFIED]" : "";
+        const blockTag = manualTag ? " | Session blocks contain manual edits" : "";
+        return `- ${d.day_name}: AM=${d.am_session || "REST"} | PM=${d.pm_session || "—"}${manualTag}${aiTag}${blockTag}${d.note ? ` | Note: ${d.note}` : ""}`;
+      }).join("\n")
     : "- No schedule loaded";
+
+  // Build dynamic week scope context for multi-week clarifying flows.
+  let blockWeekLabels = [];
+  if (currentWeekRow?.block_id && resolvedUserId) {
+    try {
+      const { data: blockWeeks } = await supabase
+        .from("training_weeks")
+        .select("label, week_order")
+        .eq("user_id", resolvedUserId)
+        .eq("block_id", currentWeekRow.block_id)
+        .order("week_order", { ascending: true });
+      blockWeekLabels = (blockWeeks || []).map((w) => w.label).filter(Boolean);
+    } catch (_) {}
+  }
+  if (blockWeekLabels.length === 0 && currentWeekRow?.label) {
+    blockWeekLabels = [currentWeekRow.label];
+  }
+  if (blockWeekLabels.length === 0 && currentWeek?.label) {
+    blockWeekLabels = [currentWeek.label];
+  }
+  const blockWeekCount = blockWeekLabels.length;
+  const blockWeeksLines = blockWeekCount > 0
+    ? blockWeekLabels.map((label, idx) => `${idx + 1}. ${label}`).join("\n")
+    : "- Unknown";
+
+  const DAY_ABBREVS = ["MON","TUE","WED","THU","FRI","SAT","SUN"];
+  const DAY_PATTERNS = [
+    { rx: /\bMON(?:DAY)?\b/gi, day: "MON" },
+    { rx: /\bTUE(?:S|SDAY)?\b/gi, day: "TUE" },
+    { rx: /\bWED(?:NESDAY)?\b/gi, day: "WED" },
+    { rx: /\bTHU(?:R|RSDAY)?\b/gi, day: "THU" },
+    { rx: /\bFRI(?:DAY)?\b/gi, day: "FRI" },
+    { rx: /\bSAT(?:URDAY)?\b/gi, day: "SAT" },
+    { rx: /\bSUN(?:DAY)?\b/gi, day: "SUN" },
+  ];
+  const unique = (arr) => [...new Set(arr)];
+  const parseQuestionPairs = (text) => {
+    if (!text) return [];
+    const pairs = [];
+    const re = /([^:\n]{3,140})\s*:\s*([^\n.]+)/g;
+    let m;
+    while ((m = re.exec(text)) !== null) {
+      pairs.push({ question: m[1].trim(), answer: m[2].trim() });
+    }
+    return pairs;
+  };
+  const extractDaysFromText = (text) => {
+    if (!text) return [];
+    const found = [];
+    for (const p of DAY_PATTERNS) {
+      if (p.rx.test(text)) found.push(p.day);
+      p.rx.lastIndex = 0;
+    }
+    return unique(found);
+  };
+
+  // Fetch full session history first so we can derive knowledge state before prompting.
+  let historyMessages = [];
+  let rawHistoryMessages = [];
+  try {
+    if (!resolvedUserId) {
+      console.warn("[coach/chat] no user_id for history fetch — skipping");
+    } else {
+      const historyQuery = supabase
+        .from("ai_messages")
+        .select("role, content")
+        .eq("user_id", resolvedUserId)
+        .eq("session_id", session_id)
+        .neq("role", "proactive")
+        .order("created_at", { ascending: false })
+        .limit(100);
+      const { data, error: histErr } = await historyQuery;
+      if (histErr) console.error("[coach/chat] history fetch error:", histErr.message);
+      if (data && data.length > 0) {
+        rawHistoryMessages = data.reverse();
+        const validated = [];
+        let expectedRole = "user";
+        for (const m of rawHistoryMessages) {
+          if (m.role === expectedRole) {
+            validated.push(m);
+            expectedRole = expectedRole === "user" ? "assistant" : "user";
+          }
+        }
+        if (validated.length > 0 && validated[validated.length - 1].role === "user") {
+          validated.pop();
+        }
+        historyMessages = validated;
+      }
+    }
+  } catch (_) {}
+
+  const userHistoryTexts = rawHistoryMessages
+    .filter((m) => m.role === "user")
+    .map((m) => String(m.content || ""))
+    .filter(Boolean);
+  const allUserTexts = [...userHistoryTexts, String(message || "")].filter(Boolean);
+
+  const sessionKnowledge = {
+    provided: {},
+    confirmed: {},
+    unknown: [],
+  };
+
+  const userJoined = allUserTexts.join("\n");
+  const architectureProvided =
+    !!attachment ||
+    /architecture|weekly structure|training block|training plan|week\s*\d|monday|tuesday|wednesday|thursday|friday|saturday|sunday/i.test(userJoined);
+  const hyroxDays = unique(
+    allUserTexts
+      .filter((t) => /hyrox/i.test(t))
+      .flatMap((t) => extractDaysFromText(t))
+  );
+  const weekCountFromText = (() => {
+    const match = userJoined.match(/\b(\d{1,2})\s+weeks?\b/i);
+    return match ? Number(match[1]) : null;
+  })();
+
+  sessionKnowledge.provided = {
+    architecture_provided: architectureProvided,
+    hyrox_days: hyroxDays,
+    weekly_structure_known: architectureProvided || hyroxDays.length > 0,
+    week_count: blockWeekCount || weekCountFromText || null,
+    block_weeks: blockWeekLabels,
+    attachment_provided: !!attachment,
+  };
+
+  const confirmedScope = { value: null };
+  const confirmedFormats = {};
+  const confirmedFocus = {};
+
+  for (const text of userHistoryTexts) {
+    for (const pair of parseQuestionPairs(text)) {
+      const q = pair.question.toLowerCase();
+      const ans = pair.answer;
+      if (q.includes("same structure across all weeks") || q.includes("differ per week")) {
+        confirmedScope.value = ans;
+      }
+      if (q.includes("format")) {
+        const w = q.match(/week\s*([0-9]{1,2})/i);
+        if (w?.[1]) {
+          confirmedFormats[`week_${w[1]}`] = ans;
+        } else {
+          confirmedFormats.all_weeks = ans;
+        }
+      }
+      if (q.includes("focus")) {
+        const values = ans.split(",").map((s) => s.trim()).filter(Boolean);
+        const w = q.match(/week\s*([0-9]{1,2})/i);
+        if (w?.[1]) {
+          confirmedFocus[`week_${w[1]}`] = values;
+        } else {
+          confirmedFocus.all_weeks = values;
+        }
+      }
+    }
+  }
+
+  sessionKnowledge.confirmed = {
+    scope: confirmedScope.value,
+    format_per_week: confirmedFormats,
+    focus_per_week: confirmedFocus,
+  };
+
+  const hasScope = !!sessionKnowledge.confirmed.scope;
+  const hasFormat = !!confirmedFormats.all_weeks || Object.keys(confirmedFormats).length >= Math.max(blockWeekCount, 1);
+  const hasFocus = !!confirmedFocus.all_weeks || Object.keys(confirmedFocus).length >= Math.max(blockWeekCount, 1);
+  if (!hasScope) sessionKnowledge.unknown.push("scope (same/different)");
+  if (!hasFormat) sessionKnowledge.unknown.push("format per week");
+  if (!hasFocus) sessionKnowledge.unknown.push("focus per week");
+
+  const sessionKnowledgeText = JSON.stringify(sessionKnowledge, null, 2);
 
   const persona = p?.coach_persona || "grinder";
   const PERSONA_INTROS = {
@@ -101,10 +304,23 @@ ATHLETE PROFILE:
 CURRENT WEEK: ${currentWeek?.label ?? "N/A"}
 ${weekScheduleLines}
 
+CURRENT BLOCK WEEKS (${blockWeekCount}):
+${blockWeeksLines}
+
 FLAGGED BIOMARKERS:
 ${bioLines}
 
 SUPPLEMENTS ON STACK: ${suppLine}
+
+SESSION KNOWLEDGE STATE (derived from conversation history + provided inputs):
+\`\`\`json
+${sessionKnowledgeText}
+\`\`\`
+
+Use this state as the source of truth.
+- Only ask clarifying questions for items that remain in "unknown".
+- Never re-ask items in "confirmed".
+- Never ask for details already inferable from "provided".
 
 COACHING RULES:
 1. Never suggest zero strength days — minimum 2/week
@@ -164,7 +380,23 @@ RESPONSE RULES:
 - Talk like a coach: direct, confident, action-oriented. Short sentences.
 
 CLARIFYING QUESTIONS (apply in ALL modes):
-Before asking ANY question, re-read the entire conversation history to check if the answer is already there. Only ask for information not already provided. Maximum 3 questions total per block. After receiving answers, generate immediately — never ask follow-up questions.
+Before asking ANY question, re-read the entire conversation history to check if the answer is already there. Only ask for information not already provided. Maximum 3 questions per clarifying block. After each response, either continue to the next required step/week or generate the plan immediately.
+- At the start of each response, mentally build a list of everything already known from this conversation. Never ask about anything on that list.
+- If a question was answered in a previous message — even 10 messages ago — treat that answer as locked and use it silently.
+- Track confirmed answers with a mental checklist: scope (same/different), format per week, focus per week. Once checked, never ask again.
+- Before asking any question, check: is this answer already visible in what the user provided? If yes, do not ask.
+- If the user provided training architecture, NEVER ask:
+  - how many sessions per week
+  - which days have HYROX
+  - what the weekly structure looks like
+  - how many weeks exist
+- Only ask session-specific details that cannot be inferred from architecture: format (AMRAP/EMOM/For Time), focus stations, intensity level.
+
+CONTEXT LOCKING RULES:
+- "Once a user confirms an answer in this session, NEVER ask that question again. Treat confirmed answers as locked context."
+- "Before generating any clarifying question, scan the full conversation history for existing answers. If the answer is already there, use it silently."
+- "For refinements to an already-confirmed session, only ask about what genuinely changed. Never restart the full question flow for a small tweak."
+- "Confirmed architecture = locked. Refinement requests = targeted edits only."
 
 Hierarchical question flow (pick only the levels needed):
 Level 1 — Scope (only if request spans multiple weeks):
@@ -172,10 +404,34 @@ Level 1 — Scope (only if request spans multiple weeks):
 Level 2 — Days (only if request spans multiple days):
   {"question":"Which days?", "type":"multi_select", "options":["MON","TUE","WED","THU","FRI","SAT","SUN"]}
 Level 3 — Session-specific (always ask, adapt to session type):
-  HYROX: {"question":"Format?", "type":"single_select", "options":["Full Sim","Half Sim","AMRAP","EMOM","For Time"]}
+  HYROX: follow the HYROX Session Logic Tree below (this OVERRIDES generic HYROX prompts)
   Run: {"question":"Type?", "type":"single_select", "options":["Threshold","Tempo","Zone 2","Fartlek","Track Workout"]}
   Strength: {"question":"Focus?", "type":"single_select", "options":["Push","Pull","Full Body","Lower","Upper"]}
   Recovery: {"question":"Modality?", "type":"single_select", "options":["Easy Run","Bike","Swim","Row","Walk","Mobility Only"]}
+
+HYROX Session Logic Tree (mandatory):
+Trigger this flow immediately when a training architecture includes HYROX, or a remap request touches a HYROX session/day, or HYROX is present in user-provided text/image context. Do NOT wait until after remap confirmation — ask before building.
+
+Step 1 — ask this FIRST before anything else:
+{"question":"Will your HYROX sessions follow the same structure across all weeks or differ per week?","type":"single_select","options":["Same across all weeks","Different per week"]}
+
+Step 2a — if user selects "Same across all weeks", ask once and apply to every week in CURRENT BLOCK WEEKS:
+[
+  {"question":"Format?","type":"single_select","options":["Full Sim","Half Sim","AMRAP","EMOM","For Time","Compromised Running Only"]},
+  {"question":"Focus stations?","type":"multi_select","options":["Sled Push","Sled Pull","Ski Erg","Row Erg","Wall Balls","Sandbag Lunges","Farmers Carry","Burpee Broad Jump","Compromised Running"]}
+]
+
+Step 2b — if user selects "Different per week", ask one week at a time and continue until ALL weeks in CURRENT BLOCK WEEKS are covered:
+[
+  {"question":"Week X — Format?","type":"single_select","options":["Full Sim","Half Sim","AMRAP","EMOM","For Time","Compromised Running Only"]},
+  {"question":"Week X — Focus stations?","type":"multi_select","options":["Sled Push","Sled Pull","Ski Erg","Row Erg","Wall Balls","Sandbag Lunges","Farmers Carry","Burpee Broad Jump","Compromised Running"]}
+]
+After user confirms Week X, automatically move to Week X+1 with the same two questions until every week in the block is answered.
+
+Scale rule:
+- Never assume a fixed week count.
+- Read the number of weeks from CURRENT BLOCK WEEKS and the active plan structure context.
+- If "Different per week" is selected, loop through all weeks dynamically (2, 10, 16, or any count).
 
 Format:
 <clarifying_questions>
@@ -192,39 +448,7 @@ SCENARIO MODE RULES (when message starts with [SCENARIO MODE]):
 4. Every exercise must match available equipment or regenerate`;
 
   try {
-    // Fetch last 20 messages for conversation history, scoped to user
-    let historyMessages = [];
-    try {
-      if (!resolvedUserId) {
-        console.warn("[coach/chat] no user_id for history fetch — skipping");
-      }
-      const historyQuery = supabase
-        .from("ai_messages")
-        .select("role, content")
-        .order("created_at", { ascending: false })
-        .limit(20);
-      if (resolvedUserId) historyQuery.eq("user_id", resolvedUserId);
-      historyQuery.neq("role", "proactive");
-      const { data, error: histErr } = await historyQuery;
-      if (histErr) console.error("[coach/chat] history fetch error:", histErr.message);
-      if (data && data.length > 0) {
-        const reversed = data.reverse();
-        const validated = [];
-        let expectedRole = "user";
-        for (const m of reversed) {
-          if (m.role === expectedRole) {
-            validated.push(m);
-            expectedRole = expectedRole === "user" ? "assistant" : "user";
-          }
-        }
-        if (validated.length > 0 && validated[validated.length - 1].role === "user") {
-          validated.pop();
-        }
-        historyMessages = validated;
-      }
-    } catch (e) {}
-
-    console.log(`[coach/chat] user=${resolvedUserId?.slice(0,8) || "anon"} history=${historyMessages.length} msgs`);
+    console.log(`[coach/chat] user=${resolvedUserId?.slice(0,8) || "anon"} session=${session_id.slice(0,8)} history=${historyMessages.length} msgs`);
 
     const now = new Date();
     const dayNames = ["Sunday","Monday","Tuesday","Wednesday","Thursday","Friday","Saturday"];
@@ -309,8 +533,8 @@ User message: ${message || "(see attached file)"}`;
     // Persist messages scoped to user
     if (resolvedUserId) {
       const { error: insertErr } = await supabase.from("ai_messages").insert([
-        { user_id: resolvedUserId, role: "user", content: message || `[attachment: ${attachment?.name}]` },
-        { user_id: resolvedUserId, role: "assistant", content: cleanText },
+        { user_id: resolvedUserId, session_id, role: "user", content: message || `[attachment: ${attachment?.name}]` },
+        { user_id: resolvedUserId, session_id, role: "assistant", content: cleanText },
       ]);
       if (insertErr) {
         console.error("[coach/chat] failed to save messages:", insertErr.message);

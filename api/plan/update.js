@@ -26,19 +26,19 @@ export default async function handler(req, res) {
     // Try UUID first
     if (UUID_RE.test(weekRef)) {
       const { data } = await supabase
-        .from("training_weeks").select("id, week_id").eq("id", weekRef).eq("user_id", userId).single();
+        .from("training_weeks").select("id, week_id, label").eq("id", weekRef).eq("user_id", userId).single();
       if (data) return data;
     }
     // Try week_id slug
     {
       const { data } = await supabase
-        .from("training_weeks").select("id, week_id").eq("week_id", weekRef).eq("user_id", userId).single();
+        .from("training_weeks").select("id, week_id, label").eq("week_id", weekRef).eq("user_id", userId).single();
       if (data) return data;
     }
     // Try label (case-insensitive) — this is how the AI references weeks
     {
       const { data } = await supabase
-        .from("training_weeks").select("id, week_id").ilike("label", `%${weekRef}%`).eq("user_id", userId).single();
+        .from("training_weeks").select("id, week_id, label").ilike("label", `%${weekRef}%`).eq("user_id", userId).single();
       if (data) return data;
     }
     return null;
@@ -155,53 +155,83 @@ export default async function handler(req, res) {
     }
 
     if (type === "remap_week") {
-      if (!week_id) return res.status(400).json({ error: "remap_week requires week_id" });
       const { days: dayChanges } = req.body;
       if (!Array.isArray(dayChanges) || dayChanges.length === 0) {
         return res.status(400).json({ error: "remap_week requires a non-empty days array" });
       }
 
-      const weekRow = await resolveWeek(week_id);
-      if (!weekRow) return res.status(404).json({ error: `Week not found: ${week_id}` });
-
-      const results = [];
+      // Support one week (top-level week_id) and multi-week remaps (day.week_id overrides).
+      const weekToDayChanges = new Map();
       for (const dc of dayChanges) {
-        const DAY_MAP = {
-          monday:"MON", tuesday:"TUE", wednesday:"WED",
-          thursday:"THU", friday:"FRI", saturday:"SAT", sunday:"SUN",
-        };
-        const normalizedDay = DAY_MAP[dc.day?.toLowerCase()] || dc.day?.toUpperCase().slice(0, 3);
-        const updatePayload = { ai_modified: true };
-        const fieldMap = {
-          am_session:"am_session", pm_session:"pm_session",
-          am_session_custom:"am_session_custom", pm_session_custom:"pm_session_custom",
-          note:"note", ai_modification_note:"ai_modification_note",
-        };
-        for (const [key, value] of Object.entries(dc.changes || {})) {
-          if (fieldMap[key]) updatePayload[fieldMap[key]] = value;
+        const targetWeekRef = dc?.week_id || week_id;
+        if (!targetWeekRef) {
+          return res.status(400).json({ error: "remap_week requires week_id (top-level or per-day)" });
         }
-        if (description) updatePayload.ai_modification_note = updatePayload.ai_modification_note || description;
-
-        for (const field of ["am_session", "pm_session"]) {
-          if (field in updatePayload && updatePayload[field] !== null && !VALID_WORKOUT_KEYS.has(updatePayload[field])) {
-            continue;
-          }
-        }
-
-        const { data: updated, error: updateErr } = await supabase
-          .from("training_days")
-          .update(updatePayload)
-          .eq("week_id", weekRow.week_id)
-          .eq("day_name", normalizedDay)
-          .eq("user_id", userId)
-          .select();
-
-        results.push({ day: normalizedDay, updated: updated?.length || 0, error: updateErr?.message });
+        if (!weekToDayChanges.has(targetWeekRef)) weekToDayChanges.set(targetWeekRef, []);
+        weekToDayChanges.get(targetWeekRef).push(dc);
       }
 
-      const totalUpdated = results.reduce((s, r) => s + r.updated, 0);
-      console.log(`[plan/update] remap_week: ${totalUpdated} days updated`, JSON.stringify(results));
-      return res.status(200).json({ success: true, description, days_updated: totalUpdated, results });
+      const weeksUpdated = {};
+      const results = [];
+      for (const [weekRef, weekDayChanges] of weekToDayChanges.entries()) {
+        const weekRow = await resolveWeek(weekRef);
+        if (!weekRow) return res.status(404).json({ error: `Week not found: ${weekRef}` });
+
+        const weekLabel = weekRow.label || weekRef;
+        let updatedForWeek = 0;
+        for (const dc of weekDayChanges) {
+          if (!dc?.day) {
+            results.push({ week: weekLabel, day: null, updated: 0, error: "Missing day" });
+            continue;
+          }
+          const DAY_MAP = {
+            monday:"MON", tuesday:"TUE", wednesday:"WED",
+            thursday:"THU", friday:"FRI", saturday:"SAT", sunday:"SUN",
+          };
+          const normalizedDay = DAY_MAP[dc.day?.toLowerCase()] || dc.day?.toUpperCase().slice(0, 3);
+          const updatePayload = { ai_modified: true };
+          const fieldMap = {
+            am_session:"am_session", pm_session:"pm_session",
+            am_session_custom:"am_session_custom", pm_session_custom:"pm_session_custom",
+            note:"note", ai_modification_note:"ai_modification_note",
+          };
+          for (const [key, value] of Object.entries(dc.changes || {})) {
+            if (fieldMap[key]) updatePayload[fieldMap[key]] = value;
+          }
+          if (description) updatePayload.ai_modification_note = updatePayload.ai_modification_note || description;
+
+          for (const field of ["am_session", "pm_session"]) {
+            if (field in updatePayload && updatePayload[field] !== null && !VALID_WORKOUT_KEYS.has(updatePayload[field])) {
+              continue;
+            }
+          }
+
+          const { data: updated, error: updateErr } = await supabase
+            .from("training_days")
+            .update(updatePayload)
+            .eq("week_id", weekRow.week_id)
+            .eq("day_name", normalizedDay)
+            .eq("user_id", userId)
+            .select();
+
+          const updatedCount = updated?.length || 0;
+          if (!updateErr) updatedForWeek += updatedCount;
+          results.push({ week: weekLabel, day: normalizedDay, updated: updatedCount, error: updateErr?.message || null });
+        }
+        weeksUpdated[weekLabel] = updatedForWeek;
+      }
+
+      const totalUpdated = Object.values(weeksUpdated).reduce((sum, n) => sum + n, 0);
+      console.log(`[plan/update] remap_week: ${totalUpdated} rows updated`, JSON.stringify({ weeksUpdated, results }));
+      return res.status(200).json({
+        success: true,
+        description,
+        weeks_updated: weeksUpdated,
+        total: totalUpdated,
+        // Backward compatibility for any old consumers.
+        days_updated: totalUpdated,
+        results,
+      });
     }
 
     return res.status(400).json({ error: `Unknown plan change type: ${type}` });

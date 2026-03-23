@@ -148,6 +148,35 @@ const parseClarifyingQuestions = (text) => {
   } catch (_) { return null; }
 };
 
+const normalizeClarifyingQuestions = (questions) =>
+  (Array.isArray(questions) ? questions : []).map((q, idx) => ({
+    ...q,
+    id: String(q?.id || `q_${idx}`),
+    options: Array.isArray(q?.options) ? q.options : [],
+    branches: q?.branches && typeof q.branches === "object" ? q.branches : null,
+  }));
+
+const getClarifyingFlow = (questions, selectionsById) => {
+  const normalized = normalizeClarifyingQuestions(questions);
+  const byId = new Map(normalized.map((q) => [q.id, q]));
+  if (normalized.length === 0) return { normalized, byId, sequence: [] };
+
+  const root = normalized[0];
+  const rootSelection = selectionsById[root.id] || [];
+  const selectedRoot = rootSelection[0];
+
+  if (root.branches) {
+    if (!selectedRoot) return { normalized, byId, sequence: [root.id] };
+    const rawBranchIds = Array.isArray(root.branches[selectedRoot]) ? root.branches[selectedRoot] : [];
+    const branchIds = rawBranchIds
+      .map((id) => String(id))
+      .filter((id) => byId.has(id));
+    return { normalized, byId, sequence: [root.id, ...branchIds] };
+  }
+
+  return { normalized, byId, sequence: normalized.map((q) => q.id) };
+};
+
 const renderMarkdown = (text) => {
   if (!text) return null;
   const clean = stripPlanChange(text);
@@ -169,10 +198,25 @@ const PERSONAS = [
   { id:"sage",      label:"THE SAGE",      sub:"Mindful · RPE-based", color:"#00D4A0" },
 ];
 
+const createSessionId = () => {
+  if (typeof crypto !== "undefined" && typeof crypto.randomUUID === "function") {
+    return crypto.randomUUID();
+  }
+  return "xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx".replace(/[xy]/g, (c) => {
+    const r = Math.random() * 16 | 0;
+    const v = c === "x" ? r : (r & 0x3 | 0x8);
+    return v.toString(16);
+  });
+};
+
+const PLAN_BUILDER_DISMISS_KEY = "plan_builder_dismiss_until";
+
+const makeInitialChatMessages = (userName) => ([
+  { role:"assistant", content:`Hey ${userName || "there"} — I have your WHOOP data, training plan, and biomarkers loaded. What do you need?`, planChange:null }
+]);
+
 const AIChat = ({ whoopData, currentWeek, recentActivities, onPlanChange, userName, persona, onPersonaChange, proactiveBadge, authToken }) => {
-  const [messages, setMessages] = useState([
-    { role:"assistant", content:`Hey ${userName || "there"} — I have your WHOOP data, training plan, and biomarkers loaded. What do you need?`, planChange:null }
-  ]);
+  const [messages, setMessages] = useState(makeInitialChatMessages(userName));
   const [input, setInput] = useState("");
   const [loading, setLoading] = useState(false);
   const [expanded, setExpanded] = useState(false);
@@ -180,7 +224,12 @@ const AIChat = ({ whoopData, currentWeek, recentActivities, onPlanChange, userNa
   const [showPersonas, setShowPersonas] = useState(false);
   const [isRecording, setIsRecording] = useState(false);
   const [chatCqSelections, setChatCqSelections] = useState({});
+  const [answeredQuestionIds, setAnsweredQuestionIds] = useState(() => new Set());
+  const [answeredQuestionValues, setAnsweredQuestionValues] = useState({});
+  const [autoSubmittedQuestionBlocks, setAutoSubmittedQuestionBlocks] = useState(() => new Set());
+  const [answeredQuestions, setAnsweredQuestions] = useState({});
   const [pendingReview, setPendingReview] = useState(null);
+  const [chatSessionId, setChatSessionId] = useState(createSessionId);
   const recognitionRef = useRef(null);
   const messagesEndRef = useRef(null);
   const textareaRef = useRef(null);
@@ -213,10 +262,80 @@ const AIChat = ({ whoopData, currentWeek, recentActivities, onPlanChange, userNa
     if (expanded) messagesEndRef.current?.scrollIntoView({ behavior:"smooth" });
   }, [messages, expanded]);
 
+  const startFreshSession = () => {
+    setMessages(makeInitialChatMessages(userName));
+    setChatCqSelections({});
+    setAnsweredQuestionIds(new Set());
+    setAnsweredQuestionValues({});
+    setAutoSubmittedQuestionBlocks(new Set());
+    setAnsweredQuestions({});
+    setPendingReview(null);
+    setInput("");
+    setAttachment(null);
+    setShowPersonas(false);
+    setLoading(false);
+    setChatSessionId(createSessionId());
+    if (fileInputRef.current) fileInputRef.current.value = "";
+    if (textareaRef.current) textareaRef.current.style.height = "auto";
+  };
+
+  const submitClarifyingAnswers = (messageIndex, answers) => {
+    if (!answers?.trim()) return;
+    setMessages(prev => prev.map((mm, mi) => mi === messageIndex ? { ...mm, cqSubmitted:true } : mm));
+    setMessages(prev => [...prev, { role:"user", content:answers, planChange:null }]);
+    setLoading(true);
+    fetch("/api/coach/chat", {
+      method:"POST",
+      headers:{"Content-Type":"application/json", ...(authToken ? {"Authorization":`Bearer ${authToken}`} : {})},
+      body: JSON.stringify({
+        message: answers,
+        whoopData,
+        currentWeek:{ id:currentWeek?.id, label:currentWeek?.label, subtitle:currentWeek?.subtitle },
+        recentActivities:recentActivities?.slice(0,5),
+        session_id: chatSessionId,
+      }),
+    }).then(r=>r.json()).then(data => {
+      const cqs2 = parseClarifyingQuestions(data.message);
+      setMessages(prev => [...prev, { role:"assistant", content:data.message||"Something went wrong.", planChange:data.planChange||null, clarifyingQuestions:cqs2 }]);
+    }).catch(() => {
+      setMessages(prev => [...prev, { role:"assistant", content:"Connection error. Try again.", planChange:null }]);
+    }).finally(() => setLoading(false));
+  };
+
+  useEffect(() => {
+    if (loading) return;
+    for (let i = 0; i < messages.length; i++) {
+      const m = messages[i];
+      if (!m?.clarifyingQuestions || m.cqSubmitted) continue;
+      const msgKey = `chat_${i}`;
+      if (autoSubmittedQuestionBlocks.has(msgKey)) continue;
+      const normalizedAll = normalizeClarifyingQuestions(m.clarifyingQuestions);
+      if (normalizedAll.length === 0) continue;
+      const answered = answeredQuestions[msgKey] || [];
+      const remaining = normalizedAll.filter((q) => !answeredQuestionIds.has(q.id) || answered.includes(q.id));
+      if (remaining.length > 0) continue;
+
+      const answers = normalizedAll.map((q) => {
+        const sel = answeredQuestionValues[q.id] || [];
+        return `${q?.question?.replace("?","")}:  ${sel.join(", ") || "Not specified"}`;
+      }).join(". ");
+
+      setAutoSubmittedQuestionBlocks((prev) => {
+        const next = new Set(prev);
+        next.add(msgKey);
+        return next;
+      });
+      submitClarifyingAnswers(i, answers);
+      break;
+    }
+  }, [messages, loading, answeredQuestions, answeredQuestionIds, answeredQuestionValues, autoSubmittedQuestionBlocks]);
+
   const sendMessage = async () => {
     if ((!input.trim() && !attachment) || loading) return;
     const userMsg = input.trim();
     const currentAttachment = attachment;
+    const activeSessionId = chatSessionId || createSessionId();
+    if (!chatSessionId) setChatSessionId(activeSessionId);
     setInput("");
     setAttachment(null);
     if (fileInputRef.current) fileInputRef.current.value = "";
@@ -238,6 +357,7 @@ const AIChat = ({ whoopData, currentWeek, recentActivities, onPlanChange, userNa
           currentWeek: { id: currentWeek?.id, label: currentWeek?.label, subtitle: currentWeek?.subtitle },
           recentActivities: recentActivities?.slice(0,5),
           attachment: currentAttachment || null,
+          session_id: activeSessionId,
         }),
       });
       if (!res.ok) {
@@ -261,14 +381,21 @@ const AIChat = ({ whoopData, currentWeek, recentActivities, onPlanChange, userNa
       setMessages(prev => prev.map(m => m.planChange === planChange ? { ...m, planChangeStatus:"applying" } : m));
       console.log("[AIChat] APPLY TO PLAN — sending to onPlanChange:", JSON.stringify(planChange));
       try {
-        await onPlanChange(planChange);
-        const count = planChange.type === "remap_week" ? (planChange.days?.length || 0) : 1;
+        const result = await onPlanChange(planChange);
+        const count = result?.modifiedCount ?? (planChange.type === "remap_week" ? (planChange.days?.length || 0) : 1);
+        const confirmedWeeks = planChange.type === "remap_week" && result?.weeksUpdated
+          ? Object.entries(result.weeksUpdated)
+          : [];
+        const perWeekHint = confirmedWeeks.length > 0
+          ? `\n\n**Confirmed writes:**\n${confirmedWeeks.map(([weekName, weekCount]) => `- ${weekName}: ${weekCount}`).join("\n")}`
+          : "";
         setMessages(prev => prev.map(m => m.planChange === planChange ? { ...m, planChangeStatus:"accepted" } : m));
-        setMessages(prev => [...prev, { role:"assistant", content:`✓ **Plan updated** — ${count} session${count>1?"s":""} modified.`, planChange:null }]);
+        setMessages(prev => [...prev, { role:"assistant", content:`✓ **Plan updated** — ${count} session${count>1?"s":""} modified.${perWeekHint}`, planChange:null }]);
       } catch (e) {
         console.error("[AIChat] APPLY failed:", e);
         setMessages(prev => prev.map(m => m.planChange === planChange ? { ...m, planChangeStatus:null } : m));
-        setMessages(prev => [...prev, { role:"assistant", content:`Failed to update plan: ${e.message}. Try again.`, planChange:null }]);
+        const errMsg = e?.message || "Plan update failed — tap to retry";
+        setMessages(prev => [...prev, { role:"assistant", content:errMsg, planChange:null }]);
       }
     } else {
       setMessages(prev => prev.map(m => m.planChange === planChange ? { ...m, planChangeStatus:"rejected" } : m));
@@ -278,7 +405,7 @@ const AIChat = ({ whoopData, currentWeek, recentActivities, onPlanChange, userNa
   if (!expanded) {
     return (
       <div style={{ position:"fixed", bottom:80, left:"50%", transform:"translateX(-50%)", width:"calc(100% - 40px)", maxWidth:440, zIndex:150 }}>
-        <button onClick={() => setExpanded(true)}
+        <button onClick={() => { startFreshSession(); setExpanded(true); }}
           style={{ width:"100%", padding:"14px 20px", background:C.card, border:`1px solid ${C.border}`, borderRadius:C.radius, display:"flex", alignItems:"center", gap:12, cursor:"pointer", boxShadow:"0 4px 20px rgba(0,0,0,0.5)", ...C.glass }}>
           <div style={{ position:"relative", width:32, height:32, borderRadius:"50%", background:`${C.cyan}15`, border:`1px solid ${C.cyan}33`, display:"flex", alignItems:"center", justifyContent:"center", flexShrink:0 }}>
             <span style={{ fontSize:14, color:C.cyan }}>✦</span>
@@ -350,51 +477,97 @@ const AIChat = ({ whoopData, currentWeek, recentActivities, onPlanChange, userNa
             </div>
             {m.clarifyingQuestions && !m.cqSubmitted && (
               <div style={{ maxWidth:"90%", marginTop:8, width:"100%" }}>
-                {m.clarifyingQuestions.map((q, qi) => {
-                  const key = `chat_${i}_${qi}`;
-                  const selected = chatCqSelections[key] || [];
-                  return (
-                    <div key={qi} style={{ background:C.card, borderRadius:12, padding:"12px 14px", marginBottom:6, border:`1px solid ${C.border}`, ...C.glass }}>
-                      <div style={{ fontFamily:C.fs, fontSize:13, color:C.text, marginBottom:10, lineHeight:1.4 }}>{q.question}</div>
-                      <div style={{ display:"flex", flexWrap:"wrap", gap:6 }}>
-                        {q.options.map((opt, oi) => {
-                          const on = selected.includes(opt);
-                          return (
-                            <button key={oi} onClick={() => {
-                              setChatCqSelections(prev => {
-                                const cur = prev[key] || [];
-                                return { ...prev, [key]: on ? cur.filter(x => x !== opt) : [...cur, opt] };
-                              });
-                            }} style={{
-                              padding:"6px 12px", borderRadius:20, cursor:"pointer",
-                              background: on ? `${C.cyan}22` : C.cardSolid,
-                              border: `1px solid ${on ? C.cyan : C.border}`,
-                              fontFamily:C.fm, fontSize:10, color: on ? C.cyan : C.muted, letterSpacing:1,
-                            }}>{opt}</button>
-                          );
-                        })}
-                      </div>
-                    </div>
+                {(() => {
+                  const normalizedAll = normalizeClarifyingQuestions(m.clarifyingQuestions);
+                  const msgKey = `chat_${i}`;
+                  const answered = answeredQuestions[msgKey] || [];
+                  const normalized = normalizedAll.filter((q) => !answeredQuestionIds.has(q.id) || answered.includes(q.id));
+                  const selectionsById = Object.fromEntries(
+                    normalized.map((q) => [q.id, chatCqSelections[`${msgKey}_${q.id}`] || []])
                   );
-                })}
-                <button onClick={() => {
-                  const answers = m.clarifyingQuestions.map((q, qi) => {
-                    const sel = chatCqSelections[`chat_${i}_${qi}`] || [];
-                    return `${q.question.replace("?","")}:  ${sel.join(", ") || "Not specified"}`;
-                  }).join(". ");
-                  setMessages(prev => prev.map((mm, mi) => mi === i ? {...mm, cqSubmitted:true} : mm));
-                  setMessages(prev => [...prev, { role:"user", content:answers, planChange:null }]);
-                  setLoading(true);
-                  fetch("/api/coach/chat", {
-                    method:"POST", headers:{"Content-Type":"application/json", ...(authToken ? {"Authorization":`Bearer ${authToken}`} : {})},
-                    body: JSON.stringify({ message:answers, whoopData, currentWeek:{ id:currentWeek?.id, label:currentWeek?.label, subtitle:currentWeek?.subtitle }, recentActivities:recentActivities?.slice(0,5) }),
-                  }).then(r=>r.json()).then(data => {
-                    const cqs2 = parseClarifyingQuestions(data.message);
-                    setMessages(prev => [...prev, { role:"assistant", content:data.message||"Something went wrong.", planChange:data.planChange||null, clarifyingQuestions:cqs2 }]);
-                  }).catch(() => {
-                    setMessages(prev => [...prev, { role:"assistant", content:"Connection error. Try again.", planChange:null }]);
-                  }).finally(() => setLoading(false));
-                }} style={{ width:"100%", padding:"12px", background:C.cyan, color:"#000", border:"none", borderRadius:10, cursor:"pointer", fontFamily:C.ff, fontSize:13, letterSpacing:2, marginTop:4 }}>CONFIRM →</button>
+                  const { byId, sequence } = getClarifyingFlow(normalized, selectionsById);
+                  const nextQuestionId = sequence.find((qid) => !answered.includes(qid)) || null;
+                  const activeQuestion = nextQuestionId ? byId.get(nextQuestionId) : null;
+                  const activeSelection = activeQuestion ? (selectionsById[activeQuestion.id] || []) : [];
+                  const allAnswered = sequence.length > 0 && sequence.every((qid) => answered.includes(qid));
+                  const questionIdx = activeQuestion ? Math.min(answered.length + 1, sequence.length) : sequence.length;
+
+                  return (
+                    <>
+                      {sequence.length > 0 && (
+                        <div style={{ fontFamily:C.fm, fontSize:8, color:C.muted, letterSpacing:2, marginBottom:6 }}>
+                          Question {questionIdx} of {sequence.length}
+                        </div>
+                      )}
+
+                      {activeQuestion && (
+                        <div style={{ background:C.card, borderRadius:12, padding:"12px 14px", marginBottom:6, border:`1px solid ${C.border}`, ...C.glass }}>
+                          <div style={{ fontFamily:C.fs, fontSize:13, color:C.text, marginBottom:10, lineHeight:1.4 }}>{activeQuestion.question}</div>
+                          <div style={{ display:"flex", flexWrap:"wrap", gap:6 }}>
+                            {activeQuestion.options.map((opt, oi) => {
+                              const on = activeSelection.includes(opt);
+                              return (
+                                <button key={oi} onClick={() => {
+                                  setChatCqSelections((prev) => {
+                                    const key = `${msgKey}_${activeQuestion.id}`;
+                                    const cur = prev[key] || [];
+                                    let next = [];
+                                    if (activeQuestion.type === "single_select") {
+                                      next = [opt];
+                                    } else {
+                                      next = on ? cur.filter((x) => x !== opt) : [...cur, opt];
+                                    }
+                                    return { ...prev, [key]: next };
+                                  });
+                                }} style={{
+                                  padding:"6px 12px", borderRadius:20, cursor:"pointer",
+                                  background: on ? `${C.cyan}22` : C.cardSolid,
+                                  border: `1px solid ${on ? C.cyan : C.border}`,
+                                  fontFamily:C.fm, fontSize:10, color: on ? C.cyan : C.muted, letterSpacing:1,
+                                }}>{opt}</button>
+                              );
+                            })}
+                          </div>
+                        </div>
+                      )}
+
+                      {activeQuestion && (
+                        <button
+                          onClick={() => {
+                            if (activeSelection.length === 0) return;
+                            const selectedNow = [...activeSelection];
+                            setAnsweredQuestions((prev) => {
+                              const cur = prev[msgKey] || [];
+                              if (cur.includes(activeQuestion.id)) return prev;
+                              return { ...prev, [msgKey]: [...cur, activeQuestion.id] };
+                            });
+                            setAnsweredQuestionIds((prev) => {
+                              const next = new Set(prev);
+                              next.add(activeQuestion.id);
+                              return next;
+                            });
+                            setAnsweredQuestionValues((prev) => ({ ...prev, [activeQuestion.id]: selectedNow }));
+                          }}
+                          disabled={activeSelection.length === 0}
+                          style={{ width:"100%", padding:"12px", background:activeSelection.length ? C.cyan : C.cardSolid, color:activeSelection.length ? "#000" : C.muted, border:"none", borderRadius:10, cursor:activeSelection.length ? "pointer" : "default", fontFamily:C.ff, fontSize:13, letterSpacing:2, marginTop:4 }}
+                        >
+                          CONFIRM ANSWER →
+                        </button>
+                      )}
+
+                      {allAnswered && (
+                        <button onClick={() => {
+                          const answers = sequence.map((qid) => {
+                            const q = byId.get(qid);
+                            const sel = selectionsById[qid] || [];
+                            return `${q?.question?.replace("?","")}:  ${sel.join(", ") || "Not specified"}`;
+                          }).join(". ");
+                          submitClarifyingAnswers(i, answers);
+                        }} style={{ width:"100%", padding:"12px", background:C.cyan, color:"#000", border:"none", borderRadius:10, cursor:"pointer", fontFamily:C.ff, fontSize:13, letterSpacing:2, marginTop:4 }}>FINAL CONFIRM →</button>
+                      )}
+                    </>
+                  );
+                })()}
               </div>
             )}
             {m.cqSubmitted && <div style={{ fontFamily:C.fm, fontSize:8, color:C.green, letterSpacing:2, marginTop:4 }}>✓ ANSWERS SENT</div>}
@@ -580,6 +753,11 @@ const SessionModal = ({ name, dayData, sess, weekId, onClose, onSessSwitch, sund
   const accent = name ? getAccent(name) : C.muted;
   const customContent = sess === "am" ? dayData?.am_session_custom : dayData?.pm_session_custom;
   const showCustom = !!(customContent && dayData?.ai_modified);
+  const currentBlocks = sess === "am" ? dayData?.am_session_blocks : dayData?.pm_session_blocks;
+  const hasManualEdits = Array.isArray(currentBlocks) && currentBlocks.some((b) => b?.is_modified);
+  const sessionStatus = hasManualEdits
+    ? { label: "MODIFIED", color: C.yellow }
+    : { label: "AI GENERATED", color: C.cyan };
 
   const enterEdit = () => {
     setEditName(name || "");
@@ -606,7 +784,13 @@ const SessionModal = ({ name, dayData, sess, weekId, onClose, onSessSwitch, sund
     setSaving(true);
     const blocksKey = sess === "am" ? "am_session_blocks" : "pm_session_blocks";
     const ordered = editBlocks.map((b,i) => ({ ...b, order:i }));
-    const update = { [blocksKey]: ordered, note: editNote };
+    const manuallyEditedBlocks = ordered.map((b) => ({ ...b, is_modified: true, is_ai_generated: false }));
+    const update = {
+      [blocksKey]: manuallyEditedBlocks,
+      note: editNote,
+      ai_modified: false,
+      ai_modification_note: null,
+    };
     try {
       // weekId is the UUID from training_weeks; training_days.week_id is the slug
       // Look up the slug first, then update training_days
@@ -633,13 +817,13 @@ const SessionModal = ({ name, dayData, sess, weekId, onClose, onSessSwitch, sund
     setEditBlocks(prev => [...prev, {
       id:uid(), type:"GENERAL", duration:20, rounds:null, order:prev.length,
       exercises:[{ id:uid(), name:"New exercise", sets:3, reps:"10", note:null }],
-      is_ai_generated:false, is_modified:false,
+      is_ai_generated:false, is_modified:true,
     }]);
   };
 
   const dupBlock = (idx) => {
     const b = editBlocks[idx];
-    const nb = { ...JSON.parse(JSON.stringify(b)), id:uid(), is_ai_generated:false };
+    const nb = { ...JSON.parse(JSON.stringify(b)), id:uid(), is_ai_generated:false, is_modified:true };
     setEditBlocks(prev => [...prev.slice(0,idx+1), nb, ...prev.slice(idx+1)]);
   };
 
@@ -648,8 +832,7 @@ const SessionModal = ({ name, dayData, sess, weekId, onClose, onSessSwitch, sund
   const updateBlock = (idx, updates) => {
     setEditBlocks(prev => prev.map((b,i) => {
       if (i !== idx) return b;
-      const modified = b.is_ai_generated ? true : b.is_modified;
-      return { ...b, ...updates, is_modified:modified };
+      return { ...b, ...updates, is_modified:true };
     }));
   };
 
@@ -809,6 +992,24 @@ const SessionModal = ({ name, dayData, sess, weekId, onClose, onSessSwitch, sund
               <div style={{ fontFamily:C.ff, fontSize:24, color:C.muted }}>SUNDAY SESSION</div>
             )}
             {w && <div style={{ fontFamily:C.fm, fontSize:8, color:C.muted, marginTop:4 }}>{w.duration}</div>}
+            {!dayData?.isRaceDay && (name || customContent) && (
+              <div
+                style={{
+                  display: "inline-block",
+                  marginTop: 8,
+                  background: `${sessionStatus.color}22`,
+                  border: `1px solid ${sessionStatus.color}44`,
+                  borderRadius: 20,
+                  padding: "3px 10px",
+                  fontFamily: C.fm,
+                  fontSize: 7,
+                  color: sessionStatus.color,
+                  letterSpacing: 2,
+                }}
+              >
+                {sessionStatus.label}
+              </div>
+            )}
           </div>
           <div style={{ display:"flex", gap:6 }}>
             <button onClick={enterEdit} style={{ background:C.card, border:`1px solid ${C.border}`, color:C.cyan, width:36, height:36, borderRadius:"50%", cursor:"pointer", fontSize:13, display:"flex", alignItems:"center", justifyContent:"center" }}>✏️</button>
@@ -924,9 +1125,13 @@ export default function App() {
   const [scenarioChanges, setScenarioChanges] = useState([]);
   const [showLabReview, setShowLabReview] = useState(false);
   const [labToast, setLabToast] = useState(null);
+  const [planBuilderOpen, setPlanBuilderOpen] = useState(false);
+  const [planBuilderDismissUntil, setPlanBuilderDismissUntil] = useState(0);
   const [labContext, setLabContext] = useState("");
   const [labTargetDay, setLabTargetDay] = useState(null);
   const [cqSelections, setCqSelections] = useState({});
+  const [labAnsweredQuestions, setLabAnsweredQuestions] = useState({});
+  const [labSessionId, setLabSessionId] = useState(createSessionId);
   const dataFetched = useRef(false);
 
   // ── Auth state ──────────────────────────────────────────────────────────────
@@ -967,6 +1172,14 @@ export default function App() {
     });
 
     return () => subscription.unsubscribe();
+  }, []);
+
+  useEffect(() => {
+    const raw = localStorage.getItem(PLAN_BUILDER_DISMISS_KEY);
+    const ts = Number(raw);
+    if (Number.isFinite(ts) && ts > 0) {
+      setPlanBuilderDismissUntil(ts);
+    }
   }, []);
 
   // Data fetches — only run once per session when profile is first loaded
@@ -1230,6 +1443,7 @@ export default function App() {
           currentWeek: week ? { id:week.id, label:week.label, subtitle:week.subtitle } : null,
           recentActivities: garminActivities.slice(0,3),
           scenarioChanges: scenarioChanges.length > 0 ? scenarioChanges : undefined,
+          session_id: labSessionId,
         }),
       });
       const data = await res.json();
@@ -1253,8 +1467,14 @@ export default function App() {
   };
 
   const labApplyAll = async () => {
-    for (const change of scenarioChanges) {
-      await handlePlanChange(change);
+    try {
+      for (const change of scenarioChanges) {
+        await handlePlanChange(change);
+      }
+    } catch (e) {
+      setLabToast(e?.message || "Failed to apply queued changes — tap to retry");
+      setTimeout(() => setLabToast(null), 5000);
+      return;
     }
     setScenarioChanges([]);
     setLabMessages([]);
@@ -1265,6 +1485,8 @@ export default function App() {
   const labDiscard = () => {
     setScenarioChanges([]);
     setLabMessages([]);
+    setCqSelections({});
+    setLabAnsweredQuestions({});
     setShowLabReview(false);
     setLabOpen(false);
   };
@@ -1280,6 +1502,18 @@ export default function App() {
 
   const handlePlanChange = async (planChange) => {
     const token = session?.access_token;
+    const normalizeWeekKey = (value) => String(value || "").toUpperCase().replace(/[^A-Z0-9]/g, "");
+    const resolveActualWeekCount = (weeksUpdated, expectedWeekRef) => {
+      const expectedNorm = normalizeWeekKey(expectedWeekRef);
+      for (const [actualWeekRef, actualCount] of Object.entries(weeksUpdated || {})) {
+        const actualNorm = normalizeWeekKey(actualWeekRef);
+        if (!actualNorm) continue;
+        if (actualNorm === expectedNorm || actualNorm.includes(expectedNorm) || expectedNorm.includes(actualNorm)) {
+          return Number(actualCount) || 0;
+        }
+      }
+      return 0;
+    };
     try {
       if (planChange.type === "add_supplement") {
         console.log("[handlePlanChange] add_supplement:", JSON.stringify(planChange));
@@ -1293,8 +1527,9 @@ export default function App() {
         });
         const body = await res.json().catch(() => ({}));
         console.log("[handlePlanChange] supplement update status:", res.status, "| body:", JSON.stringify(body));
+        if (!res.ok) throw new Error(body.error || "Supplement update failed — tap to retry");
         if (res.ok) await fetchSupplements();
-        return;
+        return { modifiedCount: 1 };
       }
 
       // modify_day — existing plan update logic
@@ -1310,15 +1545,49 @@ export default function App() {
       });
       const body = await res.json().catch(() => ({}));
       console.log("[handlePlanChange] update status:", res.status, "| body:", JSON.stringify(body));
-      if (!res.ok) {
-        console.log("[handlePlanChange] update FAILED — still calling fetchPlan to confirm DB state");
+
+      if (!res.ok) throw new Error(body.error || "Plan update failed — tap to retry");
+
+      let modifiedCount = 0;
+      let confirmedWeeksUpdated = null;
+      if (planChange.type === "remap_week") {
+        const expectedWeekCounts = {};
+        const fallbackWeekRef = planChange.week_id || "CURRENT WEEK";
+        for (const dayChange of (planChange.days || [])) {
+          const targetWeekRef = dayChange?.week_id || fallbackWeekRef;
+          expectedWeekCounts[targetWeekRef] = (expectedWeekCounts[targetWeekRef] || 0) + 1;
+        }
+
+        const weeksUpdated = body.weeks_updated || {};
+        confirmedWeeksUpdated = weeksUpdated;
+        for (const [weekRef, expectedCount] of Object.entries(expectedWeekCounts)) {
+          const actualCount = resolveActualWeekCount(weeksUpdated, weekRef);
+          if (actualCount === 0) {
+            throw new Error(`Week ${weekRef} failed to update — tap to retry`);
+          }
+          if (actualCount !== expectedCount) {
+            throw new Error(`Week ${weekRef} updated ${actualCount}/${expectedCount} sessions — tap to retry`);
+          }
+          modifiedCount += actualCount;
+        }
+
+        if (typeof body.total === "number" && body.total !== modifiedCount) {
+          throw new Error("Write confirmation mismatch — tap to retry");
+        }
       } else {
-        console.log("[handlePlanChange] update OK — calling fetchPlan");
+        modifiedCount = Array.isArray(body.updated) ? body.updated.length : 0;
+        if (modifiedCount === 0) {
+          throw new Error(`Week ${planChange.week_id || "selected week"} failed to update — tap to retry`);
+        }
       }
+
+      console.log("[handlePlanChange] update confirmed — calling fetchPlan");
       await fetchPlan(token);
       console.log("[handlePlanChange] fetchPlan complete");
+      return { modifiedCount, weeksUpdated: confirmedWeeksUpdated };
     } catch (e) {
       console.log("[handlePlanChange] caught error:", e.message);
+      throw e;
     }
   };
 
@@ -1400,6 +1669,89 @@ export default function App() {
   const todayAm  = todayDayData ? getEffAm(todayDayData) : null;
   const todayPm  = todayDayData?.pm || null;
   const flaggedBio = biomarkers.filter(b => b.flag === "HIGH" || b.flag === "LOW");
+  const noPlanLoaded = !planLoading && planBlocks.length === 0;
+  const planBuilderDismissed = noPlanLoaded && Date.now() < planBuilderDismissUntil;
+  const showNoPlanState = noPlanLoaded && !planBuilderDismissed;
+
+  const dismissPlanBuilderFor24h = () => {
+    const until = Date.now() + (24 * 60 * 60 * 1000);
+    setPlanBuilderDismissUntil(until);
+    localStorage.setItem(PLAN_BUILDER_DISMISS_KEY, String(until));
+  };
+
+  const openPlanBuilder = () => {
+    setPlanBuilderOpen(true);
+  };
+
+  const NoPlanState = ({ compact = false }) => {
+    if (compact) {
+      return (
+        <div style={{ padding: "20px 24px", display: "flex", justifyContent: "center" }}>
+          <button
+            onClick={openPlanBuilder}
+            style={{
+              padding: "10px 14px",
+              background: "transparent",
+              color: C.cyan,
+              border: `1px solid ${C.cyan}44`,
+              borderRadius: 10,
+              cursor: "pointer",
+              fontFamily: C.fm,
+              fontSize: 10,
+              letterSpacing: 2,
+            }}
+          >
+            BUILD MY PLAN
+          </button>
+        </div>
+      );
+    }
+
+    return (
+      <div style={{ display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", padding: "60px 24px", textAlign: "center" }}>
+        <div style={{ fontFamily: C.ff, fontSize: 28, letterSpacing: 3, color: C.muted, marginBottom: 8 }}>
+          NO TRAINING PLAN FOUND<span style={{ color: C.red }}>.</span>
+        </div>
+        <div style={{ fontFamily: C.fm, fontSize: 9, color: C.light, letterSpacing: 2, lineHeight: 1.8, marginBottom: 16 }}>
+          Build your personalized training structure now, or dismiss this reminder for 24 hours.
+        </div>
+        <div style={{ width: "100%", maxWidth: 320, display: "flex", flexDirection: "column", gap: 10 }}>
+          <button
+            onClick={openPlanBuilder}
+            style={{
+              padding: "12px 14px",
+              background: C.green,
+              color: "#000",
+              border: "none",
+              borderRadius: 10,
+              cursor: "pointer",
+              fontFamily: C.ff,
+              fontSize: 14,
+              letterSpacing: 2,
+            }}
+          >
+            BUILD MY PLAN
+          </button>
+          <button
+            onClick={dismissPlanBuilderFor24h}
+            style={{
+              padding: "10px 12px",
+              background: "transparent",
+              color: C.muted,
+              border: `1px solid ${C.border}`,
+              borderRadius: 10,
+              cursor: "pointer",
+              fontFamily: C.fm,
+              fontSize: 10,
+              letterSpacing: 2,
+            }}
+          >
+            I'LL DO IT LATER
+          </button>
+        </div>
+      </div>
+    );
+  };
 
   return (
     <div style={{ minHeight:"100vh", background:C.bg, color:C.text, fontFamily:C.fs, maxWidth:480, margin:"0 auto", paddingBottom:80 }}>
@@ -1415,7 +1767,11 @@ export default function App() {
         </div>
       )}
 
-      {nav === "today" && (
+      {nav === "today" && showNoPlanState && <NoPlanState />}
+
+      {nav === "today" && noPlanLoaded && planBuilderDismissed && <NoPlanState compact />}
+
+      {nav === "today" && !noPlanLoaded && (
         <div>
           <div style={{ padding:"16px 20px 12px", display:"flex", justifyContent:"space-between", alignItems:"center" }}>
             <div>
@@ -1794,7 +2150,7 @@ export default function App() {
             </div>
           )}
           <div style={{ marginTop:24, marginBottom:24, marginLeft:20, marginRight:20 }}>
-            <button onClick={() => { setLabOpen(true); setLabMessages([]); setCqSelections({}); const wk = week?.label?.split("·")[1]?.trim() || week?.label || ""; const selD = selDay || todayDayName; setLabContext(`${wk} · ${selD}`); setLabTargetDay(selD); }}
+            <button onClick={() => { setLabOpen(true); setLabMessages([]); setCqSelections({}); setLabAnsweredQuestions({}); setLabSessionId(createSessionId()); const wk = week?.label?.split("·")[1]?.trim() || week?.label || ""; const selD = selDay || todayDayName; setLabContext(`${wk} · ${selD}`); setLabTargetDay(selD); }}
               style={{ width:"100%", padding:"14px", background:`${C.cyan}08`, border:`1px solid ${C.cyan}22`, borderRadius:C.radius, cursor:"pointer", display:"flex", alignItems:"center", justifyContent:"center", gap:10, ...C.glass }}>
               <span style={{ fontSize:16 }}>🧪</span>
               <span style={{ fontFamily:C.ff, fontSize:14, color:C.cyan, letterSpacing:2 }}>RUN A SCENARIO</span>
@@ -1802,13 +2158,39 @@ export default function App() {
           </div>
           <div style={{ margin:"0 20px 20px" }}>
             <div style={{ fontFamily:C.fm, fontSize:8, color:C.muted, letterSpacing:3, marginBottom:10 }}>WEEKLY STRUCTURE</div>
-            {[["MON","HYROX SESSION",C.red],["TUE","THRESHOLD RUN",C.blue],["WED","STRENGTH + Z2 PM","#aaa"],["THU","TEMPO / VO2 MAX",C.blue],["FRI","HYROX SESSION",C.red],["SAT","LONG RUN",C.green],["SUN","MOBILITY OR PLYO+CORE",C.green]].map(([day,label,color]) => (
-              <div key={day} style={{ display:"flex", alignItems:"center", gap:12, padding:"10px 0", borderBottom:`1px solid ${C.border}` }}>
-                <div style={{ width:8, height:8, borderRadius:"50%", background:color, flexShrink:0 }} />
-                <span style={{ fontFamily:C.ff, fontSize:13, color, minWidth:36 }}>{day}</span>
-                <span style={{ fontFamily:C.fm, fontSize:8, color:C.muted, letterSpacing:1 }}>{label}</span>
-              </div>
-            ))}
+            {(week?.days || []).map((d) => {
+              const selectedSunday = sundayChoice[week?.id || weekId];
+              const sundaySession = d.isSunday
+                ? (selectedSunday === "mobility"
+                  ? "SUNDAY — Mobility Protocol"
+                  : selectedSunday === "plyo"
+                    ? "SUNDAY — Plyo & Core"
+                    : null)
+                : null;
+
+              const primarySession = d.isRaceDay ? "🏁 RACE DAY" : (d.isSunday ? sundaySession : (d.am || d.pm));
+              const color = d.isRaceDay ? C.red : (primarySession ? getAccent(primarySession) : C.light);
+
+              let label = "REST";
+              if (d.isRaceDay) {
+                label = "RACE DAY";
+              } else if (d.isSunday) {
+                label = selectedSunday === "mobility" ? "MOBILITY PROTOCOL"
+                  : selectedSunday === "plyo" ? "PLYO + CORE"
+                  : "CHOOSE SUNDAY SESSION";
+              } else if (primarySession) {
+                label = getTypeLabel(primarySession);
+                if (d.pm) label = `${label} + PM`;
+              }
+
+              return (
+                <div key={d.day} style={{ display:"flex", alignItems:"center", gap:12, padding:"10px 0", borderBottom:`1px solid ${C.border}` }}>
+                  <div style={{ width:8, height:8, borderRadius:"50%", background:color, flexShrink:0 }} />
+                  <span style={{ fontFamily:C.ff, fontSize:13, color, minWidth:36 }}>{d.day}</span>
+                  <span style={{ fontFamily:C.fm, fontSize:8, color:C.muted, letterSpacing:1 }}>{label}</span>
+                </div>
+              );
+            })}
           </div>
         </div>
       )}
@@ -2197,6 +2579,22 @@ export default function App() {
 
       <AIChat whoopData={whoopData} currentWeek={week} recentActivities={recentActivities} onPlanChange={handlePlanChange} userName={profile?.name} persona={coachPersona} onPersonaChange={handlePersonaChange} proactiveBadge={proactiveBadge} authToken={session?.access_token} />
 
+      <PlanBuilder
+        open={planBuilderOpen}
+        profile={profile}
+        authToken={session?.access_token}
+        onClose={() => setPlanBuilderOpen(false)}
+        onGenerated={async ({ builderInputs }) => {
+          setPlanBuilderOpen(false);
+          localStorage.removeItem(PLAN_BUILDER_DISMISS_KEY);
+          setPlanBuilderDismissUntil(0);
+          setPlanLoading(true);
+          await fetchPlan(session?.access_token);
+          setNav("plan");
+          setProfile((prev) => (prev ? { ...prev, plan_builder: builderInputs } : prev));
+        }}
+      />
+
       {selDay && (
         <SessionModal name={modalName} dayData={dayData} sess={sess} weekId={weekId} onClose={() => setSelDay(null)} onSessSwitch={setSess} sundayChoice={sundayChoice} setSundayChoice={setSundayChoice} supabase={supabase} session={session} onSaved={() => fetchPlan(session?.access_token)} />
       )}
@@ -2234,41 +2632,90 @@ export default function App() {
                   </div>
                   {m.clarifyingQuestions && !m.cqSubmitted && (
                     <div style={{ maxWidth:"95%", marginTop:6, width:"100%" }}>
-                      {m.clarifyingQuestions.map((q, qi) => {
-                        const key = `${i}_${qi}`;
-                        const selected = cqSelections[key] || [];
-                        return (
-                          <div key={qi} style={{ background:C.card, borderRadius:10, padding:"10px 12px", marginBottom:6, border:`1px solid ${C.border}` }}>
-                            <div style={{ fontFamily:C.fs, fontSize:11, color:C.text, marginBottom:8, lineHeight:1.4 }}>{q.question}</div>
-                            <div style={{ display:"flex", flexWrap:"wrap", gap:6 }}>
-                              {q.options.map((opt, oi) => {
-                                const on = selected.includes(opt);
-                                return (
-                                  <button key={oi} onClick={() => {
-                                    setCqSelections(prev => {
-                                      const cur = prev[key] || [];
-                                      return { ...prev, [key]: on ? cur.filter(x => x !== opt) : [...cur, opt] };
-                                    });
-                                  }} style={{
-                                    padding:"5px 10px", borderRadius:16, cursor:"pointer",
-                                    background: on ? `${C.cyan}22` : C.cardSolid,
-                                    border: `1px solid ${on ? C.cyan : C.border}`,
-                                    fontFamily:C.fm, fontSize:9, color: on ? C.cyan : C.muted, letterSpacing:1,
-                                  }}>{opt}</button>
-                                );
-                              })}
-                            </div>
-                          </div>
+                      {(() => {
+                        const normalized = normalizeClarifyingQuestions(m.clarifyingQuestions);
+                        const msgKey = `lab_${i}`;
+                        const selectionsById = Object.fromEntries(
+                          normalized.map((q) => [q.id, cqSelections[`${msgKey}_${q.id}`] || []])
                         );
-                      })}
-                      <button onClick={() => {
-                        const answers = m.clarifyingQuestions.map((q, qi) => {
-                          const sel = cqSelections[`${i}_${qi}`] || [];
-                          return `${q.question.replace("?","")}:  ${sel.join(", ") || "Not specified"}`;
-                        }).join(". ");
-                        setLabMessages(prev => prev.map((mm, mi) => mi === i ? {...mm, cqSubmitted:true} : mm));
-                        labSend(answers);
-                      }} style={{ width:"100%", padding:"10px", background:C.cyan, color:"#000", border:"none", borderRadius:8, cursor:"pointer", fontFamily:C.ff, fontSize:12, letterSpacing:2, marginTop:4 }}>CONFIRM →</button>
+                        const { byId, sequence } = getClarifyingFlow(normalized, selectionsById);
+                        const answered = labAnsweredQuestions[msgKey] || [];
+                        const nextQuestionId = sequence.find((qid) => !answered.includes(qid)) || null;
+                        const activeQuestion = nextQuestionId ? byId.get(nextQuestionId) : null;
+                        const activeSelection = activeQuestion ? (selectionsById[activeQuestion.id] || []) : [];
+                        const allAnswered = sequence.length > 0 && sequence.every((qid) => answered.includes(qid));
+                        const questionIdx = activeQuestion ? Math.min(answered.length + 1, sequence.length) : sequence.length;
+
+                        return (
+                          <>
+                            {sequence.length > 0 && (
+                              <div style={{ fontFamily:C.fm, fontSize:7, color:C.muted, letterSpacing:2, marginBottom:6 }}>
+                                Question {questionIdx} of {sequence.length}
+                              </div>
+                            )}
+
+                            {activeQuestion && (
+                              <div style={{ background:C.card, borderRadius:10, padding:"10px 12px", marginBottom:6, border:`1px solid ${C.border}` }}>
+                                <div style={{ fontFamily:C.fs, fontSize:11, color:C.text, marginBottom:8, lineHeight:1.4 }}>{activeQuestion.question}</div>
+                                <div style={{ display:"flex", flexWrap:"wrap", gap:6 }}>
+                                  {activeQuestion.options.map((opt, oi) => {
+                                    const on = activeSelection.includes(opt);
+                                    return (
+                                      <button key={oi} onClick={() => {
+                                        setCqSelections((prev) => {
+                                          const key = `${msgKey}_${activeQuestion.id}`;
+                                          const cur = prev[key] || [];
+                                          let next = [];
+                                          if (activeQuestion.type === "single_select") {
+                                            next = [opt];
+                                          } else {
+                                            next = on ? cur.filter((x) => x !== opt) : [...cur, opt];
+                                          }
+                                          return { ...prev, [key]: next };
+                                        });
+                                      }} style={{
+                                        padding:"5px 10px", borderRadius:16, cursor:"pointer",
+                                        background: on ? `${C.cyan}22` : C.cardSolid,
+                                        border: `1px solid ${on ? C.cyan : C.border}`,
+                                        fontFamily:C.fm, fontSize:9, color: on ? C.cyan : C.muted, letterSpacing:1,
+                                      }}>{opt}</button>
+                                    );
+                                  })}
+                                </div>
+                              </div>
+                            )}
+
+                            {activeQuestion && (
+                              <button
+                                onClick={() => {
+                                  if (activeSelection.length === 0) return;
+                                  setLabAnsweredQuestions((prev) => {
+                                    const cur = prev[msgKey] || [];
+                                    if (cur.includes(activeQuestion.id)) return prev;
+                                    return { ...prev, [msgKey]: [...cur, activeQuestion.id] };
+                                  });
+                                }}
+                                disabled={activeSelection.length === 0}
+                                style={{ width:"100%", padding:"10px", background:activeSelection.length ? C.cyan : C.cardSolid, color:activeSelection.length ? "#000" : C.muted, border:"none", borderRadius:8, cursor:activeSelection.length ? "pointer" : "default", fontFamily:C.ff, fontSize:12, letterSpacing:2, marginTop:4 }}
+                              >
+                                CONFIRM ANSWER →
+                              </button>
+                            )}
+
+                            {allAnswered && (
+                              <button onClick={() => {
+                                const answers = sequence.map((qid) => {
+                                  const q = byId.get(qid);
+                                  const sel = selectionsById[qid] || [];
+                                  return `${q?.question?.replace("?","")}:  ${sel.join(", ") || "Not specified"}`;
+                                }).join(". ");
+                                setLabMessages(prev => prev.map((mm, mi) => mi === i ? {...mm, cqSubmitted:true} : mm));
+                                labSend(answers);
+                              }} style={{ width:"100%", padding:"10px", background:C.cyan, color:"#000", border:"none", borderRadius:8, cursor:"pointer", fontFamily:C.ff, fontSize:12, letterSpacing:2, marginTop:4 }}>FINAL CONFIRM →</button>
+                            )}
+                          </>
+                        );
+                      })()}
                     </div>
                   )}
                   {m.cqSubmitted && <div style={{ fontFamily:C.fm, fontSize:7, color:C.green, letterSpacing:2, marginTop:3 }}>✓ ANSWERS SENT</div>}
