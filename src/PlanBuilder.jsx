@@ -67,6 +67,7 @@ export default function PlanBuilder({ user, session, onComplete, onDismiss }) {
           <button type="button" onClick={onDismiss} style={{ padding: "16px 20px", background: "transparent", color: "#888", border: "1px solid #2a2a2a", borderRadius: 12, fontSize: 12, cursor: "pointer" }}>CANCEL</button>
         </div>
       </div>
+      </div>
     </>
   );
 }
