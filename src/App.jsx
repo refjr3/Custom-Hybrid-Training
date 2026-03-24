@@ -1864,264 +1864,184 @@ export default function App() {
 
       {nav === "today" && showNoPlanState && <NoPlanState />}
 
-      {nav === "today" && (
-        <div>
-          <div style={{ padding:"16px 20px 12px", display:"flex", justifyContent:"space-between", alignItems:"center" }}>
-            <div>
-              <div style={{ fontFamily:C.fm, fontSize:7, color:C.muted, letterSpacing:3, textTransform:"uppercase" }}>HYBRID PERFORMANCE OS</div>
-              <div style={{ fontFamily:C.ff, fontSize:26, letterSpacing:2, lineHeight:1, marginTop:2 }}>{profile?.name?.toUpperCase() || "ATHLETE"}<span style={{ color:C.red }}>.</span></div>
+      {nav === "today" && (() => {
+        const cardGlass = {
+          background: "rgba(255,255,255,0.04)",
+          border: "1px solid rgba(255,255,255,0.10)",
+          borderRadius: 16,
+          padding: 20,
+          ...C.glass,
+        };
+        const darkCardGlass = {
+          background: "rgba(255,255,255,0.02)",
+          border: "1px solid rgba(255,255,255,0.08)",
+          borderRadius: 16,
+          padding: 20,
+          ...C.glass,
+        };
+        const headerDate = new Date().toLocaleDateString("en-US", {
+          weekday: "long",
+          month: "long",
+          day: "numeric",
+        }).toUpperCase();
+        const athleteName = profile?.name?.toUpperCase() || "ATHLETE";
+        const todaySessionName = todayDayData ? getSessionNameForDay(todayDayData, "am") : null;
+        const todayMeta = deriveSessionMeta(todaySessionName, todayDayData);
+        const todayWorkout = todaySessionName ? WL[todaySessionName] : null;
+        const zoneByKey = {
+          hyrox: { zone: "RACE PACE", hr: "150-170 BPM" },
+          strength: { zone: "POWER", hr: "N/A" },
+          zone2: { zone: "Z2", hr: "132-151 BPM" },
+          threshold: { zone: "Z4", hr: "150-168 BPM" },
+          tempo: { zone: "Z3-Z4", hr: "147-168 BPM" },
+          recovery: { zone: "Z1-Z2", hr: "<132 BPM" },
+          race: { zone: "RACE", hr: "VARIABLE" },
+          rest: { zone: "REST", hr: "N/A" },
+        };
+        const todayZone = zoneByKey[todayMeta.key] || zoneByKey.rest;
+        const todayDuration = todayWorkout?.duration || "—";
+
+        const tomorrowDayName = todayDayNames[(new Date().getDay() + 1) % 7];
+        const tomorrowDayData = week ? (week.days.find((d) => d.day === tomorrowDayName) || null) : null;
+        const tomorrowSessionName = tomorrowDayData ? getSessionNameForDay(tomorrowDayData, "am") : null;
+        const tomorrowMeta = deriveSessionMeta(tomorrowSessionName, tomorrowDayData);
+        const tomorrowWorkout = tomorrowSessionName ? WL[tomorrowSessionName] : null;
+        const tomorrowDuration = tomorrowWorkout?.duration || "—";
+
+        const racesList = Array.isArray(profile?.races) ? profile.races : [];
+        const primaryRace = racesList.find((r) => r?.is_primary && r?.date) || racesList.find((r) => r?.date) || null;
+        const raceName = primaryRace?.name || profile?.target_race_name || null;
+        const raceDate = primaryRace?.date || profile?.target_race_date || null;
+        const hasRaceCountdown = !!(raceName && raceDate);
+        const raceDateObj = raceDate ? new Date(`${raceDate}T00:00:00`) : null;
+        const todayDateObj = new Date();
+        const todayStart = new Date(todayDateObj.getFullYear(), todayDateObj.getMonth(), todayDateObj.getDate());
+        const daysAway = raceDateObj ? Math.max(0, Math.ceil((raceDateObj.getTime() - todayStart.getTime()) / (1000 * 60 * 60 * 24))) : null;
+
+        const recoveryHistory = [
+          ...(Array.isArray(whoopData?.recovery_history) ? whoopData.recovery_history : []),
+          ...(Array.isArray(whoopData?.recovery?.history) ? whoopData.recovery.history : []),
+        ]
+          .map((v) => Number(v?.score ?? v))
+          .filter((n) => Number.isFinite(n))
+          .slice(-7);
+        const recoveryTrend = recoveryHistory.length > 0
+          ? Math.round(recoveryHistory.reduce((s, n) => s + n, 0) / recoveryHistory.length)
+          : rec;
+        const plannedForWeek = (week?.days || []).filter((d) => getSessionNameForDay(d, "am") || d?.pm).length;
+        const completedForWeek = (week?.days || []).filter((d) => {
+          const dayDateKey = getDayDateKey(d);
+          if (!dayDateKey) return false;
+          return garminActivities.some((a) => a.start_time?.startsWith(dayDateKey));
+        }).length;
+        const compliance = garminConnected
+          ? (plannedForWeek > 0 ? Math.round((completedForWeek / plannedForWeek) * 100) : 80)
+          : 80;
+        const readinessScore = Math.max(0, Math.min(100, Math.round(recoveryTrend * 0.6 + compliance * 0.4)));
+        const readinessColor = readinessScore > 75 ? C.green : readinessScore >= 50 ? C.yellow : C.red;
+
+        return (
+          <div style={{ padding: "0 16px 16px", display: "flex", flexDirection: "column", gap: 16, overflowX: "hidden" }}>
+            <div style={{ ...cardGlass, paddingBottom: 14 }}>
+              <div style={{ fontFamily: C.fm, fontSize: 9, color: C.muted, letterSpacing: 2.5, textTransform: "uppercase" }}>
+                {headerDate}
+              </div>
+              <div style={{ fontFamily: C.ff, fontSize: 38, color: C.text, lineHeight: 1, letterSpacing: 1, marginTop: 8 }}>
+                {athleteName}
+              </div>
+              <div style={{ height: 1, background: "rgba(0,243,255,0.7)", marginTop: 12 }} />
             </div>
-            <div style={{ fontFamily:C.fm, fontSize:8, color:C.muted, letterSpacing:2, textAlign:"right" }}>
-              {week?.phase}<br/><span style={{ color:C.text }}>{week?.label?.split("·")[1]?.trim() || week?.label}</span>
-            </div>
-          </div>
 
-          <div style={{ padding:"8px 20px 20px" }}>
-            {!whoopConnected && !whoopLoading ? (
-              <div style={{ background:C.card, borderRadius:C.radius, padding:"28px 20px", textAlign:"center", border:`1px solid ${C.border}`, ...C.glass }}>
-                <div style={{ fontFamily:C.ff, fontSize:20, color:C.muted, marginBottom:8 }}>WHOOP NOT CONNECTED</div>
-                <div style={{ fontFamily:C.fm, fontSize:9, color:C.muted, letterSpacing:2, marginBottom:16 }}>Connect to see live recovery data</div>
-                <a href="/api/auth/login" style={{ display:"inline-block", background:C.green, color:"#000", padding:"14px 28px", height:48, boxSizing:"border-box", fontFamily:C.ff, fontSize:14, letterSpacing:2, textDecoration:"none", borderRadius:10, textTransform:"uppercase" }}>CONNECT WHOOP</a>
+            <div style={{ ...cardGlass, boxShadow: `0 0 18px ${rc}33` }}>
+              <div style={{ display: "flex", justifyContent: "center", marginBottom: 16 }}>
+                <Ring score={rec} size={170} stroke={14} color={rc} label="RECOVERY" sublabel={whoopLabel(rec)} glowEffect />
               </div>
-            ) : whoopLoading ? (
-              <div style={{ display:"flex", justifyContent:"center", alignItems:"center", height:200 }}>
-                <div style={{ fontFamily:C.fm, fontSize:9, color:C.muted, letterSpacing:2 }}>LOADING...</div>
-              </div>
-            ) : (
-              <>
-                <div style={{ display:"flex", justifyContent:"center", marginBottom:24 }}>
-                  <Ring score={rec} size={170} stroke={14} color={rc} label="RECOVERY" sublabel={whoopLabel(rec)} glowEffect />
-                </div>
-                <div style={{ display:"flex", gap:12, justifyContent:"center", marginBottom:20 }}>
-                  <Ring score={sleep} size={80} stroke={8} color={C.blue} label="SLEEP" />
-                  <Ring score={Math.round((strain/21)*100)} size={80} stroke={8} color={C.orange || "#FF7700"} label="STRAIN" sublabel={`${strain}`} />
-                  <Ring score={Math.min(Math.round((sleepHours/9)*100),100)} size={80} stroke={8} color={C.muted} label="HRS" sublabel={`${sleepHours}h`} />
-                </div>
-                <div style={{ background:`${rc}10`, border:`1px solid ${rc}22`, borderRadius:C.radius, padding:"14px 18px", marginBottom:16, boxShadow:glow(rc,0.15), ...C.glass }}>
-                  <div style={{ fontFamily:C.fm, fontSize:7, color:rc, letterSpacing:3, fontWeight:700, marginBottom:6, textTransform:"uppercase" }}>● {whoopLabel(rec)} DAY</div>
-                  <div style={{ fontFamily:C.fs, fontSize:14, color:C.text, lineHeight:1.5 }}>{whoopMsg(rec)}</div>
-                  <div style={{ fontFamily:C.fm, fontSize:7, color:C.muted, marginTop:8, letterSpacing:2 }}>HRV {hrv}ms · RHR {rhr}bpm · SLEEP {sleepEff}%</div>
-                </div>
-                <div style={{ display:"flex", gap:8 }}>
-                  <StatPill label="HRV" value={`${hrv}ms`} />
-                  <StatPill label="RHR" value={`${rhr}`} />
-                  <StatPill label="EFFICIENCY" value={`${sleepEff}%`} />
-                </div>
-              </>
-            )}
-          </div>
-
-          {(() => {
-            const recScore = whoopData ? Math.min(100, Math.max(0, whoopData.recovery?.score || 0)) : null;
-            const currentWeekDays = (planBlocks[0]?.weeks?.[0]?.days) || [];
-            const plannedSessions = currentWeekDays.filter(d => d.am).length;
-            const completedSessions = currentWeekDays.filter(d => {
-              const dd = d.date?.split(" ")[0];
-              return garminActivities.some(a => a.start_time?.startsWith(dd || "___"));
-            }).length;
-            const complianceScore = plannedSessions > 0 ? Math.round((completedSessions / plannedSessions) * 100) : 50;
-            const vo2Vals = unifiedMetrics.filter(m => m.vo2_max).slice(0, 5);
-            const vo2Score = vo2Vals.length >= 2 ? (Number(vo2Vals[0].vo2_max) >= Number(vo2Vals[vo2Vals.length-1].vo2_max) ? 80 : 50) : 50;
-            const sleepScore = whoopData?.sleep?.score || 50;
-            const flaggedCount = biomarkers.filter(b => b.flag === "HIGH" || b.flag === "LOW").length;
-            const bioScore = Math.max(0, 100 - flaggedCount * 20);
-            const components = [
-              { label:"RECOVERY TREND", score: recScore ?? 50, weight:0.30, color: (recScore??50) >= 67 ? C.green : (recScore??50) >= 34 ? C.yellow : C.red },
-              { label:"COMPLIANCE", score: complianceScore, weight:0.25, color: complianceScore >= 80 ? C.green : complianceScore >= 50 ? C.yellow : C.red },
-              { label:"VO2 MAX TREND", score: vo2Score, weight:0.20, color: vo2Score >= 70 ? C.green : vo2Score >= 40 ? C.yellow : C.red },
-              { label:"SLEEP QUALITY", score: sleepScore, weight:0.15, color: sleepScore >= 70 ? C.green : sleepScore >= 40 ? C.yellow : C.red },
-              { label:"BIOMARKERS", score: bioScore, weight:0.10, color: bioScore >= 70 ? C.green : bioScore >= 40 ? C.yellow : C.red },
-            ];
-            const readiness = Math.round(components.reduce((s,c) => s + c.score * c.weight, 0));
-            const rColor = readiness >= 75 ? C.green : readiness >= 50 ? C.yellow : C.red;
-            return (
-              <div style={{ padding:"0 20px 16px" }}>
-                <button onClick={() => setShowReadinessBreakdown(p => !p)} style={{ width:"100%", background:C.card, borderRadius:C.radius, padding:"16px 18px", border:`1px solid ${rColor}22`, cursor:"pointer", textAlign:"left", boxShadow:glow(rColor,0.1), ...C.glass }}>
-                  <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center" }}>
-                    <div>
-                      <div style={{ fontFamily:C.fm, fontSize:7, color:C.muted, letterSpacing:3, marginBottom:4 }}>RACE READINESS</div>
-                      <div style={{ fontFamily:C.ff, fontSize:36, color:rColor, fontWeight:700, lineHeight:1 }}>{readiness}</div>
-                    </div>
-                    <Ring score={readiness} size={56} stroke={5} color={rColor} />
-                  </div>
-                </button>
-                {showReadinessBreakdown && (
-                  <div style={{ marginTop:8, display:"flex", flexDirection:"column", gap:4 }}>
-                    {components.map((c,i) => (
-                      <div key={i} style={{ display:"flex", alignItems:"center", gap:10, padding:"8px 12px", background:C.card, borderRadius:8, border:`1px solid ${C.border}` }}>
-                        <div style={{ fontFamily:C.fm, fontSize:7, color:C.muted, letterSpacing:2, flex:1 }}>{c.label} ({Math.round(c.weight*100)}%)</div>
-                        <div style={{ width:60, height:4, borderRadius:2, background:C.cardSolid, overflow:"hidden" }}>
-                          <div style={{ width:`${c.score}%`, height:"100%", background:c.color, borderRadius:2 }} />
-                        </div>
-                        <div style={{ fontFamily:C.ff, fontSize:14, color:c.color, minWidth:28, textAlign:"right" }}>{c.score}</div>
-                      </div>
-                    ))}
-                  </div>
-                )}
-              </div>
-            );
-          })()}
-
-          {garminActivities.length > 0 && (
-            <div style={{ padding:"0 20px 16px" }}>
-              <div style={{ fontFamily:C.fm, fontSize:7, color:C.muted, letterSpacing:3, marginBottom:8, textTransform:"uppercase" }}>LAST ACTIVITY</div>
-              {(() => {
-                const a = garminActivities[0];
-                return (
-                  <div style={{ background:C.card, borderRadius:C.radius, padding:"14px 16px", border:`1px solid ${C.border}`, ...C.glass }}>
-                    <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:8 }}>
-                      <div style={{ fontFamily:C.ff, fontSize:17, color:C.text, letterSpacing:1 }}>{a.name || a.activity_type}</div>
-                      <div style={{ fontFamily:C.fm, fontSize:7, color:C.muted, letterSpacing:2 }}>
-                        {a.start_time ? new Date(a.start_time).toLocaleDateString("en-US",{month:"short",day:"numeric"}).toUpperCase() : ""}
-                      </div>
-                    </div>
-                    <div style={{ display:"flex", gap:16 }}>
-                      {a.distance_meters > 0 && <div><div style={{ fontFamily:C.fm, fontSize:6, color:C.muted, letterSpacing:2 }}>DISTANCE</div><div style={{ fontFamily:C.ff, fontSize:20, color:C.cyan }}>{(a.distance_meters/1000).toFixed(1)}km</div></div>}
-                      {a.duration_seconds > 0 && <div><div style={{ fontFamily:C.fm, fontSize:6, color:C.muted, letterSpacing:2 }}>DURATION</div><div style={{ fontFamily:C.ff, fontSize:20, color:C.text }}>{Math.floor(a.duration_seconds/60)}m</div></div>}
-                      {a.avg_hr > 0 && <div><div style={{ fontFamily:C.fm, fontSize:6, color:C.muted, letterSpacing:2 }}>AVG HR</div><div style={{ fontFamily:C.ff, fontSize:20, color:C.red }}>{a.avg_hr}</div></div>}
-                    </div>
-                  </div>
-                );
-              })()}
-            </div>
-          )}
-
-          {weeklyReview && new Date().getDay() === 0 && (
-            <div style={{ padding:"0 20px 16px" }}>
-              <div style={{ background:`${C.cyan}06`, border:`1px solid ${C.cyan}22`, borderRadius:C.radius, padding:"16px 18px", ...C.glass }}>
-                <div style={{ display:"flex", alignItems:"center", gap:8, marginBottom:10 }}>
-                  <span style={{ fontSize:16 }}>📊</span>
-                  <div style={{ fontFamily:C.ff, fontSize:16, color:C.cyan, letterSpacing:2 }}>WEEKLY REVIEW</div>
-                </div>
-                <div style={{ fontFamily:C.fs, fontSize:13, color:C.text, lineHeight:1.7 }}>{renderMarkdown(weeklyReview)}</div>
-              </div>
-            </div>
-          )}
-
-          {proactiveMessages.length > 0 && (
-            <div style={{ padding:"0 20px 16px" }}>
-              {proactiveMessages.map((m, i) => (
-                <div key={i} style={{ background:`${C.cyan}08`, border:`1px solid ${C.cyan}22`, borderRadius:C.radius, padding:"14px 16px", marginBottom:i < proactiveMessages.length-1 ? 8 : 0, ...C.glass }}>
-                  <div style={{ display:"flex", alignItems:"center", gap:8, marginBottom:6 }}>
-                    <span style={{ fontSize:14, color:C.cyan }}>✦</span>
-                    <div style={{ fontFamily:C.fm, fontSize:7, color:C.cyan, letterSpacing:3, textTransform:"uppercase" }}>COACH INSIGHT</div>
-                  </div>
-                  <div style={{ fontFamily:C.fs, fontSize:13, color:C.text, lineHeight:1.6 }}>{m.content}</div>
-                </div>
-              ))}
-            </div>
-          )}
-
-          {synthesisNote && (
-            <div style={{ padding:"0 20px 16px" }}>
-              <div style={{ background:"#FF770015", border:"1px solid #FF770033", borderRadius:14, padding:"14px 16px" }}>
-                <div style={{ display:"flex", alignItems:"center", gap:8, marginBottom:6 }}>
-                  <span style={{ fontSize:14 }}>⚡</span>
-                  <div style={{ fontFamily:C.fm, fontSize:8, color:"#FF7700", letterSpacing:3, fontWeight:700 }}>ADAPTIVE COACHING</div>
-                </div>
-                <div style={{ fontFamily:C.fs, fontSize:13, color:C.text, lineHeight:1.5 }}>{synthesisNote}</div>
-              </div>
-            </div>
-          )}
-
-          {planBlocks.length === 0 && !planLoading && (
-            <div style={{ padding: "0 20px 20px", textAlign: "center" }}>
-              <div style={{ color: "#888", letterSpacing: 3, fontSize: 11, marginBottom: 12 }}>NO TRAINING PLAN</div>
-              <button onClick={() => setPlanBuilderOpen(true)} style={{ background: "#00F3FF", color: "#000", border: "none", borderRadius: 12, padding: "16px 32px", fontSize: 13, fontWeight: 700, letterSpacing: 2, cursor: "pointer" }}>BUILD MY PLAN</button>
-            </div>
-          )}
-
-          <div style={{ padding:"0 20px 20px" }}>
-            <div style={{ fontFamily:C.fm, fontSize:8, color:C.muted, letterSpacing:3, marginBottom:12 }}>TODAY · {todayDayName}</div>
-            {todayDayData?.isRaceDay ? (
-              <div onClick={() => { setSelDay(todayDayName); setSess("am"); }} style={{ background:`${C.red}22`, border:`1px solid ${C.red}44`, borderRadius:16, padding:"20px", textAlign:"center", cursor:"pointer" }}>
-                <div style={{ fontFamily:C.ff, fontSize:32, color:C.red }}>🏁 RACE DAY</div>
-                <div style={{ fontFamily:C.ff, fontSize:18, color:C.red }}>MIAMI · APR 4</div>
-              </div>
-            ) : todayDayData?.isSunday ? (
-              <div style={{ background:C.card, borderRadius:16, padding:"16px", border:`1px solid ${C.border}` }}>
-                <div style={{ fontFamily:C.fm, fontSize:8, color:C.muted, letterSpacing:3, marginBottom:12 }}>SUNDAY · CHOOSE</div>
-                <div style={{ display:"flex", gap:10 }}>
-                  {[["mobility","MOBILITY"],["plyo","PLYO + CORE"]].map(([key,label]) => (
-                    <button key={key} onClick={() => setSundayChoice(p => ({...p,[weekId]:key}))} style={{ flex:1, padding:"14px", background: sundayChoice[weekId]===key ? C.green : C.card2, color: sundayChoice[weekId]===key ? "#000" : C.text, border:`1px solid ${sundayChoice[weekId]===key ? C.green : C.border}`, borderRadius:12, cursor:"pointer", fontFamily:C.ff, fontSize:14, letterSpacing:2 }}>{label}</button>
-                  ))}
-                </div>
-                {sundayChoice[weekId] && <div style={{ marginTop:12 }}><TodayCard name={getSundayWo(weekId)} onTap={() => setSelDay(todayDayName)} /></div>}
-              </div>
-            ) : (
-              <div style={{ display:"flex", flexDirection:"column", gap:12 }}>
-                {todayAm && <TodayCard name={todayAm} onTap={() => { setSelDay(todayDayName); setSess("am"); }} />}
-                {todayPm && (
-                  <>
-                    <div style={{ display:"flex", alignItems:"center", gap:8 }}>
-                      <div style={{ flex:1, height:1, background:C.border }} />
-                      <div style={{ fontFamily:C.fm, fontSize:7, color:C.muted, letterSpacing:3 }}>PM SESSION</div>
-                      <div style={{ flex:1, height:1, background:C.border }} />
-                    </div>
-                    <TodayCard name={todayPm} onTap={() => { setSelDay(todayDayName); setSess("pm"); }} />
-                  </>
-                )}
-              </div>
-            )}
-          </div>
-
-          {flaggedBio.length > 0 && (
-            <div style={{ padding:"0 20px 20px" }}>
-              <div style={{ fontFamily:C.fm, fontSize:8, color:C.muted, letterSpacing:3, marginBottom:10 }}>FLAGGED BIOMARKERS</div>
-              <div style={{ display:"flex", gap:8, flexWrap:"wrap" }}>
-                {flaggedBio.slice(0,3).map((b,i) => (
-                  <div key={i} style={{ background:`${C.red}15`, border:`1px solid ${C.red}33`, borderRadius:10, padding:"10px 14px", flex:1, minWidth:90 }}>
-                    <div style={{ fontFamily:C.fm, fontSize:7, color:C.red, letterSpacing:2, marginBottom:4 }}>{b.flag} ⚠</div>
-                    <div style={{ fontFamily:C.ff, fontSize:16, color:C.text }}>{b.value} {b.unit}</div>
-                    <div style={{ fontFamily:C.fm, fontSize:7, color:C.muted }}>{b.label}</div>
+              <div style={{ display: "flex", justifyContent: "space-between", gap: 10, marginBottom: 14 }}>
+                {[["HRV", `${hrv}`], ["RHR", `${rhr}`], ["SLEEP", `${sleep}`]].map(([label, value]) => (
+                  <div key={label} style={{ flex: 1, textAlign: "center" }}>
+                    <div style={{ fontFamily: C.ff, fontSize: 28, color: C.cyan, lineHeight: 1 }}>{value}</div>
+                    <div style={{ fontFamily: C.fm, fontSize: 8, color: C.muted, letterSpacing: 2, marginTop: 4 }}>{label}</div>
                   </div>
                 ))}
               </div>
-            </div>
-          )}
-
-          {garminActivities.length > 0 && (
-            <div style={{ padding:"0 20px 20px" }}>
-              <div style={{ fontFamily:C.fm, fontSize:7, color:C.muted, letterSpacing:3, marginBottom:10, textTransform:"uppercase" }}>RECENT ACTIVITIES</div>
-              <div style={{ display:"flex", flexDirection:"column", gap:8 }}>
-                {garminActivities.slice(0,3).map((a,i) => (
-                  <div key={i} style={{ background:C.card, borderRadius:C.radius, padding:"12px 16px", border:`1px solid ${C.border}`, ...C.glass }}>
-                    <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:6 }}>
-                      <div style={{ fontFamily:C.ff, fontSize:15, color:C.text, letterSpacing:1 }}>{a.name || a.activity_type}</div>
-                      <div style={{ fontFamily:C.fm, fontSize:7, color:C.muted, letterSpacing:2 }}>
-                        {a.start_time ? new Date(a.start_time).toLocaleDateString("en-US",{month:"short",day:"numeric"}).toUpperCase() : ""}
-                      </div>
-                    </div>
-                    <div style={{ display:"flex", gap:16 }}>
-                      {a.distance_meters > 0 && (
-                        <div>
-                          <div style={{ fontFamily:C.fm, fontSize:6, color:C.muted, letterSpacing:2 }}>DISTANCE</div>
-                          <div style={{ fontFamily:C.ff, fontSize:16, color:C.cyan }}>{(a.distance_meters/1000).toFixed(1)}km</div>
-                        </div>
-                      )}
-                      {a.duration_seconds > 0 && (
-                        <div>
-                          <div style={{ fontFamily:C.fm, fontSize:6, color:C.muted, letterSpacing:2 }}>DURATION</div>
-                          <div style={{ fontFamily:C.ff, fontSize:16, color:C.text }}>{Math.floor(a.duration_seconds/60)}m</div>
-                        </div>
-                      )}
-                      {a.avg_hr > 0 && (
-                        <div>
-                          <div style={{ fontFamily:C.fm, fontSize:6, color:C.muted, letterSpacing:2 }}>AVG HR</div>
-                          <div style={{ fontFamily:C.ff, fontSize:16, color:C.red }}>{a.avg_hr}</div>
-                        </div>
-                      )}
-                    </div>
-                  </div>
-                ))}
+              <div style={{ display: "flex", justifyContent: "center" }}>
+                <div style={{ padding: "6px 12px", borderRadius: 999, border: `1px solid ${rc}66`, color: rc, fontFamily: C.fm, fontSize: 10, letterSpacing: 2, boxShadow: glow(rc, 0.18) }}>
+                  {whoopLabel(rec)}
+                </div>
               </div>
-              {!garminConnected && (
-                <a href="/api/auth/garmin-login" style={{ display:"block", marginTop:10, padding:"12px", background:C.card, border:`1px solid ${C.border}`, borderRadius:10, textAlign:"center", fontFamily:C.ff, fontSize:12, color:C.cyan, letterSpacing:2, textDecoration:"none" }}>CONNECT GARMIN</a>
+            </div>
+
+            <div style={cardGlass}>
+              <div style={{ fontFamily: C.fm, fontSize: 8, color: C.cyan, letterSpacing: 2.5, textTransform: "uppercase", marginBottom: 10 }}>TODAY'S SESSION</div>
+              {todaySessionName ? (
+                <>
+                  <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 8 }}>
+                    <span style={{ fontSize: 34, lineHeight: 1 }}>{todayMeta.emoji}</span>
+                    <span style={{ background: `${todayMeta.color}22`, border: `1px solid ${todayMeta.color}44`, color: todayMeta.color, borderRadius: 999, padding: "4px 10px", fontFamily: C.fm, fontSize: 9, letterSpacing: 1.5 }}>
+                      {todayMeta.tag}
+                    </span>
+                  </div>
+                  <div style={{ fontFamily: C.ff, fontSize: 30, color: C.text, lineHeight: 1.05 }}>{todayMeta.label}</div>
+                  <div style={{ fontFamily: C.fm, fontSize: 9, color: C.muted, letterSpacing: 1.5, marginTop: 8 }}>
+                    {todayDuration} · {todayZone.zone} · {todayZone.hr}
+                  </div>
+                  <div style={{ display: "flex", justifyContent: "flex-end", marginTop: 12 }}>
+                    <button
+                      onClick={() => {
+                        if (!todayDayData) return;
+                        setNav("plan");
+                        setSelDay(todayDayData.day);
+                        setSess("am");
+                        setPlanDetailView("overview");
+                      }}
+                      style={{ background: "transparent", border: "none", color: C.cyan, fontFamily: C.ff, fontSize: 14, letterSpacing: 2, cursor: "pointer" }}
+                    >
+                      VIEW WORKOUT →
+                    </button>
+                  </div>
+                </>
+              ) : (
+                <div style={{ fontFamily: C.ff, fontSize: 26, color: C.text, lineHeight: 1.1 }}>
+                  REST DAY<span style={{ color: C.muted }}> — Recovery is the work</span>
+                </div>
               )}
             </div>
-          )}
-        </div>
-      )}
+
+            <div style={darkCardGlass}>
+              <div style={{ fontFamily: C.fm, fontSize: 8, color: C.muted, letterSpacing: 2.5, textTransform: "uppercase", marginBottom: 10 }}>TOMORROW</div>
+              <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                <span style={{ fontSize: 24 }}>{tomorrowMeta.emoji}</span>
+                <div>
+                  <div style={{ fontFamily: C.ff, fontSize: 22, color: C.text, lineHeight: 1.1 }}>{tomorrowMeta.label}</div>
+                  <div style={{ fontFamily: C.fm, fontSize: 8, color: C.muted, letterSpacing: 1.5, marginTop: 3 }}>{tomorrowDuration}</div>
+                </div>
+              </div>
+            </div>
+
+            {hasRaceCountdown && (
+              <div style={cardGlass}>
+                <div style={{ fontFamily: C.fm, fontSize: 8, color: C.cyan, letterSpacing: 2.5, textTransform: "uppercase", marginBottom: 10 }}>RACE COUNTDOWN</div>
+                <div style={{ display: "flex", alignItems: "flex-end", justifyContent: "space-between", gap: 10 }}>
+                  <div>
+                    <div style={{ fontFamily: C.ff, fontSize: 24, color: C.text, lineHeight: 1.1 }}>🏁 {raceName}</div>
+                    <div style={{ fontFamily: C.ff, fontSize: 46, color: C.text, lineHeight: 1, marginTop: 8 }}>{daysAway}</div>
+                    <div style={{ fontFamily: C.fm, fontSize: 8, color: C.muted, letterSpacing: 2, marginTop: 4 }}>{daysAway} DAYS AWAY</div>
+                  </div>
+                </div>
+                <div style={{ marginTop: 16 }}>
+                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 6 }}>
+                    <span style={{ fontFamily: C.fm, fontSize: 8, color: C.muted, letterSpacing: 2 }}>RACE READINESS</span>
+                    <span style={{ fontFamily: C.ff, fontSize: 16, color: readinessColor }}>{readinessScore}%</span>
+                  </div>
+                  <div style={{ width: "100%", height: 8, borderRadius: 999, background: "#1D1D1D", overflow: "hidden" }}>
+                    <div style={{ width: `${readinessScore}%`, height: "100%", background: readinessColor, borderRadius: 999, transition: "width 0.4s ease" }} />
+                  </div>
+                </div>
+              </div>
+            )}
+          </div>
+        );
+      })()}
 
       {nav === "plan" && planLoading && (
         <div style={{ display:"flex", alignItems:"center", justifyContent:"center", padding:60 }}>
