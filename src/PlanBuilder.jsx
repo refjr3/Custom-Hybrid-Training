@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { createClient } from "@supabase/supabase-js";
 
 const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
@@ -72,6 +72,13 @@ export default function PlanBuilder({ open, onGenerated, onClose }) {
   const [daysPerWeek, setDaysPerWeek] = useState(null);
   const [status, setStatus] = useState("idle");
   const [error, setError] = useState("");
+  const [progressStep, setProgressStep] = useState(0);
+  const progressSteps = [
+    "Analyzing your goals",
+    "Structuring your phases",
+    "Building your sessions",
+    "Finalizing your plan",
+  ];
 
   const toggleSport = (sportId) => {
     setSports((prev) => {
@@ -101,10 +108,19 @@ export default function PlanBuilder({ open, onGenerated, onClose }) {
   const canNext2 = noRaceYet || races.some((r) => r.name.trim().length > 0);
   const canBuild = Number.isInteger(daysPerWeek);
 
+  useEffect(() => {
+    if (status !== "loading") return;
+    const id = setInterval(() => {
+      setProgressStep((prev) => (prev + 1) % progressSteps.length);
+    }, 3000);
+    return () => clearInterval(id);
+  }, [status, progressSteps.length]);
+
   const generatePlan = async () => {
     if (!canBuild) return;
     setStatus("loading");
     setError("");
+    setProgressStep(0);
     try {
       const { data: { session } } = await supabase.auth.getSession();
       const token = session?.access_token;
@@ -144,6 +160,13 @@ export default function PlanBuilder({ open, onGenerated, onClose }) {
           <div style={{ fontFamily: C.ff, color: C.text, fontSize: 48, letterSpacing: 2 }}>TRIAD.</div>
           <div style={{ fontSize: 36, color: C.cyan, margin: "8px 0 14px", animation: "pbSpin 1s linear infinite" }}>⬡</div>
           <div style={{ fontFamily: C.fm, color: C.text, fontSize: 10, letterSpacing: 2 }}>YOUR COACH IS BUILDING YOUR PROGRAM...</div>
+          <div style={{ marginTop: 12, textAlign: "left", display: "inline-flex", flexDirection: "column", gap: 6 }}>
+            {progressSteps.map((label, idx) => (
+              <div key={label} style={{ fontFamily: C.fs, fontSize: 13, color: status === "loading" && idx === progressStep ? C.cyan : C.muted }}>
+                ● {label}
+              </div>
+            ))}
+          </div>
           {status === "error" && (
             <div style={{ marginTop: 14 }}>
               <div style={{ fontFamily: C.fs, color: "#FF6A6A", fontSize: 13, maxWidth: 360 }}>{error}</div>

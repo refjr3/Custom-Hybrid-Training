@@ -5,28 +5,24 @@ const supabase = createClient(
   process.env.SUPABASE_SERVICE_KEY
 );
 
-// Must match the validated set in api/plan/update.js exactly
-const VALID_WORKOUT_KEYS = new Set([
-  "FOR TIME — Ultimate HYROX",
+const ALLOWED_AM_SESSIONS = [
   "FOR TIME — Hyrox Full Runs Half Stations",
-  "FOR TIME — Hyrox Full Send",
-  "AMRAP 40 — Hyrox Grind",
-  "AMRAP 60 — Ski Row Burpee",
-  "EMOM 60 — Hyrox Stations",
-  "EMOM 40 — Full Hyrox",
-  "INTERVAL — 6 Rounds Run Ski Wall Balls",
+  "FOR TIME — Hyrox Half Runs Full Stations",
+  "AMRAP — Hyrox Full Sim",
+  "EMOM — Hyrox Skills",
   "STRENGTH A — Full Body Power",
-  "STRENGTH B — Full Body Pull",
-  "STRENGTH C — Full Body Hybrid",
-  "THRESHOLD — 10×2 Min",
+  "STRENGTH B — Lower Dominant",
+  "STRENGTH C — Upper Dominant",
+  "THRESHOLD — 10x2 Min",
   "TEMPO — 20 Min Sustained",
-  "VO2 MAX — Short Intervals",
+  "VO2 MAX — 6x3 Min",
   "ZONE 2 — Easy Aerobic",
-  "LONG RUN — Base Builder",
-  "SUNDAY — Mobility Protocol",
-  "SUNDAY — Plyo & Core",
+  "LONG RUN — Zone 2 Base",
+  "RACE SIMULATION — Full HYROX",
   "RECOVERY — Active Reset",
-]);
+  "MOBILITY — Full Protocol",
+];
+const VALID_WORKOUT_KEYS = new Set(ALLOWED_AM_SESSIONS);
 
 // ── Date helpers ──────────────────────────────────────────────────────────────
 
@@ -169,131 +165,89 @@ function buildPhaseStructure({ customPhases, totalWeeks, legacyPhases, legacyWee
   return rebalanceToTotal(rows, weeks);
 }
 
-function buildPrompt(profile, planStart, builder = {}) {
-  const {
-    name, sports = [], experience_level, target_race_name, target_race_date,
-    weekly_training_hours, dob, lthr, z2_min, z2_max,
-    weeks_per_block = 6, phases = 3, deload_preference = "every_block",
-  } = profile;
-  const {
-    totalWeeks,
-    daysPerWeek,
-    sessionPreference,
-    equipment,
-    phaseStructure,
-  } = builder;
+function buildPrompt(profile, builder = {}) {
+  const sports = Array.isArray(profile?.sports) ? profile.sports : [];
+  const sport = sports[0] || profile?.race_goal || "hybrid";
+  const raceName = profile?.target_race_name || "No race set";
+  const raceDate = profile?.target_race_date || "TBD";
+  const totalWeeks = toPositiveInt(builder?.totalWeeks, 12);
+  const daysPerWeek = toDaysPerWeek(builder?.daysPerWeek, 5);
+  const phaseStructure = Array.isArray(builder?.phaseStructure) ? builder.phaseStructure : [];
+  const fallback = [Math.max(1, Math.round(totalWeeks * 0.3)), Math.max(1, Math.round(totalWeeks * 0.4)), Math.max(1, Math.round(totalWeeks * 0.2)), Math.max(1, totalWeeks - (Math.round(totalWeeks * 0.3) + Math.round(totalWeeks * 0.4) + Math.round(totalWeeks * 0.2)))];
+  const getPhaseWeeks = (name, idx) => {
+    const row = phaseStructure.find((p) => String(p?.name || "").toUpperCase().includes(name));
+    return toPositiveInt(row?.weeks, fallback[idx]);
+  };
+  const baseWeeks = getPhaseWeeks("BASE", 0);
+  const buildWeeks = getPhaseWeeks("BUILD", 1);
+  const peakWeeks = getPhaseWeeks("PEAK", 2);
+  const taperWeeks = getPhaseWeeks("TAPER", 3);
+  const allowed = ALLOWED_AM_SESSIONS.map((s) => `"${s}"`).join(", ");
 
-  const ageYears = dob
-    ? Math.floor((Date.now() - new Date(dob).getTime()) / (365.25 * 24 * 60 * 60 * 1000))
-    : null;
-  const lthrVal   = lthr ?? (ageYears ? 180 - ageYears : 163);
-  const z2MinVal  = z2_min ?? Math.round(lthrVal * 0.68);
-  const z2MaxVal  = z2_max ?? Math.round(lthrVal * 0.83);
-  const threshMin = Math.round(lthrVal * 0.95);
-  const threshMax = Math.round(lthrVal * 1.05);
+  return `Generate a ${totalWeeks}-week ${sport} training plan.
+Race: ${raceName} on ${raceDate}.
+Training days per week: ${daysPerWeek}.
+Phases: Base (${baseWeeks}wk) → Build (${buildWeeks}wk) → Peak (${peakWeeks}wk) → Taper (${taperWeeks}wk).
 
-  const sportLabel = sports.length > 0 ? sports.join(", ") : "hybrid";
-  const raceName = target_race_name || "target event";
-  const raceDate = target_race_date || "TBD";
-  const totalWeeksValue = toPositiveInt(
-    totalWeeks,
-    phaseStructure.reduce((sum, p) => sum + p.weeks, 0) || (phases * weeks_per_block)
-  );
-  const daysPerWeekValue = toDaysPerWeek(daysPerWeek, 5);
-  const sessionPrefValue = normalizeSessionPreference(sessionPreference);
-  const equipmentList = equipment.length > 0 ? equipment : DEFAULT_EQUIPMENT;
-  const phaseStructureLabel = phaseStructure.map((p) => `${p.name} ${p.weeks} wks`).join(" -> ");
-  const phaseCount = phaseStructure.length;
-
-  const validKeyList = [...VALID_WORKOUT_KEYS].map(k => `  "${k}"`).join("\n");
-  const planStartStr = fmtDate(planStart);
-  const blockRules = phaseStructure.map((p, idx) => `${String(idx + 1).padStart(2, "0")} ${p.name}: ${p.weeks} weeks`).join("\n");
-
-  // Show one minimal example week so Claude understands the exact JSON shape
-  const exampleDay = `{"day_name":"MON","am_session":"ZONE 2 — Easy Aerobic","pm_session":null,"note":"45 min easy Z2.","is_sunday":false}`;
-
-  return `Generate a ${totalWeeksValue}-week training plan for a ${sportLabel} athlete.
-Race: ${raceName} on ${raceDate} (${totalWeeksValue} weeks away)
-Experience: ${experience_level ?? "intermediate"}
-Training days per week: ${daysPerWeekValue}
-Session preference: ${sessionPrefValue}
-Available equipment: ${equipmentList.join(", ")}
-Phase structure: ${phaseStructureLabel}
-Deload: ${deload_preference}
-LTHR: ${lthrVal} bpm
-Z2: ${z2MinVal}-${z2MaxVal} bpm
-
-ATHLETE:
-- Name: ${name || "the athlete"}
-- Sports: ${sportLabel}
-- Weekly hours target: ${weekly_training_hours ?? 8}h
-- Z2 zone: ${z2MinVal}–${z2MaxVal} bpm | Threshold: ${threshMin}–${threshMax} bpm
-- Race: ${raceName}${target_race_date ? ` on ${target_race_date}` : ""}
-
-PLAN STRUCTURE:
-- Total weeks: ${totalWeeksValue}
-- Blocks/phases (${phaseCount}):
-${blockRules}
-- Plan starts: ${planStartStr}
-- Deload rule: ${deloadInstruction(deload_preference, weeks_per_block)}
-
-SPORT FOCUS: ${sportFocus(sports)}
-
-VALID SESSION KEYS — use ONLY these exact strings for am_session / pm_session, or null:
-${validKeyList}
-
-Generate:
-- First 4 weeks in full detail with complete workouts
-- Remaining weeks as outlines with session types only
-- Every session must use only the available equipment listed
-- Respect the training days per week — never schedule more sessions than specified
-- Output as structured JSON matching the training_days schema
-
-Return ONLY a JSON object — no markdown fences, no explanation. Shape:
-{
-  "blocks": [
-    {
-      "block_id": "01_base",
-      "phase": "BASE BUILDING",
-      "label": "Block 1 — Base Building",
-      "weeks": [
-        {
-          "label": "WEEK 1",
-          "subtitle": "Establish aerobic base",
-          "is_deload": false,
-          "days": [
-            ${exampleDay},
-            {"day_name":"TUE", ...},
-            {"day_name":"WED", ...},
-            {"day_name":"THU", ...},
-            {"day_name":"FRI", ...},
-            {"day_name":"SAT", ...},
-            {"day_name":"SUN","am_session":"SUNDAY — Mobility Protocol","pm_session":null,"note":"Mobility + recovery.","is_sunday":true}
-          ]
-        }
-      ]
-    }
-  ]
+Return ONLY valid JSON array. No markdown. No explanation.
+Each week has week_label, phase, week_order, and days array.
+Each day has day_name (MON/TUE/WED/THU/FRI/SAT/SUN), am_session (from allowed list or null), note (one sentence or null).
+Rest days have null am_session.
+Allowed am_session values: [${allowed}]`;
 }
 
-RULES:
-1. Exactly ${phaseCount} blocks and each block must match this exact duration map:
-${blockRules}
-2. Each week must have exactly 7 days (MON TUE WED THU FRI SAT SUN — in that order).
-3. Keep training-day count <= ${daysPerWeekValue} per week (non-rest days). Never exceed this cap.
-4. Session preference must be respected:
-   - AM: use am_session for planned sessions; keep pm_session null.
-   - PM: use pm_session for planned sessions; keep am_session null.
-   - Both: may use AM or PM, but still keep weekly total sessions <= ${daysPerWeekValue}.
-5. am_session and pm_session must be null or one of the valid keys above. No other strings allowed.
-6. Sunday: is_sunday=true, use "SUNDAY — Mobility Protocol" or "SUNDAY — Plyo & Core".
-7. Rest days: am_session=null, pm_session=null, note="Rest day."
-8. Final block should trend into peak/taper toward the race.
-9. block_id must be a unique slug prefixed with a zero-padded number (e.g. "01_base", "02_build", "03_peak").
-10. Notes: max 60 characters each.
-11. Never prescribe equipment not listed in: ${equipmentList.join(", ")}.
-12. Scale workload to roughly ${weekly_training_hours ?? 8} hours/week.
-13. Weeks 1-4 should include richer notes; later weeks can be concise session-type outlines.`;
+function toSlug(value, fallback = "block") {
+  const clean = String(value || "")
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "_")
+    .replace(/^_+|_+$/g, "");
+  return clean || fallback;
+}
+
+function buildBlocksFromWeeks(weeksArray, phaseStructure) {
+  const normalizedWeeks = Array.isArray(weeksArray) ? weeksArray : [];
+  const byPhase = new Map();
+  const weekLabels = [];
+  normalizedWeeks.forEach((week, idx) => {
+    const phase = String(week?.phase || "Base");
+    const key = phase.toUpperCase();
+    if (!byPhase.has(key)) byPhase.set(key, []);
+    byPhase.get(key).push({ ...week, week_order: Number(week?.week_order) || (idx + 1) });
+    weekLabels.push({ key, order: Number(week?.week_order) || (idx + 1) });
+  });
+
+  const orderedPhases = [];
+  const used = new Set();
+  (phaseStructure || []).forEach((p) => {
+    const key = String(p?.name || "").toUpperCase();
+    if (byPhase.has(key) && !used.has(key)) {
+      orderedPhases.push(key);
+      used.add(key);
+    }
+  });
+  weekLabels
+    .sort((a, b) => a.order - b.order)
+    .forEach(({ key }) => {
+      if (!used.has(key) && byPhase.has(key)) {
+        orderedPhases.push(key);
+        used.add(key);
+      }
+    });
+
+  return orderedPhases.map((phaseKey, idx) => {
+    const phaseWeeks = (byPhase.get(phaseKey) || []).sort((a, b) => (a.week_order || 0) - (b.week_order || 0));
+    return {
+      block_id: `${String(idx + 1).padStart(2, "0")}_${toSlug(phaseKey, "phase")}`,
+      phase: phaseKey,
+      label: `${phaseKey} BLOCK`,
+      weeks: phaseWeeks.map((w) => ({
+        label: w.week_label || `WEEK ${w.week_order || 1}`,
+        subtitle: null,
+        is_deload: false,
+        days: Array.isArray(w.days) ? w.days : [],
+      })),
+    };
+  });
 }
 
 // ── Handler ───────────────────────────────────────────────────────────────────
@@ -431,7 +385,7 @@ export default async function handler(req, res) {
         model:      "claude-sonnet-4-6",
         max_tokens: 8192,
         system:     "You are a JSON-only training plan generator. Output only valid JSON — no markdown fences, no prose, no explanation.",
-        messages:   [{ role: "user", content: buildPrompt(profile, planStart, builderContext) }],
+        messages:   [{ role: "user", content: buildPrompt(profile, builderContext) }],
       }),
     });
 
@@ -455,7 +409,15 @@ export default async function handler(req, res) {
     }
 
     // ── Insert training_blocks → training_weeks → training_days ──────────
-    const blocks = Array.isArray(plan.blocks) ? plan.blocks : [];
+    const generatedWeeks = Array.isArray(plan)
+      ? plan
+      : (Array.isArray(plan.weeks) ? plan.weeks : []);
+    const blocks = [{
+      block_id: "01_plan",
+      phase: "PLAN",
+      label: "Generated Plan",
+      weeks: generatedWeeks,
+    }];
     let globalWeekIndex = 0;
     let weeksCreated = 0;
 
