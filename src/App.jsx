@@ -1182,16 +1182,15 @@ export default function App() {
   const [cqSelections, setCqSelections] = useState({});
   const [labAnsweredQuestions, setLabAnsweredQuestions] = useState({});
   const [labSessionId, setLabSessionId] = useState(createSessionId);
+  // Auth state is declared with the rest of top-level hooks to keep hook order stable.
+  const [session, setSession]       = useState(null);
+  const [profile, setProfile]       = useState(null);
+  const [authLoading, setAuthLoading] = useState(true);
   const dataFetched = useRef(false);
 
   useEffect(() => {
     setPlanDetailView("overview");
   }, [selDay, weekId, sess]);
-
-  // ── Auth state ──────────────────────────────────────────────────────────────
-  const [session, setSession]       = useState(null);
-  const [profile, setProfile]       = useState(null);
-  const [authLoading, setAuthLoading] = useState(true);
 
   // Initialise auth on mount; listen for session changes
   useEffect(() => {
