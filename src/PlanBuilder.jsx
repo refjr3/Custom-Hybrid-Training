@@ -1,10 +1,11 @@
 import { useEffect, useMemo, useState, useRef } from "react";
 import { createClient } from "@supabase/supabase-js";
 
-const supabase = createClient(
-  import.meta.env.VITE_SUPABASE_URL,
-  import.meta.env.VITE_SUPABASE_ANON_KEY
-);
+const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
+const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY;
+const supabase = (supabaseUrl && supabaseAnonKey)
+  ? createClient(supabaseUrl, supabaseAnonKey)
+  : null;
 
 const C = {
   bg: "#000000",
@@ -514,6 +515,11 @@ export default function PlanBuilder({
     try {
       let token = authToken;
       if (!token) {
+        if (!supabase) {
+          setError("Missing Supabase configuration (VITE_SUPABASE_URL / VITE_SUPABASE_ANON_KEY)");
+          setGenerating(false);
+          return;
+        }
         const { data: { session: authSession } } = await supabase.auth.getSession();
         if (!authSession?.access_token) {
           setError("Session expired — please refresh the page");
