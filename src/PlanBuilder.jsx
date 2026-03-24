@@ -136,16 +136,19 @@ export default function PlanBuilder({ open, onGenerated, onClose }) {
         body: JSON.stringify({ sports, races: payloadRaces, days_per_week: daysPerWeek, no_race: noRaceYet }),
       });
       clearTimeout(timeout);
+      console.log("[PlanBuilder] generate response status:", res.status);
       if (!res.ok) {
-        const err = await res.json().catch(() => ({}));
-        throw new Error(err.error || "Generation failed");
+        const errorData = await res.json().catch(() => ({ error: res.statusText }));
+        setError(`Generation failed: ${errorData.error || res.status}`);
+        setStatus("error");
+        return;
       }
       await onGenerated();
     } catch (e) {
       if (e?.name === "AbortError") {
         setError("Plan generation is taking longer than expected. Check back in a moment or tap Retry.");
       } else {
-        setError("Something went wrong — tap to retry");
+        setError(`Generation failed: ${e?.message || "Unknown error"}`);
       }
       setStatus("error");
     }

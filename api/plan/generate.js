@@ -253,63 +253,64 @@ function buildBlocksFromWeeks(weeksArray, phaseStructure) {
 // ── Handler ───────────────────────────────────────────────────────────────────
 
 export default async function handler(req, res) {
+  console.log("[generate] called with:", JSON.stringify(req.body).slice(0, 200));
   if (req.method !== "POST") return res.status(405).json({ error: "Method not allowed" });
+  try {
+    const token = req.headers.authorization?.replace("Bearer ", "");
+    if (!token) return res.status(401).json({ error: "Unauthorized" });
 
-  const token = req.headers.authorization?.replace("Bearer ", "");
-  if (!token) return res.status(401).json({ error: "Unauthorized" });
+    const { data: { user }, error: authErr } = await supabase.auth.getUser(token);
+    if (authErr || !user) return res.status(401).json({ error: "Invalid token" });
+    const userId = user.id;
 
-  const { data: { user }, error: authErr } = await supabase.auth.getUser(token);
-  if (authErr || !user) return res.status(401).json({ error: "Invalid token" });
-  const userId = user.id;
-
-  const profileData = req.body?.profile || null;
-  let profile = profileData;
-  if (!profile) {
-    // Use defaults from request body when profile lookup is unavailable.
+    const profileData = req.body?.profile || null;
+    let profile = profileData;
+    if (!profile) {
+      // Use defaults from request body when profile lookup is unavailable.
+      profile = {
+        sports: req.body?.sports || (req.body?.sport ? [req.body.sport] : []),
+        race_goal: req.body?.sport || req.body?.race_goal || null,
+        target_race_name: req.body?.race_name || null,
+        target_race_date: req.body?.race_date || req.body?.target_race_date || null,
+        weeks_per_block: req.body?.weeks_per_block || 4,
+        phases: req.body?.phases || ["Base", "Build", "Peak", "Taper"],
+        days_per_week: req.body?.days_per_week || 5,
+      };
+    }
     profile = {
-      sports: req.body?.sports || (req.body?.sport ? [req.body.sport] : []),
-      race_goal: req.body?.sport || req.body?.race_goal || null,
-      target_race_name: req.body?.race_name || null,
-      target_race_date: req.body?.race_date || req.body?.target_race_date || null,
-      weeks_per_block: req.body?.weeks_per_block || 4,
-      phases: req.body?.phases || ["Base", "Build", "Peak", "Taper"],
-      days_per_week: req.body?.days_per_week || 5,
+      ...profile,
+      user_id: req.body?.user_id || profile?.user_id || userId,
     };
-  }
-  profile = {
-    ...profile,
-    user_id: req.body?.user_id || profile?.user_id || userId,
-  };
-  // Normalize the simplified 3-question payload.
-  const simpleSport = String(req.body?.sport || "").trim().toLowerCase();
-  const simpleRaceName = typeof req.body?.race_name === "string" ? req.body.race_name.trim() : "";
-  const simpleRaceDate = typeof req.body?.race_date === "string" ? req.body.race_date : null;
-  if (simpleSport) {
-    profile.sports = [simpleSport];
-    profile.race_goal = simpleSport;
-  }
-  if ((!Array.isArray(profile?.sports) || profile.sports.length === 0) && profile?.race_goal) {
-    profile.sports = [String(profile.race_goal).toLowerCase()];
-  }
-  profile.target_race_name = simpleRaceName || profile?.target_race_name || null;
-  profile.target_race_date = simpleRaceDate || profile?.target_race_date || null;
+    // Normalize the simplified 3-question payload.
+    const simpleSport = String(req.body?.sport || "").trim().toLowerCase();
+    const simpleRaceName = typeof req.body?.race_name === "string" ? req.body.race_name.trim() : "";
+    const simpleRaceDate = typeof req.body?.race_date === "string" ? req.body.race_date : null;
+    if (simpleSport) {
+      profile.sports = [simpleSport];
+      profile.race_goal = simpleSport;
+    }
+    if ((!Array.isArray(profile?.sports) || profile.sports.length === 0) && profile?.race_goal) {
+      profile.sports = [String(profile.race_goal).toLowerCase()];
+    }
+    profile.target_race_name = simpleRaceName || profile?.target_race_name || null;
+    profile.target_race_date = simpleRaceDate || profile?.target_race_date || null;
 
-  // ── Check generation_status and decide whether to proceed ─────────────────
-  let genStatus = "pending";
-  const { data: profileRow, error: profileErr } = await supabase
-    .from("user_profiles")
-    .select("generation_status")
-    .eq("user_id", userId)
-    .single();
+    // ── Check generation_status and decide whether to proceed ─────────────────
+    let genStatus = "pending";
+    const { data: profileRow, error: profileErr } = await supabase
+      .from("user_profiles")
+      .select("generation_status")
+      .eq("user_id", userId)
+      .single();
 
-  if (profileErr && profileErr.code !== "PGRST116") {
-    // Fallback path: continue with request-body profile defaults.
-    console.warn("[plan/generate] profile fetch failed, using request fallback:", profileErr.message);
-  } else {
-    genStatus = profileRow?.generation_status ?? "pending";
-  }
+    if (profileErr && profileErr.code !== "PGRST116") {
+      // Fallback path: continue with request-body profile defaults.
+      console.warn("[plan/generate] profile fetch failed, using request fallback:", profileErr.message);
+    } else {
+      genStatus = profileRow?.generation_status ?? "pending";
+    }
 
-  if (genStatus === "complete") {
+    if (genStatus === "complete") {
     // Completed plan exists — honour idempotency, don't regenerate
     const { count } = await supabase
       .from("training_weeks")
@@ -321,9 +322,9 @@ export default async function handler(req, res) {
       return res.status(200).json({ success: true, message: "Plan already exists", weeks_created: 0 });
     }
     // Status says complete but rows are gone — fall through and regenerate
-  }
+    }
 
-  if (genStatus === "in_progress" || genStatus === "failed") {
+    if (genStatus === "in_progress" || genStatus === "failed") {
     // Previous attempt was interrupted or failed — clear partial data and retry
     console.log(`[plan/generate] status=${genStatus} for ${userId} — clearing partial data and retrying`);
 
@@ -338,41 +339,41 @@ export default async function handler(req, res) {
       console.error("[plan/generate] cleanup error:", msg);
       return res.status(500).json({ error: "Failed to clear partial plan data", details: msg });
     }
-  }
+    }
 
-  const inferredWeeks = weeksUntilRaceDate(req.body?.race_date || profile?.target_race_date);
-  const daysPerWeek = toDaysPerWeek(req.body?.days_per_week ?? profile?.days_per_week, 5);
-  const sessionPreference = normalizeSessionPreference(
-    req.body?.session_preference ?? profile?.session_preference
-  );
-  const equipment = normalizeEquipment(
-    req.body?.equipment ?? profile?.equipment
-  );
-  const totalWeeks = toPositiveInt(req.body?.total_weeks, inferredWeeks ?? 12);
-  const phaseStructure = buildPhaseStructure({
-    customPhases: req.body?.phases,
-    totalWeeks,
-    legacyPhases: 4,
-    legacyWeeksPerBlock: Math.max(1, Math.round(totalWeeks / 4)),
-  });
+    const inferredWeeks = weeksUntilRaceDate(req.body?.race_date || profile?.target_race_date);
+    const daysPerWeek = toDaysPerWeek(req.body?.days_per_week ?? profile?.days_per_week, 5);
+    const sessionPreference = normalizeSessionPreference(
+      req.body?.session_preference ?? profile?.session_preference
+    );
+    const equipment = normalizeEquipment(
+      req.body?.equipment ?? profile?.equipment
+    );
+    const totalWeeks = toPositiveInt(req.body?.total_weeks, inferredWeeks ?? 12);
+    const phaseStructure = buildPhaseStructure({
+      customPhases: req.body?.phases,
+      totalWeeks,
+      legacyPhases: 4,
+      legacyWeeksPerBlock: Math.max(1, Math.round(totalWeeks / 4)),
+    });
 
-  const builderContext = {
-    totalWeeks,
-    daysPerWeek,
-    sessionPreference,
-    equipment,
-    phaseStructure,
-  };
+    const builderContext = {
+      totalWeeks,
+      daysPerWeek,
+      sessionPreference,
+      equipment,
+      phaseStructure,
+    };
 
-  // Mark generation as in_progress
-  await supabase
-    .from("user_profiles")
-    .update({ generation_status: "in_progress" })
-    .eq("user_id", userId);
+    // Mark generation as in_progress
+    await supabase
+      .from("user_profiles")
+      .update({ generation_status: "in_progress" })
+      .eq("user_id", userId);
 
-  const planStart = nextMonday();
+    const planStart = nextMonday();
 
-  try {
+    try {
     // ── Call Claude to generate the plan ──────────────────────────────────
     const claudeRes = await fetch("https://api.anthropic.com/v1/messages", {
       method: "POST",
@@ -519,12 +520,22 @@ export default async function handler(req, res) {
     console.log(`[plan/generate] created ${weeksCreated} weeks for user ${userId}`);
     return res.status(200).json({ success: true, weeks_created: weeksCreated });
 
+    } catch (err) {
+      console.error("[generate] error:", err.message, err.stack);
+      await supabase
+        .from("user_profiles")
+        .update({ generation_status: "failed" })
+        .eq("user_id", userId);
+      return res.status(500).json({
+        error: err.message,
+        step: "see logs",
+      });
+    }
   } catch (err) {
-    console.error("[plan/generate] error:", err.message);
-    await supabase
-      .from("user_profiles")
-      .update({ generation_status: "failed" })
-      .eq("user_id", userId);
-    return res.status(500).json({ error: "Plan generation failed", details: err.message });
+    console.error("[generate] error:", err.message, err.stack);
+    return res.status(500).json({
+      error: err.message,
+      step: "see logs",
+    });
   }
 }
