@@ -2849,14 +2849,13 @@ export default function App() {
           setProfile((prev) => (prev ? { ...prev, ...patch } : prev));
         }}
         onClose={() => setPlanBuilderOpen(false)}
-        onGenerated={async ({ builderInputs }) => {
+        onGenerated={async () => {
           setPlanBuilderOpen(false);
           localStorage.removeItem(PLAN_BUILDER_DISMISS_KEY);
           setPlanBuilderDismissUntil(0);
           setPlanLoading(true);
           await fetchPlan(session?.access_token);
           setNav("plan");
-          setProfile((prev) => (prev ? { ...prev, plan_builder: builderInputs } : prev));
         }}
       />
 

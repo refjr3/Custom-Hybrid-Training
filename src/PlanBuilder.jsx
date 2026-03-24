@@ -31,7 +31,7 @@ export default function PlanBuilder({ open, profile, authToken, userId, onClose,
     if (!open) return;
     const firstRace = Array.isArray(profile?.races) ? profile.races.find((r) => r?.date) || profile.races[0] : null;
     const initialSport = profile?.race_goal || firstRace?.sport || "";
-    const initialDays = DAY_OPTIONS.includes(profile?.plan_builder?.days_per_week) ? profile.plan_builder.days_per_week : 5;
+    const initialDays = DAY_OPTIONS.includes(profile?.days_per_week) ? profile.days_per_week : 5;
     setSport(initialSport); setRaceMode(firstRace?.name || firstRace?.date ? "yes" : "no");
     setRaceName(firstRace?.name || ""); setRaceDate(firstRace?.date || ""); setRaceQuery(firstRace?.name || "");
     setDaysPerWeek(initialDays); setGenerating(false); setError("");
@@ -64,7 +64,7 @@ export default function PlanBuilder({ open, profile, authToken, userId, onClose,
       const patch = {
         race_goal: sport,
         races: effectiveRaceName ? [{ sport, name: effectiveRaceName, date: effectiveRaceDate, is_primary: true }] : [],
-        plan_builder: { sport, race_name: effectiveRaceName, race_date: effectiveRaceDate, days_per_week: daysPerWeek, total_weeks: totalWeeks },
+        days_per_week: daysPerWeek,
       };
       if (typeof onSaveProfilePatch === "function") await onSaveProfilePatch(patch);
       const profilePayload = { ...profile, user_id: userId || profile?.user_id || null, sports: [sport], race_goal: sport, target_race_name: effectiveRaceName, target_race_date: effectiveRaceDate, days_per_week: daysPerWeek };
@@ -75,7 +75,7 @@ export default function PlanBuilder({ open, profile, authToken, userId, onClose,
       });
       const data = await res.json().catch(() => ({}));
       if (!res.ok) throw new Error(data?.error || "Plan generation failed");
-      if (onGenerated) await onGenerated({ response: data, builderInputs: { sport, race_name: effectiveRaceName, race_date: effectiveRaceDate, days_per_week: daysPerWeek, total_weeks: totalWeeks } });
+      if (onGenerated) await onGenerated({ response: data });
     } catch (e) {
       setError(e?.message || "Plan generation failed");
     } finally {
