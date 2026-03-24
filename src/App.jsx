@@ -2828,26 +2828,6 @@ export default function App() {
 
       <PlanBuilder
         open={planBuilderOpen}
-        profile={profile}
-        authToken={session?.access_token}
-        userId={session?.user?.id}
-        onSaveProfilePatch={async (patch) => {
-          if (!session?.user?.id) return;
-          const { error } = await supabase
-            .from("user_profiles")
-            .update(patch)
-            .eq("user_id", session.user.id);
-          if (error) {
-            // Some schemas may not include `sports`; retry with races only.
-            const { sports: _sports, ...racesOnlyPatch } = patch || {};
-            const retry = await supabase
-              .from("user_profiles")
-              .update(racesOnlyPatch)
-              .eq("user_id", session.user.id);
-            if (retry.error) throw new Error(retry.error.message || "Failed to save races");
-          }
-          setProfile((prev) => (prev ? { ...prev, ...patch } : prev));
-        }}
         onClose={() => setPlanBuilderOpen(false)}
         onGenerated={async () => {
           setPlanBuilderOpen(false);
