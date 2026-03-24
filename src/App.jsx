@@ -1184,6 +1184,10 @@ export default function App() {
   const [labSessionId, setLabSessionId] = useState(createSessionId);
   const dataFetched = useRef(false);
 
+  useEffect(() => {
+    setPlanDetailView("overview");
+  }, [selDay, weekId, sess]);
+
   // ── Auth state ──────────────────────────────────────────────────────────────
   const [session, setSession]       = useState(null);
   const [profile, setProfile]       = useState(null);
@@ -1746,10 +1750,6 @@ export default function App() {
       summary: d.ai_modification_note || "Session details were adjusted based on your latest context.",
       session: getSessionNameForDay(d, "am") || d.pm || "Session",
     }));
-
-  useEffect(() => {
-    setPlanDetailView("overview");
-  }, [selDay, weekId, sess]);
 
   const rec        = whoopData?.recovery?.score ?? 0;
   const sleep      = whoopData?.sleep?.score ?? 0;
