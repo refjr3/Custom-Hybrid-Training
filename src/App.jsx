@@ -79,6 +79,47 @@ const getTypeLabel = (name) => {
   return WL[name]?.type || name.split(" — ")[0];
 };
 
+const SESSION_EMOJI = {
+  hyrox: "🔥",
+  strength: "💪",
+  zone2: "🚴",
+  threshold: "⚡",
+  tempo: "🏃",
+  recovery: "🧘",
+  race: "🏁",
+  travel: "✈️",
+  rest: "😴",
+  mobility: "🧘",
+};
+
+const SESSION_COLORS = {
+  hyrox: "#9b59b6",
+  strength: "#e07b3a",
+  zone2: "#4a90c4",
+  threshold: "#e74c3c",
+  tempo: "#f39c12",
+  recovery: "#27ae60",
+  race: "#f1c40f",
+  rest: "#7f8c8d",
+  mobility: "#27ae60",
+  travel: "#6c5ce7",
+};
+
+const resolveSessionKey = (sessionName, dayRow) => {
+  const s = String(sessionName || "").toUpperCase();
+  if (dayRow?.isRaceDay || s.includes("RACE")) return "race";
+  if (!s || s.includes("REST")) return "rest";
+  if (s.includes("TRAVEL")) return "travel";
+  if (s.includes("MOBILITY")) return "mobility";
+  if (s.includes("RECOVERY")) return "recovery";
+  if (s.includes("STRENGTH")) return "strength";
+  if (s.includes("ZONE 2") || s.includes("LONG RUN")) return "zone2";
+  if (s.includes("THRESHOLD") || s.includes("VO2")) return "threshold";
+  if (s.includes("TEMPO")) return "tempo";
+  if (s.includes("HYROX") || s.includes("FOR TIME") || s.includes("AMRAP") || s.includes("EMOM")) return "hyrox";
+  return "rest";
+};
+
 const whoopColor = (s) => s >= 67 ? C.green : s >= 34 ? C.yellow : C.red;
 const whoopLabel = (s) => s >= 67 ? "GREEN" : s >= 34 ? "YELLOW" : "RED";
 const whoopMsg   = (s) => s >= 67 ? "Execute today's plan as written" : s >= 34 ? "Reduce intensity 20% · Skip VO2 Max" : "Recovery only · Contrast therapy · Rest";
@@ -1126,6 +1167,9 @@ export default function App() {
   const [labToast, setLabToast] = useState(null);
   const [planBuilderOpen, setPlanBuilderOpen] = useState(false);
   const [planBuilderDismissUntil, setPlanBuilderDismissUntil] = useState(0);
+  const [planDetailView, setPlanDetailView] = useState("overview");
+  const [showRecoveryGates, setShowRecoveryGates] = useState(true);
+  const [showAiAdjustments, setShowAiAdjustments] = useState(true);
   const [labContext, setLabContext] = useState("");
   const [labTargetDay, setLabTargetDay] = useState(null);
   const [cqSelections, setCqSelections] = useState({});
@@ -1659,7 +1703,46 @@ export default function App() {
     return c === "mobility" ? "SUNDAY — Mobility Protocol" : c === "plyo" ? "SUNDAY — Plyo & Core" : null;
   };
   const getEffAm = (d) => d.isSunday ? getSundayWo(weekId) : d.am;
-  const modalName = dayData ? (sess === "am" ? getEffAm(dayData) : dayData.pm) : null;
+  const getSessionNameForDay = (d, slot = "am") => (slot === "am" ? getEffAm(d) : d?.pm);
+  const getDayDateKey = (d) => d?.date?.split(" ")[0] || "";
+  const isDayCompleted = (d) => {
+    const dayDateKey = getDayDateKey(d);
+    if (!dayDateKey) return false;
+    return garminActivities.some((a) => a.start_time?.startsWith(dayDateKey));
+  };
+  const deriveSessionMeta = (sessionName, dayRow) => {
+    const key = resolveSessionKey(sessionName, dayRow);
+    const color = SESSION_COLORS[key] || C.light;
+    const emoji = SESSION_EMOJI[key] || "📌";
+    const tag = dayRow?.isRaceDay ? "RACE" : (sessionName ? getTypeLabel(sessionName).toUpperCase() : "REST");
+    const label = dayRow?.isRaceDay
+      ? "Race Day"
+      : sessionName
+        ? (String(sessionName).split(" — ")[1] || String(sessionName))
+        : "Rest / Open";
+    return { key, color, emoji, tag, label };
+  };
+
+  const selectedSessionName = dayData ? getSessionNameForDay(dayData, sess) : null;
+  const selectedWorkout = selectedSessionName ? WL[selectedSessionName] : null;
+  const selectedMeta = deriveSessionMeta(selectedSessionName, dayData);
+  const selectedCustomContent = sess === "am" ? dayData?.am_session_custom : dayData?.pm_session_custom;
+  const selectedShowCustom = !!(selectedCustomContent && dayData?.ai_modified);
+  const selectedCanViewWorkout = !!(dayData?.isRaceDay || selectedShowCustom || selectedWorkout);
+  const selectedCoachingNote = dayData?.ai_modification_note || dayData?.note2a || selectedWorkout?.note || "";
+  const selectedKeyPoints = selectedWorkout?.steps?.filter((s) => !s.startsWith("—")).slice(0, 5) || [];
+
+  const weeklyAiAdjustments = (week?.days || [])
+    .filter((d) => d?.ai_modified || d?.ai_modification_note)
+    .map((d) => ({
+      day: d.day,
+      summary: d.ai_modification_note || "Session details were adjusted based on your latest context.",
+      session: getSessionNameForDay(d, "am") || d.pm || "Session",
+    }));
+
+  useEffect(() => {
+    setPlanDetailView("overview");
+  }, [selDay, weekId, sess]);
 
   const rec        = whoopData?.recovery?.score ?? 0;
   const sleep      = whoopData?.sleep?.score ?? 0;
@@ -2064,138 +2147,291 @@ export default function App() {
           <div style={{ padding:"16px 20px 10px" }}>
             <div style={{ fontFamily:C.fm, fontSize:8, color:C.muted, letterSpacing:3, marginBottom:10 }}>TRAINING BLOCK</div>
             <div style={{ display:"flex", gap:6, overflowX:"auto", scrollbarWidth:"none" }}>
-              {planBlocks.map(b => (
-                <button key={b.id} onClick={() => { setBlockId(b.id); setWeekId(b.weeks[0].id); setSelDay(null); }} style={{ flexShrink:0, padding:"8px 16px", background: blockId===b.id ? C.card : "transparent", color: blockId===b.id ? C.cyan : C.muted, border:"none", borderBottom: blockId===b.id ? `2px solid ${C.cyan}` : "2px solid transparent", borderRadius:0, cursor:"pointer", fontFamily:C.ff, fontSize:12, letterSpacing:2, transition:"all 0.2s" }}>{b.label}</button>
+              {planBlocks.map((b) => (
+                <button
+                  key={b.id}
+                  onClick={() => {
+                    setBlockId(b.id);
+                    setWeekId(b.weeks[0].id);
+                    setSelDay(null);
+                    setPlanDetailView("overview");
+                  }}
+                  style={{
+                    flexShrink:0,
+                    padding:"8px 16px",
+                    background: blockId===b.id ? C.card : "transparent",
+                    color: blockId===b.id ? C.cyan : C.muted,
+                    border:"none",
+                    borderBottom: blockId===b.id ? `2px solid ${C.cyan}` : "2px solid transparent",
+                    borderRadius:0,
+                    cursor:"pointer",
+                    fontFamily:C.ff,
+                    fontSize:12,
+                    letterSpacing:2,
+                    transition:"all 0.2s",
+                  }}
+                >
+                  {b.label}
+                </button>
               ))}
             </div>
           </div>
-          <div style={{ display:"flex", overflowX:"auto", scrollbarWidth:"none", borderBottom:`1px solid ${C.border}`, paddingLeft:20 }}>
-            {weeks.map(w => (
-              <button key={w.id} onClick={() => { setWeekId(w.id); setSelDay(null); }} style={{ flexShrink:0, padding:"10px 14px", background:"transparent", color: weekId===w.id ? C.text : C.muted, border:"none", borderBottom:`2px solid ${weekId===w.id ? C.cyan : "transparent"}`, cursor:"pointer", fontFamily:C.fm, fontSize:7, letterSpacing:2, whiteSpace:"nowrap", transition:"all 0.2s" }}>
-                {w.label.includes("·") ? w.label.split("·")[1]?.trim() : w.label}
-                <div style={{ fontSize:6, marginTop:2, opacity:0.6 }}>{w.dates}</div>
-              </button>
-            ))}
-          </div>
-          <div style={{ padding:"14px 20px 12px", borderBottom:`1px solid ${C.border}` }}>
-            <div style={{ fontFamily:C.fm, fontSize:7, color:C.green, letterSpacing:4, marginBottom:3 }}>{week.phase}</div>
-            <div style={{ fontFamily:C.ff, fontSize:24, letterSpacing:1 }}>{week.label}</div>
-            <div style={{ fontFamily:C.fm, fontSize:8, color:C.muted, marginTop:3 }}>{week.subtitle}</div>
-          </div>
-          <div style={{ display:"grid", gridTemplateColumns:"repeat(7,1fr)", borderBottom:`1px solid ${C.border}` }}>
-            {week.days.map((d, i) => {
-              const eAm = getEffAm(d);
-              const ac  = d.isSunday && !sundayChoice[weekId] ? C.light : getAccent(eAm);
-              const isSel = selDay === d.day;
-              const isToday = d.day === todayDayName;
-              const isLabTarget = labOpen && labTargetDay === d.day;
+
+          <div style={{ display:"flex", overflowX:"auto", scrollbarWidth:"none", padding:"0 20px 10px", gap:8 }}>
+            {weeks.map((w) => {
+              const active = weekId === w.id;
               return (
-                <button key={d.day} onClick={() => { setSelDay(isSel ? null : d.day); setSess("am"); }} style={{ background: isSel ? C.card : "transparent", border: isLabTarget ? `1px solid ${C.cyan}88` : isToday ? `1px solid ${C.cyan}44` : "none", borderRight: i<6 && !isToday && !isLabTarget ? `1px solid ${C.border}` : undefined, borderBottom:`2px solid ${isSel ? C.cyan : "transparent"}`, borderLeft: isLabTarget ? `3px solid ${C.cyan}` : undefined, padding:"12px 4px 10px", cursor:"pointer", textAlign:"center", boxShadow: isLabTarget ? `inset 0 0 20px ${C.cyan}15` : isSel ? `inset 0 0 16px ${C.cyan}10` : isToday ? `inset 0 0 12px ${C.cyan}08` : "none", transition:"all 0.15s" }}>
-                  <div style={{ fontFamily:C.fm, fontSize:7, color: isToday ? C.cyan : isSel ? C.muted : C.light, letterSpacing:1, fontWeight: isToday ? 700 : 400 }}>{d.day}</div>
-                  <div style={{ fontFamily:C.fm, fontSize:6, color: isToday ? C.cyan : C.light, margin:"2px 0 8px" }}>{d.date.split(" ")[1]}</div>
-                  <div style={{ width:8, height:8, borderRadius:"50%", background:ac, margin:"0 auto", opacity: isSel ? 1 : 0.6 }} />
-                  <div style={{ fontFamily:C.fm, fontSize:6, color: isSel ? ac : C.light, letterSpacing:1, marginTop:5, lineHeight:1.3 }}>
-                    {d.isSunday ? (sundayChoice[weekId] ? sundayChoice[weekId].toUpperCase() : "?") : d.isRaceDay ? "RACE" : getTypeLabel(d.am)}
-                  </div>
-                  {d.pm && <div style={{ fontFamily:C.fm, fontSize:5, color:C.light, marginTop:2 }}>+PM</div>}
-                  {(() => {
-                    const dayDate = d.date;
-                    const hasActivity = garminActivities.some(a => a.start_time && a.start_time.startsWith(dayDate?.split(" ")[0] || "___"));
-                    return hasActivity
-                      ? <div style={{ fontSize:8, color:C.green, marginTop:2 }}>✓</div>
-                      : d.am ? <div style={{ fontSize:8, color:C.light, marginTop:2 }}>—</div> : null;
-                  })()}
-                  {isToday && <div style={{ width:4, height:4, borderRadius:"50%", background:C.cyan, margin:"3px auto 0" }} />}
+                <button
+                  key={w.id}
+                  onClick={() => {
+                    setWeekId(w.id);
+                    setSelDay(null);
+                    setPlanDetailView("overview");
+                  }}
+                  style={{
+                    flexShrink:0,
+                    padding:"10px 12px",
+                    background: active ? C.card : "transparent",
+                    color: active ? C.text : C.muted,
+                    border: active ? "1px solid #ffffff" : `1px solid ${C.border}`,
+                    borderRadius:10,
+                    cursor:"pointer",
+                    fontFamily:C.fm,
+                    fontSize:7,
+                    letterSpacing:2,
+                    whiteSpace:"nowrap",
+                    textAlign:"left",
+                  }}
+                >
+                  <div>{w.label.includes("·") ? w.label.split("·")[1]?.trim() : w.label}</div>
+                  <div style={{ fontSize:6, marginTop:2, opacity:0.7 }}>{w.dates}</div>
                 </button>
               );
             })}
           </div>
+
+          <div style={{ padding:"6px 20px 12px" }}>
+            <div style={{ fontFamily:C.fm, fontSize:7, color:C.green, letterSpacing:4, marginBottom:3 }}>{week.phase}</div>
+            <div style={{ fontFamily:C.ff, fontSize:24, letterSpacing:1 }}>{week.label}</div>
+            <div style={{ fontFamily:C.fm, fontSize:8, color:C.muted, marginTop:3 }}>{week.subtitle}</div>
+          </div>
+
+          <div style={{ padding:"0 20px 8px" }}>
+            <div style={{ display:"grid", gridTemplateColumns:"repeat(7,minmax(0,1fr))", gap:8 }}>
+              {(week?.days || []).map((d) => {
+                const sessionName = getSessionNameForDay(d, "am");
+                const meta = deriveSessionMeta(sessionName, d);
+                const isSelected = selDay === d.day;
+                const completed = isDayCompleted(d);
+                const dateLabel = d?.date?.split(" ")[1] || d?.date || "";
+                const shortLabel = meta.label.length > 16 ? `${meta.label.slice(0, 15)}…` : meta.label;
+                return (
+                  <button
+                    key={d.day}
+                    onClick={() => {
+                      if (isSelected) {
+                        setSelDay(null);
+                        setPlanDetailView("overview");
+                        return;
+                      }
+                      setSelDay(d.day);
+                      setSess("am");
+                      setPlanDetailView("overview");
+                    }}
+                    style={{
+                      minHeight:126,
+                      background:C.card,
+                      border: isSelected ? `1px solid ${C.cyan}` : `1px solid ${C.border}`,
+                      borderRadius:12,
+                      padding:"8px 6px 7px",
+                      display:"flex",
+                      flexDirection:"column",
+                      alignItems:"center",
+                      gap:6,
+                      cursor:"pointer",
+                      opacity: completed ? 0.72 : 1,
+                      position:"relative",
+                      ...C.glass,
+                    }}
+                  >
+                    <div style={{ width:"100%", display:"flex", justifyContent:"space-between", alignItems:"center" }}>
+                      <span style={{ fontFamily:C.fm, fontSize:7, color:C.muted, letterSpacing:1 }}>{d.day}</span>
+                      {completed && <span style={{ fontSize:10, color:C.green }}>✓</span>}
+                    </div>
+                    <div style={{ fontSize:22, lineHeight:1 }}>{meta.emoji}</div>
+                    <div style={{ background:`${meta.color}22`, border:`1px solid ${meta.color}44`, borderRadius:999, padding:"2px 7px", fontFamily:C.fm, fontSize:6, color:meta.color, letterSpacing:1 }}>
+                      {meta.tag}
+                    </div>
+                    <div style={{ fontFamily:C.fs, fontSize:10, color:C.text, textAlign:"center", lineHeight:1.25, minHeight:26 }}>
+                      {shortLabel}
+                    </div>
+                    <div style={{ fontFamily:C.fm, fontSize:6, color:C.light, marginTop:"auto" }}>{dateLabel}</div>
+                    {d?.ai_modified && <div style={{ position:"absolute", top:6, right:6, color:"#9b59b6", fontSize:10 }}>✦</div>}
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+
           {dayData && (
-            <div style={{ margin:"16px 20px", background:C.card, borderRadius:C.radius, overflow:"hidden", border:`1px solid ${C.border}`, ...C.glass }}>
+            <div style={{ margin:"8px 20px 0", background:C.card, borderRadius:C.radius, border:`1px solid ${C.border}`, overflow:"hidden", ...C.glass }}>
               {dayData.isSunday && (
                 <div style={{ padding:"14px 16px", borderBottom:`1px solid ${C.border}` }}>
                   <div style={{ fontFamily:C.fm, fontSize:8, color:C.muted, letterSpacing:3, marginBottom:10 }}>CHOOSE SESSION</div>
                   <div style={{ display:"flex", gap:8 }}>
                     {[["mobility","MOBILITY"],["plyo","PLYO + CORE"]].map(([key,label]) => (
-                      <button key={key} onClick={() => setSundayChoice(p => ({...p,[weekId]:key}))} style={{ flex:1, padding:"12px", background: sundayChoice[weekId]===key ? C.green : C.card2, color: sundayChoice[weekId]===key ? "#000" : C.text, border:`1px solid ${sundayChoice[weekId]===key ? C.green : C.border}`, borderRadius:10, cursor:"pointer", fontFamily:C.ff, fontSize:12, letterSpacing:2 }}>{label}</button>
+                      <button key={key} onClick={() => setSundayChoice((p) => ({...p,[weekId]:key}))} style={{ flex:1, padding:"11px", background: sundayChoice[weekId]===key ? C.green : C.card2, color: sundayChoice[weekId]===key ? "#000" : C.text, border:`1px solid ${sundayChoice[weekId]===key ? C.green : C.border}`, borderRadius:10, cursor:"pointer", fontFamily:C.ff, fontSize:11, letterSpacing:2 }}>
+                        {label}
+                      </button>
                     ))}
                   </div>
                 </div>
               )}
+
               {dayData.pm && (
                 <div style={{ display:"flex", borderBottom:`1px solid ${C.border}` }}>
                   {[["am","AM"],["pm","PM"]].map(([s,l]) => (
-                    <button key={s} onClick={() => setSess(s)} style={{ flex:1, padding:"10px", fontFamily:C.ff, fontSize:12, letterSpacing:3, background:"transparent", color: sess===s ? C.text : C.muted, border:"none", borderBottom:`2px solid ${sess===s ? C.green : "transparent"}`, cursor:"pointer" }}>{l} SESSION</button>
+                    <button key={s} onClick={() => { setSess(s); setPlanDetailView("overview"); }} style={{ flex:1, padding:"10px", fontFamily:C.ff, fontSize:12, letterSpacing:2, background:"transparent", color: sess===s ? C.text : C.muted, border:"none", borderBottom:`2px solid ${sess===s ? C.cyan : "transparent"}`, cursor:"pointer" }}>
+                      {l} SESSION
+                    </button>
                   ))}
                 </div>
               )}
+
               <div style={{ padding:"16px" }}>
-                {(() => {
-                  const wName = sess === "am" ? getEffAm(dayData) : dayData.pm;
-                  const wo = wName ? WL[wName] : null;
-                  const ac = wName ? getAccent(wName) : C.muted;
-                  if (!wo && !dayData.isRaceDay) return <div style={{ fontFamily:C.ff, fontSize:18, color:C.muted }}>SELECT A SESSION</div>;
-                  return (
-                    <>
-                      {wo && (
-                        <>
-                          <div style={{ display:"flex", alignItems:"center", gap:8, marginBottom:10 }}>
-                            <div style={{ background:`${ac}22`, border:`1px solid ${ac}44`, borderRadius:20, padding:"3px 10px", fontFamily:C.fm, fontSize:7, color:ac, letterSpacing:2 }}>{wo.type}</div>
-                            {dayData.pm && <div style={{ background:`${C.red}22`, border:`1px solid ${C.red}44`, borderRadius:20, padding:"3px 10px", fontFamily:C.fm, fontSize:7, color:C.red, letterSpacing:2 }}>2-A-DAY</div>}
+                {planDetailView === "overview" ? (
+                  <>
+                    <div style={{ display:"flex", alignItems:"center", gap:8, marginBottom:8 }}>
+                      <span style={{ fontSize:20 }}>{selectedMeta.emoji}</span>
+                      <div style={{ fontFamily:C.ff, fontSize:22, color:C.text, lineHeight:1.1 }}>{selectedMeta.label}</div>
+                      {dayData?.ai_modified && <span style={{ fontFamily:C.fm, fontSize:8, color:"#9b59b6", letterSpacing:2 }}>✦ AI</span>}
+                    </div>
+                    <div style={{ fontFamily:C.fm, fontSize:8, color:selectedMeta.color, letterSpacing:2, marginBottom:10 }}>
+                      {selectedMeta.tag}
+                    </div>
+                    <div style={{ background:C.card2, borderRadius:10, padding:"10px 12px", marginBottom:10, border:`1px solid ${C.border}` }}>
+                      <div style={{ fontFamily:C.fm, fontSize:7, color:C.muted, letterSpacing:2, marginBottom:5 }}>RECOVERY / STRAIN GATE</div>
+                      <div style={{ fontFamily:C.fs, fontSize:12, color:C.text, lineHeight:1.5 }}>
+                        WHOOP {whoopLabel(rec)} ({rec}%) — {whoopMsg(rec)}
+                      </div>
+                    </div>
+                    <div style={{ fontFamily:C.fm, fontSize:7, color:C.muted, letterSpacing:2, marginBottom:6 }}>COACHING CONTEXT</div>
+                    <div style={{ fontFamily:C.fs, fontSize:13, color:C.muted, lineHeight:1.6, marginBottom:12 }}>
+                      {selectedCoachingNote || "No additional context on this day yet."}
+                    </div>
+                    <div style={{ display:"flex", flexDirection:"column", gap:6 }}>
+                      {(selectedKeyPoints.length > 0 ? selectedKeyPoints : ["Stay smooth through transitions", "Keep quality over quantity", "Adjust intensity if recovery is low"]).slice(0,5).map((point, idx) => (
+                        <div key={`${point}_${idx}`} style={{ display:"flex", gap:8, alignItems:"flex-start" }}>
+                          <span style={{ color:selectedMeta.color, fontSize:10, marginTop:3 }}>•</span>
+                          <span style={{ fontFamily:C.fs, fontSize:13, color:C.text, lineHeight:1.5 }}>{point}</span>
+                        </div>
+                      ))}
+                    </div>
+                    {selectedCanViewWorkout && (
+                      <button
+                        onClick={() => setPlanDetailView("workout")}
+                        style={{ marginTop:14, width:"100%", padding:"12px", background:selectedMeta.color, color:"#fff", border:"none", borderRadius:10, cursor:"pointer", fontFamily:C.ff, fontSize:13, letterSpacing:2 }}
+                      >
+                        VIEW WORKOUT →
+                      </button>
+                    )}
+                  </>
+                ) : (
+                  <>
+                    <button onClick={() => setPlanDetailView("overview")} style={{ marginBottom:12, background:"transparent", border:`1px solid ${C.border}`, color:C.muted, borderRadius:8, padding:"6px 10px", cursor:"pointer", fontFamily:C.fm, fontSize:9, letterSpacing:1 }}>
+                      ← BACK
+                    </button>
+                    {dayData?.isRaceDay ? (
+                      <div style={{ display:"flex", flexDirection:"column", gap:8 }}>
+                        {["Wake 3 hrs before gun — calm morning","High carb, low fiber breakfast — no dairy","10 min easy jog + 4 strides","Skip stimulants — the race environment is your caffeine","EXECUTE YOUR PACING STRATEGY — TRUST THE WORK"].map((s,i) => (
+                          <div key={i} style={{ display:"flex", gap:12, padding:"12px 14px", background: i===4 ? C.red : C.card2, borderRadius:10, alignItems:"flex-start" }}>
+                            <span style={{ fontFamily:C.ff, fontSize:11, color: i===4 ? "#ffffff88" : C.light, minWidth:18 }}>{String(i+1).padStart(2,"0")}</span>
+                            <span style={{ fontFamily:C.fs, fontSize:13, color: i===4 ? "#fff" : C.text, lineHeight:1.45 }}>{s}</span>
                           </div>
-                          <div style={{ fontFamily:C.ff, fontSize:22, color:C.text, marginBottom:4, lineHeight:1.1 }}>{wName.split(" — ")[1] || wName}</div>
-                          <div style={{ fontFamily:C.fm, fontSize:7, color:C.muted, letterSpacing:2, marginBottom:14 }}>{wo.tag} · {wo.duration}</div>
-                        </>
-                      )}
-                      <button onClick={() => setSelDay(dayData.day)} style={{ width:"100%", padding:"12px", background:ac, color: ac === C.green ? "#000" : "#fff", border:"none", borderRadius:10, cursor:"pointer", fontFamily:C.ff, fontSize:14, letterSpacing:3 }}>VIEW FULL SESSION →</button>
-                    </>
-                  );
-                })()}
+                        ))}
+                      </div>
+                    ) : selectedShowCustom ? (
+                      renderCustomSession(selectedCustomContent, selectedMeta.color)
+                    ) : selectedWorkout ? (
+                      <div style={{ display:"flex", flexDirection:"column", gap:6 }}>
+                        {selectedWorkout.steps.map((s,i) => {
+                          const isDivider = s.startsWith("—");
+                          return isDivider ? (
+                            <div key={i} style={{ fontFamily:C.fm, fontSize:8, color:C.light, letterSpacing:3, padding:"8px 0 2px" }}>{s.replace(/—/g,"").trim()}</div>
+                          ) : (
+                            <div key={i} style={{ display:"flex", gap:12, padding:"12px 14px", background:C.card2, borderRadius:10, borderLeft:`3px solid ${selectedMeta.color}`, alignItems:"flex-start" }}>
+                              <span style={{ fontFamily:C.ff, fontSize:11, color:C.light, minWidth:18 }}>{String(i+1).padStart(2,"0")}</span>
+                              <span style={{ fontFamily:C.fs, fontSize:13, color:C.text, lineHeight:1.45 }}>{s}</span>
+                            </div>
+                          );
+                        })}
+                        {(selectedCoachingNote || selectedWorkout.note) && (
+                          <div style={{ marginTop:8, background:C.card2, borderRadius:10, padding:"12px 14px", borderLeft:`3px solid ${C.border}` }}>
+                            <div style={{ fontFamily:C.fm, fontSize:8, color:C.red, letterSpacing:2, marginBottom:5 }}>COACH NOTE</div>
+                            <div style={{ fontFamily:C.fs, fontSize:13, color:C.muted, lineHeight:1.6 }}>{selectedCoachingNote || selectedWorkout.note}</div>
+                          </div>
+                        )}
+                      </div>
+                    ) : (
+                      <div style={{ fontFamily:C.fs, fontSize:13, color:C.muted }}>No workout details available yet.</div>
+                    )}
+                  </>
+                )}
               </div>
             </div>
           )}
+
+          {weeklyAiAdjustments.length > 0 && (
+            <div style={{ margin:"14px 20px 0", background:"#9b59b612", border:`1px solid #9b59b644`, borderRadius:12, overflow:"hidden" }}>
+              <button onClick={() => setShowAiAdjustments((v) => !v)} style={{ width:"100%", display:"flex", justifyContent:"space-between", alignItems:"center", background:"transparent", border:"none", padding:"12px 14px", cursor:"pointer" }}>
+                <span style={{ fontFamily:C.ff, fontSize:14, color:"#c6a6ff", letterSpacing:2 }}>✦ AI ADJUSTMENTS</span>
+                <span style={{ color:"#c6a6ff", fontSize:14 }}>{showAiAdjustments ? "−" : "+"}</span>
+              </button>
+              {showAiAdjustments && (
+                <div style={{ padding:"0 14px 12px", display:"flex", flexDirection:"column", gap:8 }}>
+                  {weeklyAiAdjustments.map((adj, idx) => (
+                    <div key={`${adj.day}_${idx}`} style={{ background:C.card, border:`1px solid ${C.border}`, borderRadius:10, padding:"10px 12px" }}>
+                      <div style={{ fontFamily:C.fm, fontSize:8, color:"#c6a6ff", letterSpacing:2, marginBottom:4 }}>
+                        {adj.day} · {adj.session}
+                      </div>
+                      <div style={{ fontFamily:C.fs, fontSize:12, color:C.muted, lineHeight:1.5 }}>{adj.summary}</div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
+
+          <div style={{ margin:"14px 20px 0", background:C.card, border:`1px solid ${C.border}`, borderRadius:12, overflow:"hidden", ...C.glass }}>
+            <button onClick={() => setShowRecoveryGates((v) => !v)} style={{ width:"100%", display:"flex", justifyContent:"space-between", alignItems:"center", background:"transparent", border:"none", padding:"12px 14px", cursor:"pointer" }}>
+              <span style={{ fontFamily:C.ff, fontSize:14, color:C.cyan, letterSpacing:2 }}>RECOVERY GATES</span>
+              <span style={{ color:C.cyan, fontSize:14 }}>{showRecoveryGates ? "−" : "+"}</span>
+            </button>
+            {showRecoveryGates && (
+              <div style={{ padding:"0 14px 12px", display:"flex", flexDirection:"column", gap:8 }}>
+                {[["GREEN",">66%",C.green,"Execute session as written."],["YELLOW","34–66%",C.yellow,"Reduce intensity and shorten quality segments."],["RED","<34%",C.red,"Shift to recovery or mobility only."]].map(([gate, range, color, note]) => {
+                  const active = whoopLabel(rec) === gate;
+                  return (
+                    <div key={gate} style={{ background:C.card2, border:`1px solid ${active ? color : C.border}`, borderRadius:10, padding:"10px 12px" }}>
+                      <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:4 }}>
+                        <div style={{ fontFamily:C.fm, fontSize:8, color, letterSpacing:2 }}>{gate}</div>
+                        <div style={{ fontFamily:C.fm, fontSize:7, color:C.muted, letterSpacing:1 }}>{range}</div>
+                      </div>
+                      <div style={{ fontFamily:C.fs, fontSize:12, color:C.muted, lineHeight:1.5 }}>{note}</div>
+                      {active && <div style={{ fontFamily:C.fm, fontSize:7, color, letterSpacing:2, marginTop:6 }}>CURRENT GATE</div>}
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+
           <div style={{ marginTop:24, marginBottom:24, marginLeft:20, marginRight:20 }}>
             <button onClick={() => { setLabOpen(true); setLabMessages([]); setCqSelections({}); setLabAnsweredQuestions({}); setLabSessionId(createSessionId()); const wk = week?.label?.split("·")[1]?.trim() || week?.label || ""; const selD = selDay || todayDayName; setLabContext(`${wk} · ${selD}`); setLabTargetDay(selD); }}
               style={{ width:"100%", padding:"14px", background:`${C.cyan}08`, border:`1px solid ${C.cyan}22`, borderRadius:C.radius, cursor:"pointer", display:"flex", alignItems:"center", justifyContent:"center", gap:10, ...C.glass }}>
               <span style={{ fontSize:16 }}>🧪</span>
               <span style={{ fontFamily:C.ff, fontSize:14, color:C.cyan, letterSpacing:2 }}>RUN A SCENARIO</span>
             </button>
-          </div>
-          <div style={{ margin:"0 20px 20px" }}>
-            <div style={{ fontFamily:C.fm, fontSize:8, color:C.muted, letterSpacing:3, marginBottom:10 }}>WEEKLY STRUCTURE</div>
-            {(week?.days || []).map((d) => {
-              const selectedSunday = sundayChoice[week?.id || weekId];
-              const sundaySession = d.isSunday
-                ? (selectedSunday === "mobility"
-                  ? "SUNDAY — Mobility Protocol"
-                  : selectedSunday === "plyo"
-                    ? "SUNDAY — Plyo & Core"
-                    : null)
-                : null;
-
-              const primarySession = d.isRaceDay ? "🏁 RACE DAY" : (d.isSunday ? sundaySession : (d.am || d.pm));
-              const color = d.isRaceDay ? C.red : (primarySession ? getAccent(primarySession) : C.light);
-
-              let label = "REST";
-              if (d.isRaceDay) {
-                label = "RACE DAY";
-              } else if (d.isSunday) {
-                label = selectedSunday === "mobility" ? "MOBILITY PROTOCOL"
-                  : selectedSunday === "plyo" ? "PLYO + CORE"
-                  : "CHOOSE SUNDAY SESSION";
-              } else if (primarySession) {
-                label = getTypeLabel(primarySession);
-                if (d.pm) label = `${label} + PM`;
-              }
-
-              return (
-                <div key={d.day} style={{ display:"flex", alignItems:"center", gap:12, padding:"10px 0", borderBottom:`1px solid ${C.border}` }}>
-                  <div style={{ width:8, height:8, borderRadius:"50%", background:color, flexShrink:0 }} />
-                  <span style={{ fontFamily:C.ff, fontSize:13, color, minWidth:36 }}>{d.day}</span>
-                  <span style={{ fontFamily:C.fm, fontSize:8, color:C.muted, letterSpacing:1 }}>{label}</span>
-                </div>
-              );
-            })}
           </div>
         </div>
       )}
@@ -2617,10 +2853,6 @@ export default function App() {
           setProfile((prev) => (prev ? { ...prev, plan_builder: builderInputs } : prev));
         }}
       />
-
-      {selDay && (
-        <SessionModal name={modalName} dayData={dayData} sess={sess} weekId={weekId} onClose={() => setSelDay(null)} onSessSwitch={setSess} sundayChoice={sundayChoice} setSundayChoice={setSundayChoice} supabase={supabase} session={session} onSaved={() => fetchPlan(session?.access_token)} />
-      )}
 
       {labOpen && (
         <>
