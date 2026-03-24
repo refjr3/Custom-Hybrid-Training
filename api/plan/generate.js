@@ -54,6 +54,15 @@ function fmtDate(d) {
 // ── Prompt builders ───────────────────────────────────────────────────────────
 
 const DAY_IDX = { MON: 0, TUE: 1, WED: 2, THU: 3, FRI: 4, SAT: 5, SUN: 6 };
+const DEFAULT_EQUIPMENT = [
+  "Full Gym",
+  "HYROX Equipment",
+  "Dumbbells",
+  "Bodyweight",
+  "Running/Outdoor",
+  "Pool",
+  "Cycling",
+];
 
 function sportFocus(sports = []) {
   if (sports.includes("hyrox"))
@@ -86,6 +95,17 @@ function toDaysPerWeek(value, fallback = 5) {
   const n = Number(value);
   if (!Number.isFinite(n)) return fallback;
   return Math.max(1, Math.min(7, Math.round(n)));
+}
+
+function weeksUntilRaceDate(dateStr) {
+  if (!dateStr) return null;
+  const target = new Date(`${dateStr}T00:00:00`);
+  if (Number.isNaN(target.getTime())) return null;
+  const now = new Date();
+  const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+  const diffMs = target.getTime() - today.getTime();
+  if (diffMs <= 0) return 12;
+  return Math.max(1, Math.ceil(diffMs / (1000 * 60 * 60 * 24 * 7)));
 }
 
 function normalizeSessionPreference(value) {
@@ -181,7 +201,7 @@ function buildPrompt(profile, planStart, builder = {}) {
   );
   const daysPerWeekValue = toDaysPerWeek(daysPerWeek, 5);
   const sessionPrefValue = normalizeSessionPreference(sessionPreference);
-  const equipmentList = equipment.length > 0 ? equipment : ["Running/Outdoor", "Bodyweight"];
+  const equipmentList = equipment.length > 0 ? equipment : DEFAULT_EQUIPMENT;
   const phaseStructureLabel = phaseStructure.map((p) => `${p.name} ${p.weeks} wks`).join(" -> ");
   const phaseCount = phaseStructure.length;
 
@@ -293,16 +313,32 @@ export default async function handler(req, res) {
   if (!profile) {
     // Use defaults from request body when profile lookup is unavailable.
     profile = {
-      sports: req.body?.sports || [],
-      target_race_date: req.body?.target_race_date,
+      sports: req.body?.sports || (req.body?.sport ? [req.body.sport] : []),
+      race_goal: req.body?.sport || req.body?.race_goal || null,
+      target_race_name: req.body?.race_name || null,
+      target_race_date: req.body?.race_date || req.body?.target_race_date || null,
       weeks_per_block: req.body?.weeks_per_block || 4,
       phases: req.body?.phases || ["Base", "Build", "Peak", "Taper"],
+      days_per_week: req.body?.days_per_week || 5,
     };
   }
   profile = {
     ...profile,
     user_id: req.body?.user_id || profile?.user_id || userId,
   };
+  // Normalize the simplified 3-question payload.
+  const simpleSport = String(req.body?.sport || "").trim().toLowerCase();
+  const simpleRaceName = typeof req.body?.race_name === "string" ? req.body.race_name.trim() : "";
+  const simpleRaceDate = typeof req.body?.race_date === "string" ? req.body.race_date : null;
+  if (simpleSport) {
+    profile.sports = [simpleSport];
+    profile.race_goal = simpleSport;
+  }
+  if ((!Array.isArray(profile?.sports) || profile.sports.length === 0) && profile?.race_goal) {
+    profile.sports = [String(profile.race_goal).toLowerCase()];
+  }
+  profile.target_race_name = simpleRaceName || profile?.target_race_name || null;
+  profile.target_race_date = simpleRaceDate || profile?.target_race_date || null;
 
   // ── Check generation_status and decide whether to proceed ─────────────────
   let genStatus = "pending";
@@ -350,25 +386,20 @@ export default async function handler(req, res) {
     }
   }
 
-  const daysPerWeek = toDaysPerWeek(
-    req.body?.days_per_week ?? profile?.days_per_week,
-    5
-  );
+  const inferredWeeks = weeksUntilRaceDate(req.body?.race_date || profile?.target_race_date);
+  const daysPerWeek = toDaysPerWeek(req.body?.days_per_week ?? profile?.days_per_week, 5);
   const sessionPreference = normalizeSessionPreference(
     req.body?.session_preference ?? profile?.session_preference
   );
   const equipment = normalizeEquipment(
     req.body?.equipment ?? profile?.equipment
   );
-  const totalWeeks = toPositiveInt(
-    req.body?.total_weeks ?? profile?.total_weeks,
-    toPositiveInt(profile?.phases, 3) * toPositiveInt(profile?.weeks_per_block, 6)
-  );
+  const totalWeeks = toPositiveInt(req.body?.total_weeks, inferredWeeks ?? 12);
   const phaseStructure = buildPhaseStructure({
-    customPhases: req.body?.phases ?? profile?.custom_phases,
+    customPhases: req.body?.phases,
     totalWeeks,
-    legacyPhases: profile?.phases,
-    legacyWeeksPerBlock: profile?.weeks_per_block,
+    legacyPhases: 4,
+    legacyWeeksPerBlock: Math.max(1, Math.round(totalWeeks / 4)),
   });
 
   const builderContext = {
