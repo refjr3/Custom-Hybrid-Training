@@ -63,6 +63,7 @@ const chip = (on) => ({
 });
 
 export default function PlanBuilder({ open, onGenerated, onClose }) {
+  // Keep hook order fixed on every render.
   const [screen, setScreen] = useState(1);
   const [sports, setSports] = useState([]);
   const [races, setRaces] = useState([]);
@@ -71,8 +72,6 @@ export default function PlanBuilder({ open, onGenerated, onClose }) {
   const [daysPerWeek, setDaysPerWeek] = useState(null);
   const [status, setStatus] = useState("idle");
   const [error, setError] = useState("");
-
-  if (!open) return null;
 
   const toggleSport = (sportId) => {
     setSports((prev) => {
@@ -135,6 +134,8 @@ export default function PlanBuilder({ open, onGenerated, onClose }) {
       setStatus("error");
     }
   };
+
+  if (!open) return null;
 
   if (status === "loading" || status === "error") {
     return (
