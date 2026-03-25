@@ -1290,6 +1290,15 @@ export default function App() {
   const [flipped, setFlipped] = useState(false);
   const [showRecoveryGates, setShowRecoveryGates] = useState(false);
   const [showAiAdjustments, setShowAiAdjustments] = useState(true);
+  const [expandedExerciseId, setExpandedExerciseId] = useState(null);
+  const [exerciseDraft, setExerciseDraft] = useState({});
+  const [exerciseQuery, setExerciseQuery] = useState("");
+  const [showMovementPickerFor, setShowMovementPickerFor] = useState(null);
+  const [showAddBlockPrompt, setShowAddBlockPrompt] = useState(false);
+  const [newBlockType, setNewBlockType] = useState("strength");
+  const [newBlockName, setNewBlockName] = useState("");
+  const [editSaving, setEditSaving] = useState(false);
+  const [editToast, setEditToast] = useState(null);
   const [labContext, setLabContext] = useState("");
   const [labTargetDay, setLabTargetDay] = useState(null);
   const [cqSelections, setCqSelections] = useState({});
@@ -1911,7 +1920,6 @@ export default function App() {
     setNewBlockType("strength");
     setNewBlockName("");
     setPlanDetailView("edit");
-    setFlipped(true);
   };
 
   const cancelEditMode = () => {
@@ -2592,80 +2600,93 @@ export default function App() {
                     ...C.glass,
                   }}
                 >
-                  <div style={{ padding:"14px 14px 16px" }}>
-                    <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:6 }}>
-                      <button onClick={() => { setPlanDetailView("overview"); setFlipped(false); }} style={{ background:"transparent", border:"none", color:C.cyan, fontFamily:C.fm, fontSize:10, letterSpacing:2, textTransform:"uppercase", cursor:"pointer", padding:0 }}>
-                        ← BACK
-                      </button>
-                      <div style={{ display:"flex", alignItems:"center", gap:8 }}>
-                        <button
-                          onClick={openEditMode}
-                          style={{ background:"transparent", border:`1px solid ${C.cyan}55`, color:C.cyan, borderRadius:8, padding:"6px 10px", fontFamily:C.fm, fontSize:9, letterSpacing:2, textTransform:"uppercase", cursor:"pointer" }}
-                        >
-                          EDIT WORKOUT
+                  {planDetailView === "edit" ? (
+                    <div style={{ padding:"14px 14px 16px" }}>
+                      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 16 }}>
+                        <button onClick={cancelEditMode} style={{ background: "none", border: "none", color: "#888", fontFamily: "monospace", fontSize: 11, letterSpacing: 2, cursor: "pointer" }}>← DONE</button>
+                        <div style={{ color: "#fff", fontFamily: "monospace", fontSize: 11, letterSpacing: 3 }}>EDIT WORKOUT</div>
+                        <button onClick={saveWorkoutEdits} style={{ background: "#00F3FF", border: "none", color: "#000", fontFamily: "monospace", fontSize: 11, letterSpacing: 2, borderRadius: 8, padding: "6px 12px", cursor: "pointer", fontWeight: 700 }}>SAVE</button>
+                      </div>
+                      <div style={{ fontFamily:C.fm, fontSize:9, color:C.muted, letterSpacing:2 }}>
+                        EDITOR BODY
+                      </div>
+                    </div>
+                  ) : (
+                    <div style={{ padding:"14px 14px 16px" }}>
+                      <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:6 }}>
+                        <button onClick={() => { setPlanDetailView("overview"); setFlipped(false); }} style={{ background:"transparent", border:"none", color:C.cyan, fontFamily:C.fm, fontSize:10, letterSpacing:2, textTransform:"uppercase", cursor:"pointer", padding:0 }}>
+                          ← BACK
                         </button>
-                        <span style={{ fontFamily:C.fm, fontSize:8, color:selectedMeta.color, letterSpacing:2, textTransform:"uppercase", background:`${selectedMeta.color}22`, border:`1px solid ${selectedMeta.color}55`, borderRadius:4, padding:"2px 8px" }}>{selectedMeta.tag}</span>
+                        <div style={{ display:"flex", alignItems:"center", gap:8 }}>
+                          <button
+                            onClick={openEditMode}
+                            style={{ background:"transparent", border:`1px solid ${C.cyan}55`, color:C.cyan, borderRadius:8, padding:"6px 10px", fontFamily:C.fm, fontSize:9, letterSpacing:2, textTransform:"uppercase", cursor:"pointer" }}
+                          >
+                            EDIT WORKOUT
+                          </button>
+                          <span style={{ fontFamily:C.fm, fontSize:8, color:selectedMeta.color, letterSpacing:2, textTransform:"uppercase", background:`${selectedMeta.color}22`, border:`1px solid ${selectedMeta.color}55`, borderRadius:4, padding:"2px 8px" }}>{selectedMeta.tag}</span>
+                        </div>
                       </div>
-                    </div>
-                    <div style={{ fontFamily:C.ff, fontSize:24, color:C.text, lineHeight:1.1, letterSpacing:0.6, textTransform:"uppercase" }}>{selectedMeta.label}</div>
-                    <div style={{ marginTop:8, marginBottom:14, fontFamily:C.fm, fontSize:9, color:C.muted, letterSpacing:2, textTransform:"uppercase" }}>
-                      {selectedWorkout?.duration || "65 MIN"} · {selectedWorkout?.type || selectedWorkout?.zone || selectedMeta.tag} · {selectedWorkout?.tag || selectedWorkout?.hr || "PUSH DOMINANT"}
-                    </div>
+                      <div style={{ fontFamily:C.ff, fontSize:24, color:C.text, lineHeight:1.1, letterSpacing:0.6, textTransform:"uppercase" }}>{selectedMeta.label}</div>
+                      <div style={{ marginTop:8, marginBottom:14, fontFamily:C.fm, fontSize:9, color:C.muted, letterSpacing:2, textTransform:"uppercase" }}>
+                        {selectedWorkout?.duration || "65 MIN"} · {selectedWorkout?.type || selectedWorkout?.zone || selectedMeta.tag} · {selectedWorkout?.tag || selectedWorkout?.hr || "PUSH DOMINANT"}
+                      </div>
 
-                    {isHyroxSession ? (
-                      <div style={{ display:"flex", flexDirection:"column", gap:14 }}>
-                        {selectedBlocks.flatMap((block, bi) =>
-                          block.items.map((item, ii) => (
-                            <div key={`hyrox_${bi}_${ii}`} style={{ borderRadius:10, border:`1px solid ${C.border}`, borderLeft:"3px solid #9b59b6", padding:"10px 12px", background: ii % 2 === 0 ? "rgba(255,255,255,0.02)" : "transparent" }}>
-                              <div style={{ display:"flex", alignItems:"center", gap:10 }}>
-                                <span style={{ fontSize:16, color:item.name.toLowerCase().includes("run") ? "#4a90c4" : "#9b59b6" }}>
-                                  {item.name.toLowerCase().includes("run") ? "◉" : "⬡"}
-                                </span>
-                                <span style={{ fontFamily:C.ff, fontSize:15, color:C.text, letterSpacing:1 }}>{item.name.toUpperCase()}</span>
-                              </div>
-                              {item.detail && (
-                                <div style={{ marginTop:4, marginLeft:26, fontFamily:C.fs, fontSize:12, color:C.muted }}>
-                                  {item.detail}
+                      {isHyroxSession ? (
+                        <div style={{ display:"flex", flexDirection:"column", gap:14 }}>
+                          {selectedBlocks.flatMap((block, bi) =>
+                            block.items.map((item, ii) => (
+                              <div key={`hyrox_${bi}_${ii}`} style={{ borderRadius:10, border:`1px solid ${C.border}`, borderLeft:"3px solid #9b59b6", padding:"10px 12px", background: ii % 2 === 0 ? "rgba(255,255,255,0.02)" : "transparent" }}>
+                                <div style={{ display:"flex", alignItems:"center", gap:10 }}>
+                                  <span style={{ fontSize:16, color:item.name.toLowerCase().includes("run") ? "#4a90c4" : "#9b59b6" }}>
+                                    {item.name.toLowerCase().includes("run") ? "◉" : "⬡"}
+                                  </span>
+                                  <span style={{ fontFamily:C.ff, fontSize:15, color:C.text, letterSpacing:1 }}>{item.name.toUpperCase()}</span>
                                 </div>
-                              )}
-                            </div>
-                          ))
-                        )}
-                      </div>
-                    ) : (
-                      <div style={{ display:"flex", flexDirection:"column", gap:20 }}>
-                        {selectedBlocks.map((block, bi) => (
-                          <div key={`block_${bi}`}>
-                            <div style={{ borderLeft:`3px solid ${selectedMeta.color}`, paddingLeft:10, marginBottom:8 }}>
-                              <div style={{ fontFamily:C.fm, fontSize:10, color:C.cyan, letterSpacing:3, textTransform:"uppercase" }}>
-                                {block.title}{block.rounds ? ` · ${block.rounds} ROUNDS` : ""}
-                              </div>
-                            </div>
-                            <div style={{ display:"flex", flexDirection:"column", gap:2 }}>
-                              {block.items.map((item, ii) => (
-                                <div key={`row_${bi}_${ii}`} style={{ display:"flex", alignItems:"center", justifyContent:"space-between", gap:10, padding:"8px 10px", background: ii % 2 === 0 ? "rgba(255,255,255,0.02)" : "transparent", borderRadius:6 }}>
-                                  <div style={{ display:"flex", alignItems:"center", gap:8, minWidth:0 }}>
-                                    <span style={{ color:selectedMeta.color, fontSize:14 }}>○</span>
-                                    <span style={{ fontFamily:C.fs, fontSize:13, color:C.text, overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>{item.name}</span>
+                                {item.detail && (
+                                  <div style={{ marginTop:4, marginLeft:26, fontFamily:C.fs, fontSize:12, color:C.muted }}>
+                                    {item.detail}
                                   </div>
-                                  <span style={{ fontFamily:C.fm, fontSize:11, color:"#888", letterSpacing:1, textAlign:"right", flexShrink:0 }}>{item.detail}</span>
+                                )}
+                              </div>
+                            ))
+                          )}
+                        </div>
+                      ) : (
+                        <div style={{ display:"flex", flexDirection:"column", gap:20 }}>
+                          {selectedBlocks.map((block, bi) => (
+                            <div key={`block_${bi}`}>
+                              <div style={{ borderLeft:`3px solid ${selectedMeta.color}`, paddingLeft:10, marginBottom:8 }}>
+                                <div style={{ fontFamily:C.fm, fontSize:10, color:C.cyan, letterSpacing:3, textTransform:"uppercase" }}>
+                                  {block.title}{block.rounds ? ` · ${block.rounds} ROUNDS` : ""}
                                 </div>
-                              ))}
+                              </div>
+                              <div style={{ display:"flex", flexDirection:"column", gap:2 }}>
+                                {block.items.map((item, ii) => (
+                                  <div key={`row_${bi}_${ii}`} style={{ display:"flex", alignItems:"center", justifyContent:"space-between", gap:10, padding:"8px 10px", background: ii % 2 === 0 ? "rgba(255,255,255,0.02)" : "transparent", borderRadius:6 }}>
+                                    <div style={{ display:"flex", alignItems:"center", gap:8, minWidth:0 }}>
+                                      <span style={{ color:selectedMeta.color, fontSize:14 }}>○</span>
+                                      <span style={{ fontFamily:C.fs, fontSize:13, color:C.text, overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>{item.name}</span>
+                                    </div>
+                                    <span style={{ fontFamily:C.fm, fontSize:11, color:"#888", letterSpacing:1, textAlign:"right", flexShrink:0 }}>{item.detail}</span>
+                                  </div>
+                                ))}
+                              </div>
                             </div>
-                          </div>
-                        ))}
-                      </div>
-                    )}
+                          ))}
+                        </div>
+                      )}
 
-                    <div style={{ marginTop:16 }}>
-                      <div style={{ height:1, background:`${C.cyan}66`, marginBottom:8 }} />
-                      <div style={{ fontFamily:C.fm, fontSize:10, color:C.cyan, letterSpacing:3, textTransform:"uppercase", marginBottom:6 }}>Coach Note</div>
-                      <div style={{ fontFamily:C.fs, fontSize:13, color:"#aaa", fontStyle:"italic", lineHeight:1.6 }}>
-                        {selectedCoachingNote || selectedWorkout?.note || "Maintain quality and pace discipline through every set."}
+                      <div style={{ marginTop:16 }}>
+                        <div style={{ height:1, background:`${C.cyan}66`, marginBottom:8 }} />
+                        <div style={{ fontFamily:C.fm, fontSize:10, color:C.cyan, letterSpacing:3, textTransform:"uppercase", marginBottom:6 }}>Coach Note</div>
+                        <div style={{ fontFamily:C.fs, fontSize:13, color:"#aaa", fontStyle:"italic", lineHeight:1.6 }}>
+                          {selectedCoachingNote || selectedWorkout?.note || "Maintain quality and pace discipline through every set."}
+                        </div>
+                        <div style={{ height:1, background:`${C.cyan}66`, marginTop:8 }} />
                       </div>
-                      <div style={{ height:1, background:`${C.cyan}66`, marginTop:8 }} />
                     </div>
-                  </div>
+                  )}
                 </div>
               </div>
             </div>
