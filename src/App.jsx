@@ -1243,6 +1243,18 @@ export default function App() {
     }
   }, []);
 
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    if (params.get("whoop_connected") === "true") {
+      window.history.replaceState({}, "", "/");
+      if (session?.access_token) fetchWhoopData();
+    }
+    if (params.get("error")) {
+      console.error("Auth error:", params.get("error"));
+      window.history.replaceState({}, "", "/");
+    }
+  }, [session?.access_token]);
+
   // Data fetches — only run once per session when profile is first loaded
   useEffect(() => {
     if (!profile || dataFetched.current) return;
@@ -1695,8 +1707,19 @@ export default function App() {
   // ── Auth routing — must come after all hooks ───────────────────────────────
   if (authLoading) {
     return (
-      <div style={{ display:"flex", alignItems:"center", justifyContent:"center", minHeight:"100vh", background:C.bg }}>
-        <div className="shimmer" style={{ fontFamily:C.ff, fontSize:24, letterSpacing:6 }}>LOADING</div>
+      <div style={{ minHeight: "100vh", background: C.bg, color: C.text, fontFamily: C.fs, maxWidth: 480, margin: "0 auto", padding: "16px 16px 80px" }}>
+        <div style={{ fontFamily: C.fm, fontSize: 8, color: C.muted, letterSpacing: 3, textTransform: "uppercase" }}>
+          {new Date().toLocaleDateString("en-US", { weekday: "long", month: "long", day: "numeric" })}
+        </div>
+        <div style={{ fontFamily: C.ff, fontSize: 32, letterSpacing: 2, marginTop: 4 }}>ATHLETE</div>
+        <div style={{ height: 1, background: `${C.cyan}55`, marginTop: 12, marginBottom: 16 }} />
+        <div style={{ display: "grid", gap: 16 }}>
+          {[0, 1, 2].map((i) => (
+            <div key={i} style={{ borderRadius: 16, padding: 20, background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.08)", ...C.glass }}>
+              <div className="shimmer" style={{ fontFamily: C.ff, fontSize: 18, letterSpacing: 2 }}>LOADING</div>
+            </div>
+          ))}
+        </div>
       </div>
     );
   }
