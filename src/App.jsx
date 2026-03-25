@@ -127,6 +127,19 @@ const resolveSessionKey = (sessionName, dayRow) => {
   return "rest";
 };
 
+function getSessionIcon(amSession) {
+  if (!amSession) return "—";
+  const s = String(amSession).toLowerCase();
+  if (s.includes("hyrox") || s.includes("for time") || s.includes("amrap") || s.includes("emom")) return "⬡";
+  if (s.includes("strength")) return "▲";
+  if (s.includes("zone 2") || s.includes("easy aerobic") || s.includes("long run")) return "◉";
+  if (s.includes("threshold") || s.includes("vo2") || s.includes("tempo")) return "◈";
+  if (s.includes("recovery") || s.includes("active reset")) return "○";
+  if (s.includes("race") || s.includes("simulation")) return "◆";
+  if (s.includes("mobility")) return "✦";
+  return "—";
+}
+
 const whoopColor = (s) => s >= 67 ? C.green : s >= 34 ? C.yellow : C.red;
 const whoopLabel = (s) => s >= 67 ? "GREEN" : s >= 34 ? "YELLOW" : "RED";
 const whoopMsg   = (s) => s >= 67 ? "Execute today's plan as written" : s >= 34 ? "Reduce intensity 20% · Skip VO2 Max" : "Recovery only · Contrast therapy · Rest";
@@ -2220,7 +2233,7 @@ export default function App() {
                       ✦
                     </div>
                   )}
-                  <div style={{ fontSize:28, lineHeight:1, color:meta.color }}>{meta.icon}</div>
+                  <div style={{ fontSize:24, lineHeight:1, color:meta.color }}>{getSessionIcon(d?.am)}</div>
                   {!isRest && (
                     <div style={{ background:`${meta.color}22`, border:`1px solid ${meta.color}55`, borderRadius:4, padding:"2px 6px", fontFamily:C.fm, fontSize:7, color:meta.color, letterSpacing:2, textTransform:"uppercase", maxWidth:"100%", overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>
                       {meta.tag}
