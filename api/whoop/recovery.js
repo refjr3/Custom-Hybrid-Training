@@ -37,7 +37,7 @@ export default async function handler(req, res) {
 
   if (!access && refresh) {
     const newTokens = await refreshToken(refresh);
-    if (!newTokens.access_token) return res.status(401).json({ error: "refresh_failed" });
+    if (!newTokens.access_token) return res.status(401).json({ error: "whoop_reconnect_required" });
     access = newTokens.access_token;
     const opts = "Path=/; HttpOnly; SameSite=Lax";
     res.setHeader("Set-Cookie", [
@@ -98,13 +98,13 @@ export default async function handler(req, res) {
         ]);
         ({ recRes, sleepRes, cycleRes } = await fetchWhoop(access));
       } else {
-        return res.status(401).json({ error: "refresh_failed" });
+        return res.status(401).json({ error: "whoop_reconnect_required" });
       }
     }
 
-    if (recRes.status === 401) {
+    if (recRes.status === 401 || sleepRes.status === 401 || cycleRes.status === 401) {
       console.log("[whoop] still 401 after refresh attempt — token fully expired");
-      return res.status(401).json({ error: "token_expired", reconnect: true });
+      return res.status(401).json({ error: "whoop_reconnect_required", reconnect: true });
     }
 
     const [recData, sleepData, cycleData] = await Promise.all([

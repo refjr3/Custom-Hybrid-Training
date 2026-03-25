@@ -2597,7 +2597,15 @@ export default function App() {
                       <button onClick={() => { setPlanDetailView("overview"); setFlipped(false); }} style={{ background:"transparent", border:"none", color:C.cyan, fontFamily:C.fm, fontSize:10, letterSpacing:2, textTransform:"uppercase", cursor:"pointer", padding:0 }}>
                         ← BACK
                       </button>
-                      <span style={{ fontFamily:C.fm, fontSize:8, color:selectedMeta.color, letterSpacing:2, textTransform:"uppercase", background:`${selectedMeta.color}22`, border:`1px solid ${selectedMeta.color}55`, borderRadius:4, padding:"2px 8px" }}>{selectedMeta.tag}</span>
+                      <div style={{ display:"flex", alignItems:"center", gap:8 }}>
+                        <button
+                          onClick={openEditMode}
+                          style={{ background:"transparent", border:`1px solid ${C.cyan}55`, color:C.cyan, borderRadius:8, padding:"6px 10px", fontFamily:C.fm, fontSize:9, letterSpacing:2, textTransform:"uppercase", cursor:"pointer" }}
+                        >
+                          EDIT WORKOUT
+                        </button>
+                        <span style={{ fontFamily:C.fm, fontSize:8, color:selectedMeta.color, letterSpacing:2, textTransform:"uppercase", background:`${selectedMeta.color}22`, border:`1px solid ${selectedMeta.color}55`, borderRadius:4, padding:"2px 8px" }}>{selectedMeta.tag}</span>
+                      </div>
                     </div>
                     <div style={{ fontFamily:C.ff, fontSize:24, color:C.text, lineHeight:1.1, letterSpacing:0.6, textTransform:"uppercase" }}>{selectedMeta.label}</div>
                     <div style={{ marginTop:8, marginBottom:14, fontFamily:C.fm, fontSize:9, color:C.muted, letterSpacing:2, textTransform:"uppercase" }}>
