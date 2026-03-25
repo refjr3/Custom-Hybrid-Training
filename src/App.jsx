@@ -140,6 +140,60 @@ function getSessionIcon(amSession) {
   return "—";
 }
 
+const parseExerciseLine = (line) => {
+  const raw = String(line || "").trim();
+  if (!raw) return { name: "", detail: "" };
+  if (raw.includes(" · ")) {
+    const [name, ...rest] = raw.split(" · ");
+    return { name: name.trim(), detail: rest.join(" · ").trim() };
+  }
+  const m = raw.match(/^(.*?)(?:\s{2,}|\s+)(\d+\s*[x×].*|.*\/side.*|.*sec.*|.*min.*|@.*|RPE.*)$/i);
+  if (m) return { name: m[1].trim(), detail: m[2].trim() };
+  return { name: raw, detail: "" };
+};
+
+const normalizeWorkoutBlocks = (sessionBlocks, workout) => {
+  if (Array.isArray(sessionBlocks) && sessionBlocks.length > 0) {
+    return sessionBlocks.map((block, bi) => {
+      const exercises = Array.isArray(block?.exercises) ? block.exercises : [];
+      const items = exercises.map((ex) => {
+        if (typeof ex === "string") return parseExerciseLine(ex);
+        const name = ex?.name || ex?.exercise || ex?.title || "Exercise";
+        const detailParts = [];
+        if (ex?.sets) detailParts.push(`${ex.sets}x`);
+        if (ex?.reps) detailParts.push(String(ex.reps));
+        if (ex?.distance) detailParts.push(String(ex.distance));
+        if (ex?.duration) detailParts.push(String(ex.duration));
+        if (ex?.target) detailParts.push(String(ex.target));
+        if (ex?.note) detailParts.push(String(ex.note));
+        return { name, detail: detailParts.join(" · ") };
+      });
+      return {
+        title: String(block?.type || block?.name || `Block ${bi + 1}`).replace(/_/g, " ").toUpperCase(),
+        rounds: Number(block?.rounds) || null,
+        items: items.filter((i) => i.name),
+      };
+    });
+  }
+
+  const steps = Array.isArray(workout?.steps) ? workout.steps : [];
+  if (steps.length === 0) return [];
+  const blocks = [];
+  let current = { title: "WORKOUT", rounds: null, items: [] };
+  steps.forEach((step) => {
+    if (typeof step !== "string") return;
+    if (step.startsWith("—")) {
+      if (current.items.length > 0) blocks.push(current);
+      current = { title: step.replace(/—/g, "").trim().toUpperCase() || "WORKOUT", rounds: null, items: [] };
+      return;
+    }
+    const parsed = parseExerciseLine(step);
+    if (parsed.name) current.items.push(parsed);
+  });
+  if (current.items.length > 0) blocks.push(current);
+  return blocks;
+};
+
 const whoopColor = (s) => s >= 67 ? C.green : s >= 34 ? C.yellow : C.red;
 const whoopLabel = (s) => s >= 67 ? "GREEN" : s >= 34 ? "YELLOW" : "RED";
 const whoopMsg   = (s) => s >= 67 ? "Execute today's plan as written" : s >= 34 ? "Reduce intensity 20% · Skip VO2 Max" : "Recovery only · Contrast therapy · Rest";
@@ -1188,6 +1242,7 @@ export default function App() {
   const [planBuilderOpen, setPlanBuilderOpen] = useState(false);
   const [planBuilderDismissUntil, setPlanBuilderDismissUntil] = useState(0);
   const [planDetailView, setPlanDetailView] = useState("overview");
+  const [flipped, setFlipped] = useState(false);
   const [showRecoveryGates, setShowRecoveryGates] = useState(false);
   const [showAiAdjustments, setShowAiAdjustments] = useState(true);
   const [labContext, setLabContext] = useState("");
@@ -1203,6 +1258,7 @@ export default function App() {
 
   useEffect(() => {
     setPlanDetailView("overview");
+    setFlipped(false);
   }, [selDay, weekId, sess]);
 
   // Initialise auth on mount; listen for session changes
@@ -1777,6 +1833,11 @@ export default function App() {
   const selectedCanViewWorkout = !!(dayData?.isRaceDay || selectedShowCustom || selectedWorkout);
   const selectedCoachingNote = dayData?.ai_modification_note || dayData?.note2a || selectedWorkout?.note || "";
   const selectedKeyPoints = selectedWorkout?.steps?.filter((s) => !s.startsWith("—")).slice(0, 5) || [];
+  const selectedBlocks = normalizeWorkoutBlocks(
+    sess === "am" ? dayData?.am_session_blocks : dayData?.pm_session_blocks,
+    selectedWorkout
+  );
+  const isHyroxSession = selectedMeta.key === "hyrox";
 
   const weeklyAiAdjustments = (week?.days || [])
     .filter((d) => d?.ai_modified === true)
@@ -2250,20 +2311,46 @@ export default function App() {
           </div>
 
           {dayData && (
-            <div style={{ marginTop:16, background:C.card, border:`1px solid ${C.border}`, borderRadius:16, overflow:"hidden", transition:"max-height 200ms ease, opacity 200ms ease", ...C.glass }}>
-              {dayData.pm && (
-                <div style={{ display:"flex", borderBottom:`1px solid ${C.border}` }}>
-                  {[["am","AM"],["pm","PM"]].map(([s,l]) => (
-                    <button key={s} onClick={() => { setSess(s); setPlanDetailView("overview"); }} style={{ flex:1, padding:"10px 12px", background:"transparent", border:"none", borderBottom: sess===s ? `1.5px solid ${C.cyan}` : "1.5px solid transparent", color: sess===s ? C.text : C.muted, cursor:"pointer", fontFamily:C.fm, fontSize:9, letterSpacing:2, textTransform:"uppercase" }}>
-                      {l}
-                    </button>
-                  ))}
-                </div>
-              )}
+            <div style={{ marginTop:16, perspective:"1000px" }}>
+              <div
+                style={{
+                  position:"relative",
+                  minHeight:420,
+                  transition:"transform 0.6s cubic-bezier(0.4, 0.2, 0.2, 1)",
+                  transformStyle:"preserve-3d",
+                  WebkitTransformStyle:"preserve-3d",
+                  transform: flipped ? "rotateY(180deg)" : "rotateY(0deg)",
+                }}
+              >
+                <div
+                  style={{
+                    position:"absolute",
+                    inset:0,
+                    width:"100%",
+                    backfaceVisibility:"hidden",
+                    WebkitBackfaceVisibility:"hidden",
+                    background:C.card,
+                    border:`1px solid ${C.border}`,
+                    borderRadius:16,
+                    overflow:"hidden",
+                    ...C.glass,
+                  }}
+                >
+                  {dayData.pm && (
+                    <div style={{ display:"flex", borderBottom:`1px solid ${C.border}` }}>
+                      {[["am","AM"],["pm","PM"]].map(([s,l]) => (
+                        <button
+                          key={s}
+                          onClick={() => { setSess(s); setPlanDetailView("overview"); setFlipped(false); }}
+                          style={{ flex:1, padding:"10px 12px", background:"transparent", border:"none", borderBottom: sess===s ? `1.5px solid ${C.cyan}` : "1.5px solid transparent", color: sess===s ? C.text : C.muted, cursor:"pointer", fontFamily:C.fm, fontSize:9, letterSpacing:2, textTransform:"uppercase" }}
+                        >
+                          {l}
+                        </button>
+                      ))}
+                    </div>
+                  )}
 
-              <div style={{ padding:"14px 14px 16px" }}>
-                {planDetailView === "overview" ? (
-                  <>
+                  <div style={{ padding:"14px 14px 16px" }}>
                     <div style={{ display:"flex", alignItems:"center", gap:10, marginBottom:6 }}>
                       <span style={{ fontFamily:C.fm, fontSize:8, color:selectedMeta.color, letterSpacing:2, textTransform:"uppercase", background:`${selectedMeta.color}22`, border:`1px solid ${selectedMeta.color}55`, borderRadius:4, padding:"2px 8px" }}>{selectedMeta.tag}</span>
                       {dayData?.ai_modified && <span style={{ fontFamily:C.fm, fontSize:8, color:"#9b59b6", letterSpacing:2, textTransform:"uppercase" }}>✦ AI MODIFIED</span>}
@@ -2276,46 +2363,98 @@ export default function App() {
                       {selectedCoachingNote || "Execute with controlled effort and clean transitions."}
                     </div>
                     {selectedCanViewWorkout && (
-                      <button onClick={() => setPlanDetailView("workout")} style={{ marginTop:12, marginLeft:"auto", display:"block", background:"transparent", border:"none", color:C.cyan, fontFamily:C.fm, fontSize:11, letterSpacing:2, textTransform:"uppercase", cursor:"pointer", padding:0 }}>
+                      <button
+                        onClick={() => { setPlanDetailView("workout"); setFlipped(true); }}
+                        style={{ marginTop:12, marginLeft:"auto", display:"block", background:"transparent", border:"none", color:C.cyan, fontFamily:C.fm, fontSize:11, letterSpacing:2, textTransform:"uppercase", cursor:"pointer", padding:0 }}
+                      >
                         VIEW WORKOUT →
                       </button>
                     )}
-                  </>
-                ) : (
-                  <>
-                    <button onClick={() => setPlanDetailView("overview")} style={{ marginBottom:10, background:"transparent", border:"none", color:C.cyan, fontFamily:C.fm, fontSize:10, letterSpacing:2, textTransform:"uppercase", cursor:"pointer", padding:0 }}>
-                      ← BACK TO OVERVIEW
-                    </button>
-                    {dayData?.isRaceDay ? (
-                      <div style={{ display:"flex", flexDirection:"column", gap:8 }}>
-                        {["Wake 3 hrs before gun — calm morning","High carb, low fiber breakfast — no dairy","10 min easy jog + 4 strides","Skip stimulants — the race environment is your caffeine","EXECUTE YOUR PACING STRATEGY — TRUST THE WORK"].map((s,i) => (
-                          <div key={i} style={{ display:"flex", gap:10, padding:"10px 12px", background: i===4 ? C.red : C.card2, borderRadius:10, alignItems:"flex-start", border:`1px solid ${i===4 ? "transparent" : C.border}` }}>
-                            <span style={{ fontFamily:C.fm, fontSize:10, color: i===4 ? "#ffffffaa" : C.light, minWidth:18 }}>{String(i+1).padStart(2,"0")}</span>
-                            <span style={{ fontFamily:C.fs, fontSize:13, color: i===4 ? "#fff" : C.text, lineHeight:1.45 }}>{s}</span>
+                  </div>
+                </div>
+
+                <div
+                  style={{
+                    position:"absolute",
+                    inset:0,
+                    width:"100%",
+                    backfaceVisibility:"hidden",
+                    WebkitBackfaceVisibility:"hidden",
+                    transform:"rotateY(180deg)",
+                    background:C.card,
+                    border:`1px solid ${C.border}`,
+                    borderRadius:16,
+                    overflowY:"auto",
+                    ...C.glass,
+                  }}
+                >
+                  <div style={{ padding:"14px 14px 16px" }}>
+                    <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:6 }}>
+                      <button onClick={() => { setPlanDetailView("overview"); setFlipped(false); }} style={{ background:"transparent", border:"none", color:C.cyan, fontFamily:C.fm, fontSize:10, letterSpacing:2, textTransform:"uppercase", cursor:"pointer", padding:0 }}>
+                        ← BACK
+                      </button>
+                      <span style={{ fontFamily:C.fm, fontSize:8, color:selectedMeta.color, letterSpacing:2, textTransform:"uppercase", background:`${selectedMeta.color}22`, border:`1px solid ${selectedMeta.color}55`, borderRadius:4, padding:"2px 8px" }}>{selectedMeta.tag}</span>
+                    </div>
+                    <div style={{ fontFamily:C.ff, fontSize:24, color:C.text, lineHeight:1.1, letterSpacing:0.6, textTransform:"uppercase" }}>{selectedMeta.label}</div>
+                    <div style={{ marginTop:8, marginBottom:14, fontFamily:C.fm, fontSize:9, color:C.muted, letterSpacing:2, textTransform:"uppercase" }}>
+                      {selectedWorkout?.duration || "65 MIN"} · {selectedWorkout?.type || selectedWorkout?.zone || selectedMeta.tag} · {selectedWorkout?.tag || selectedWorkout?.hr || "PUSH DOMINANT"}
+                    </div>
+
+                    {isHyroxSession ? (
+                      <div style={{ display:"flex", flexDirection:"column", gap:14 }}>
+                        {selectedBlocks.flatMap((block, bi) =>
+                          block.items.map((item, ii) => (
+                            <div key={`hyrox_${bi}_${ii}`} style={{ borderRadius:10, border:`1px solid ${C.border}`, borderLeft:"3px solid #9b59b6", padding:"10px 12px", background: ii % 2 === 0 ? "rgba(255,255,255,0.02)" : "transparent" }}>
+                              <div style={{ display:"flex", alignItems:"center", gap:10 }}>
+                                <span style={{ fontSize:16, color:item.name.toLowerCase().includes("run") ? "#4a90c4" : "#9b59b6" }}>
+                                  {item.name.toLowerCase().includes("run") ? "◉" : "⬡"}
+                                </span>
+                                <span style={{ fontFamily:C.ff, fontSize:15, color:C.text, letterSpacing:1 }}>{item.name.toUpperCase()}</span>
+                              </div>
+                              {item.detail && (
+                                <div style={{ marginTop:4, marginLeft:26, fontFamily:C.fs, fontSize:12, color:C.muted }}>
+                                  {item.detail}
+                                </div>
+                              )}
+                            </div>
+                          ))
+                        )}
+                      </div>
+                    ) : (
+                      <div style={{ display:"flex", flexDirection:"column", gap:20 }}>
+                        {selectedBlocks.map((block, bi) => (
+                          <div key={`block_${bi}`}>
+                            <div style={{ borderLeft:`3px solid ${selectedMeta.color}`, paddingLeft:10, marginBottom:8 }}>
+                              <div style={{ fontFamily:C.fm, fontSize:10, color:C.cyan, letterSpacing:3, textTransform:"uppercase" }}>
+                                {block.title}{block.rounds ? ` · ${block.rounds} ROUNDS` : ""}
+                              </div>
+                            </div>
+                            <div style={{ display:"flex", flexDirection:"column", gap:2 }}>
+                              {block.items.map((item, ii) => (
+                                <div key={`row_${bi}_${ii}`} style={{ display:"flex", alignItems:"center", justifyContent:"space-between", gap:10, padding:"8px 10px", background: ii % 2 === 0 ? "rgba(255,255,255,0.02)" : "transparent", borderRadius:6 }}>
+                                  <div style={{ display:"flex", alignItems:"center", gap:8, minWidth:0 }}>
+                                    <span style={{ color:selectedMeta.color, fontSize:14 }}>○</span>
+                                    <span style={{ fontFamily:C.fs, fontSize:13, color:C.text, overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>{item.name}</span>
+                                  </div>
+                                  <span style={{ fontFamily:C.fm, fontSize:11, color:"#888", letterSpacing:1, textAlign:"right", flexShrink:0 }}>{item.detail}</span>
+                                </div>
+                              ))}
+                            </div>
                           </div>
                         ))}
                       </div>
-                    ) : selectedShowCustom ? (
-                      renderCustomSession(selectedCustomContent, selectedMeta.color)
-                    ) : selectedWorkout ? (
-                      <div style={{ display:"flex", flexDirection:"column", gap:6 }}>
-                        {selectedWorkout.steps.map((s,i) => {
-                          const isDivider = s.startsWith("—");
-                          return isDivider ? (
-                            <div key={i} style={{ fontFamily:C.fm, fontSize:8, color:C.light, letterSpacing:3, padding:"8px 0 2px", textTransform:"uppercase" }}>{s.replace(/—/g,"").trim()}</div>
-                          ) : (
-                            <div key={i} style={{ display:"flex", gap:10, padding:"10px 12px", background:C.card2, borderRadius:10, borderLeft:`2px solid ${selectedMeta.color}`, alignItems:"flex-start", borderTop:`1px solid ${C.border}`, borderBottom:`1px solid ${C.border}`, borderRight:`1px solid ${C.border}` }}>
-                              <span style={{ fontFamily:C.fm, fontSize:10, color:C.light, minWidth:18 }}>{String(i+1).padStart(2,"0")}</span>
-                              <span style={{ fontFamily:C.fs, fontSize:13, color:C.text, lineHeight:1.45 }}>{s}</span>
-                            </div>
-                          );
-                        })}
-                      </div>
-                    ) : (
-                      <div style={{ fontFamily:C.fs, fontSize:13, color:C.muted }}>No workout details available yet.</div>
                     )}
-                  </>
-                )}
+
+                    <div style={{ marginTop:16 }}>
+                      <div style={{ height:1, background:`${C.cyan}66`, marginBottom:8 }} />
+                      <div style={{ fontFamily:C.fm, fontSize:10, color:C.cyan, letterSpacing:3, textTransform:"uppercase", marginBottom:6 }}>Coach Note</div>
+                      <div style={{ fontFamily:C.fs, fontSize:13, color:"#aaa", fontStyle:"italic", lineHeight:1.6 }}>
+                        {selectedCoachingNote || selectedWorkout?.note || "Maintain quality and pace discipline through every set."}
+                      </div>
+                      <div style={{ height:1, background:`${C.cyan}66`, marginTop:8 }} />
+                    </div>
+                  </div>
+                </div>
               </div>
             </div>
           )}
