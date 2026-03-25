@@ -194,6 +194,51 @@ const normalizeWorkoutBlocks = (sessionBlocks, workout) => {
   return blocks;
 };
 
+const MOVEMENT_LIBRARY = {
+  hyrox: [
+    "Sled Push", "Sled Pull", "SkiErg", "Rowing", "Burpee Broad Jump",
+    "Wall Balls", "Sandbag Lunges", "Farmers Carry", "1km Run", "500m Run",
+  ],
+  strength_lower: [
+    "Barbell Squat", "Front Squat", "Romanian Deadlift", "Deadlift",
+    "Bulgarian Split Squat", "Leg Press", "Leg Extension", "Leg Curl",
+    "Hip Thrust", "Step Up", "Walking Lunge", "Goblet Squat",
+  ],
+  strength_upper_push: [
+    "Bench Press", "Incline Bench Press", "Overhead Press", "Push Press",
+    "Dumbbell Shoulder Press", "Lateral Raise", "Arnold Press",
+    "Tricep Dip", "Skull Crusher", "Push Up", "Explosive Push Up",
+  ],
+  strength_upper_pull: [
+    "Pull Up", "Chin Up", "Barbell Row", "Dumbbell Row", "Cable Row",
+    "Lat Pulldown", "Face Pull", "Barbell Curl", "Hammer Curl",
+    "Band Pull Apart", "Trap Bar Shrug",
+  ],
+  core: [
+    "Dead Bug", "Plank", "Side Plank", "Copenhagen Plank", "Ab Wheel",
+    "Hanging Knee Raise", "Hanging Leg Raise", "Russian Twist",
+    "Pallof Press", "Bird Dog", "GHD Sit Up", "L-Sit",
+  ],
+  plyometrics: [
+    "Box Jump", "Broad Jump", "Single Leg Hop", "Depth Jump",
+    "Lateral Bound", "Bounding", "Jump Squat", "Explosive Step Up",
+    "Medicine Ball Slam", "Medicine Ball Throw",
+  ],
+  running: [
+    "Easy Run", "Tempo Run", "Interval Run", "Hill Sprint", "Fartlek",
+    "Strides", "Race Pace Run", "Long Run", "Shakeout Run",
+  ],
+  cardio: [
+    "SkiErg", "Rowing", "Assault Bike", "Bike Erg", "Treadmill",
+    "Stairmaster", "Swimming", "Jump Rope",
+  ],
+  mobility: [
+    "Hip 90/90 Stretch", "Pigeon Pose", "Couch Stretch", "Thoracic Rotation",
+    "Ankle Circles", "Cat Cow", "World Greatest Stretch", "Foam Roll Quads",
+    "Foam Roll IT Band", "Lacrosse Ball Glutes",
+  ],
+};
+
 const whoopColor = (s) => s >= 67 ? C.green : s >= 34 ? C.yellow : C.red;
 const whoopLabel = (s) => s >= 67 ? "GREEN" : s >= 34 ? "YELLOW" : "RED";
 const whoopMsg   = (s) => s >= 67 ? "Execute today's plan as written" : s >= 34 ? "Reduce intensity 20% · Skip VO2 Max" : "Recovery only · Contrast therapy · Rest";
@@ -1838,6 +1883,165 @@ export default function App() {
     selectedWorkout
   );
   const isHyroxSession = selectedMeta.key === "hyrox";
+  const selectedDayName = dayData?.day || selDay || "";
+
+  const openEditMode = () => {
+    const baseBlocks = selectedBlocks.length > 0 ? selectedBlocks : [{ title: "WORKOUT", rounds: null, items: [] }];
+    const normalizedEditBlocks = baseBlocks.map((block, bi) => ({
+      id: block.id || uid(),
+      type: block.type || String(block.title || "WORKOUT").toLowerCase().replace(/\s+/g, "_"),
+      title: block.title || `BLOCK ${bi + 1}`,
+      rounds: block.rounds || null,
+      items: (block.items || []).map((item) => ({
+        id: item.id || uid(),
+        name: item.name || "",
+        sets: item.sets || "",
+        reps: item.reps || "",
+        load: item.load || item.detail || "",
+        note: item.note || "",
+        detail: item.detail || "",
+      })),
+    }));
+    setEditBlocks(normalizedEditBlocks);
+    setExpandedExerciseId(null);
+    setExerciseDraft({});
+    setExerciseQuery("");
+    setShowMovementPickerFor(null);
+    setShowAddBlockPrompt(false);
+    setNewBlockType("strength");
+    setNewBlockName("");
+    setPlanDetailView("edit");
+    setFlipped(true);
+  };
+
+  const cancelEditMode = () => {
+    setPlanDetailView("workout");
+    setFlipped(true);
+    setExpandedExerciseId(null);
+    setExerciseDraft({});
+    setShowMovementPickerFor(null);
+  };
+
+  const updateEditBlock = (blockId, updater) => {
+    setEditBlocks((prev) => prev.map((b) => (b.id === blockId ? updater(b) : b)));
+  };
+
+  const addExerciseToBlock = (blockId) => {
+    const ex = { id: uid(), name: "", sets: "", reps: "", load: "", note: "", detail: "" };
+    updateEditBlock(blockId, (block) => ({ ...block, items: [...(block.items || []), ex] }));
+    setExpandedExerciseId(ex.id);
+    setExerciseDraft(ex);
+  };
+
+  const beginExerciseEdit = (exercise) => {
+    setExpandedExerciseId(exercise.id);
+    setExerciseDraft({
+      id: exercise.id,
+      name: exercise.name || "",
+      sets: exercise.sets || "",
+      reps: exercise.reps || "",
+      load: exercise.load || exercise.detail || "",
+      note: exercise.note || "",
+      detail: exercise.detail || "",
+    });
+    setExerciseQuery(exercise.name || "");
+  };
+
+  const applyExerciseDraft = () => {
+    if (!expandedExerciseId) return;
+    setEditBlocks((prev) =>
+      prev.map((block) => ({
+        ...block,
+        items: (block.items || []).map((ex) => (ex.id === expandedExerciseId ? { ...ex, ...exerciseDraft } : ex)),
+      }))
+    );
+    setExpandedExerciseId(null);
+    setExerciseDraft({});
+    setShowMovementPickerFor(null);
+  };
+
+  const removeExercise = (blockId, exerciseId) => {
+    updateEditBlock(blockId, (block) => ({ ...block, items: (block.items || []).filter((ex) => ex.id !== exerciseId) }));
+    if (expandedExerciseId === exerciseId) {
+      setExpandedExerciseId(null);
+      setExerciseDraft({});
+      setShowMovementPickerFor(null);
+    }
+  };
+
+  const removeBlock = (blockId) => {
+    setEditBlocks((prev) => prev.filter((b) => b.id !== blockId));
+  };
+
+  const addBlock = () => {
+    const type = String(newBlockType || "custom").toLowerCase();
+    const title = newBlockName.trim() || type.toUpperCase();
+    setEditBlocks((prev) => [...prev, { id: uid(), type, title, rounds: null, items: [] }]);
+    setShowAddBlockPrompt(false);
+    setNewBlockType("strength");
+    setNewBlockName("");
+  };
+
+  const serializeBlocksForSave = () =>
+    editBlocks.map((block, bi) => ({
+      id: block.id || uid(),
+      type: String(block.type || block.title || "custom").toUpperCase().replace(/\s+/g, "_"),
+      order: bi,
+      rounds: block.rounds || null,
+      is_ai_generated: false,
+      is_modified: true,
+      exercises: (block.items || [])
+        .filter((ex) => ex.name && ex.name.trim())
+        .map((ex) => ({
+          id: ex.id || uid(),
+          name: ex.name.trim(),
+          sets: ex.sets || null,
+          reps: ex.reps || null,
+          load: ex.load || null,
+          note: ex.note || null,
+          is_ai_generated: false,
+          is_modified: true,
+        })),
+    }));
+
+  const saveWorkoutEdits = async () => {
+    if (!session?.access_token || !weekId || !selectedDayName) return;
+    setEditSaving(true);
+    setEditToast(null);
+    try {
+      const blocksKey = sess === "am" ? "am_session_blocks" : "pm_session_blocks";
+      const payload = {
+        type: "modify_day",
+        week_id: weekId,
+        day: selectedDayName,
+        changes: {
+          [blocksKey]: serializeBlocksForSave(),
+          ai_modified: false,
+          ai_modification_note: null,
+        },
+      };
+      const res = await fetch("/api/plan/update", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "Authorization": `Bearer ${session.access_token}`,
+        },
+        body: JSON.stringify(payload),
+      });
+      const body = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(body.error || "Failed to save workout");
+      await fetchPlan(session.access_token);
+      setEditToast("✓ SAVED");
+      setPlanDetailView("workout");
+      setFlipped(true);
+      setTimeout(() => setEditToast(null), 2000);
+    } catch (e) {
+      setEditToast(e.message || "Save failed");
+      setTimeout(() => setEditToast(null), 2600);
+    } finally {
+      setEditSaving(false);
+    }
+  };
 
   const weeklyAiAdjustments = (week?.days || [])
     .filter((d) => d?.ai_modified === true)
