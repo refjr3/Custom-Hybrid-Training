@@ -1895,6 +1895,7 @@ export default function App() {
   const selectedDayName = dayData?.day || selDay || "";
 
   const openEditMode = () => {
+    console.log("[openEditMode] called, setting planDetailView to edit");
     const baseBlocks = selectedBlocks.length > 0 ? selectedBlocks : [{ title: "WORKOUT", rounds: null, items: [] }];
     const normalizedEditBlocks = baseBlocks.map((block, bi) => ({
       id: block.id || uid(),
@@ -2088,6 +2089,8 @@ export default function App() {
   const openPlanBuilder = () => {
     setPlanBuilderOpen(true);
   };
+
+  console.log("[FlipCard] flipped:", flipped, "planDetailView:", planDetailView);
 
   const NoPlanState = () => {
     return (
@@ -2600,6 +2603,10 @@ export default function App() {
                     ...C.glass,
                   }}
                 >
+                  {/* TEMPORARY DEBUG — remove after fixing */}
+                  <div style={{ background: "#ff3b30", color: "#fff", padding: "4px 8px", fontSize: 10, fontFamily: "monospace" }}>
+                    planDetailView: {planDetailView} | flipped: {String(flipped)}
+                  </div>
                   {planDetailView === "edit" ? (
                     <div style={{ padding:"14px 14px 16px" }}>
                       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 16 }}>
