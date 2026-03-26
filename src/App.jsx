@@ -239,6 +239,128 @@ const MOVEMENT_LIBRARY = {
   ],
 };
 
+const MOVEMENTS = {
+  HYROX: ["Sled Push", "Sled Pull", "SkiErg", "Rowing", "Burpee Broad Jump", "Wall Balls", "Sandbag Lunges", "Farmers Carry", "1km Run", "500m Run", "200m Run"],
+  "STRENGTH — LOWER": ["Barbell Squat", "Front Squat", "Deadlift", "Romanian Deadlift", "Bulgarian Split Squat", "Leg Press", "Leg Extension", "Leg Curl", "Hip Thrust", "Walking Lunge", "Goblet Squat", "Step Up"],
+  "STRENGTH — PUSH": ["Bench Press", "Incline Bench Press", "Overhead Press", "Push Press", "Dumbbell Press", "Lateral Raise", "Arnold Press", "Tricep Dip", "Skull Crusher", "Push Up", "Plyo Push Up"],
+  "STRENGTH — PULL": ["Pull Up", "Chin Up", "Barbell Row", "Dumbbell Row", "Cable Row", "Lat Pulldown", "Face Pull", "Bicep Curl", "Hammer Curl", "Band Pull Apart"],
+  CORE: ["Dead Bug", "Plank", "Side Plank", "Copenhagen Plank", "Ab Wheel", "Hanging Leg Raise", "Russian Twist", "Pallof Press", "Bird Dog", "GHD Sit Up"],
+  PLYOMETRICS: ["Box Jump", "Broad Jump", "Depth Jump", "Lateral Bound", "Jump Squat", "Med Ball Slam", "Med Ball Throw", "Bounding", "Single Leg Hop"],
+  RUNNING: ["Easy Run", "Tempo Run", "Interval", "Hill Sprint", "Strides", "Race Pace", "Long Run", "Fartlek"],
+  CARDIO: ["SkiErg", "Rowing", "Assault Bike", "Bike Erg", "Jump Rope", "Swimming"],
+  MOBILITY: ["Hip 90/90", "Pigeon Pose", "Couch Stretch", "Thoracic Rotation", "World Greatest Stretch", "Foam Roll", "Cat Cow"],
+};
+
+const WorkoutEditorSheet = ({
+  open,
+  blocks,
+  setBlocks,
+  onCancel,
+  onSave,
+  saving,
+  status,
+  showMovementPicker,
+  setShowMovementPicker,
+  movementSearch,
+  setMovementSearch,
+  movementTarget,
+  setMovementTarget,
+}) => {
+  if (!open) return null;
+  const categories = Object.entries(MOVEMENTS).map(([category, items]) => {
+    const filtered = items.filter((name) => name.toLowerCase().includes((movementSearch || "").toLowerCase()));
+    return { category, items: filtered };
+  }).filter((c) => c.items.length > 0);
+
+  return (
+    <div style={{ position:"fixed", inset:0, zIndex:1000, background:"#0D0D0D", transform: open ? "translateY(0)" : "translateY(100%)", transition:"transform 0.35s cubic-bezier(0.4,0,0.2,1)", display:"flex", flexDirection:"column" }}>
+      <div style={{ display:"flex", justifyContent:"center", padding:"8px 0 2px", flexShrink:0 }}>
+        <div style={{ width:36, height:4, borderRadius:999, background:"rgba(255,255,255,0.65)" }} />
+      </div>
+      <div style={{ position:"sticky", top:0, zIndex:2, display:"flex", alignItems:"center", justifyContent:"space-between", padding:"10px 14px 12px", borderBottom:`1px solid ${C.border}`, background:"#0D0D0D" }}>
+        <button onClick={onCancel} style={{ background:"none", border:"none", color:"#888", fontFamily:C.fm, fontSize:11, letterSpacing:2, cursor:"pointer" }}>CANCEL</button>
+        <div style={{ color:"#fff", fontFamily:C.fm, fontSize:11, letterSpacing:3 }}>EDIT WORKOUT</div>
+        <button onClick={onSave} disabled={saving} style={{ background:"#00F3FF", border:"none", color:"#000", fontFamily:C.fm, fontSize:11, letterSpacing:2, borderRadius:8, padding:"6px 12px", cursor:saving ? "default" : "pointer", fontWeight:700 }}>{saving ? "SAVING..." : "SAVE"}</button>
+      </div>
+      {status && <div style={{ padding:"6px 14px", fontFamily:C.fm, fontSize:10, color: status.startsWith("✓") ? C.green : C.red, letterSpacing:2 }}>{status}</div>}
+      <div style={{ flex:1, overflowY:"auto", padding:"12px 14px 16px", display:"flex", flexDirection:"column", gap:12 }}>
+        {blocks.map((block, bi) => (
+          <div key={block.id} style={{ background:"rgba(255,255,255,0.04)", border:"1px solid rgba(255,255,255,0.08)", borderRadius:12, padding:12 }}>
+            <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:10 }}>
+              <div style={{ fontFamily:C.fm, fontSize:9, color:"#00F3FF", letterSpacing:3 }}>{block.title || "BLOCK"}</div>
+              <button onClick={() => setBlocks((prev) => prev.filter((_, i) => i !== bi))} style={{ background:"none", border:"none", color:"#FF3B30", fontSize:14, cursor:"pointer" }}>✕</button>
+            </div>
+            {(block.items || []).map((item, ii) => (
+              <div key={item.id || `${bi}_${ii}`} style={{ display:"flex", alignItems:"center", gap:8, padding:"6px 0", borderBottom:"1px solid rgba(255,255,255,0.06)" }}>
+                <button
+                  onClick={() => {
+                    setMovementTarget({ blockIndex: bi, itemIndex: ii });
+                    setShowMovementPicker(true);
+                  }}
+                  style={{ flex:1, background:"rgba(255,255,255,0.06)", border:"1px solid rgba(255,255,255,0.12)", borderRadius:6, color:"#fff", padding:"6px 8px", fontFamily:C.fm, fontSize:11, textAlign:"left", cursor:"pointer" }}
+                >
+                  {item.name || "Select movement"}
+                </button>
+                <input value={item.sets || ""} onChange={(e) => setBlocks((prev) => prev.map((b, bii) => bii !== bi ? b : { ...b, items: (b.items || []).map((it, iii) => iii !== ii ? it : { ...it, sets: e.target.value }) }))} placeholder="S" style={{ width:48, background:"rgba(255,255,255,0.06)", border:"1px solid rgba(255,255,255,0.12)", borderRadius:6, color:"#fff", padding:"6px 6px", fontFamily:C.fm, fontSize:11, textAlign:"center" }} />
+                <span style={{ color:"#888", fontFamily:C.fm, fontSize:11 }}>×</span>
+                <input value={item.reps || ""} onChange={(e) => setBlocks((prev) => prev.map((b, bii) => bii !== bi ? b : { ...b, items: (b.items || []).map((it, iii) => iii !== ii ? it : { ...it, reps: e.target.value }) }))} placeholder="R" style={{ width:56, background:"rgba(255,255,255,0.06)", border:"1px solid rgba(255,255,255,0.12)", borderRadius:6, color:"#fff", padding:"6px 6px", fontFamily:C.fm, fontSize:11, textAlign:"center" }} />
+                <input value={item.load || ""} onChange={(e) => setBlocks((prev) => prev.map((b, bii) => bii !== bi ? b : { ...b, items: (b.items || []).map((it, iii) => iii !== ii ? it : { ...it, load: e.target.value }) }))} placeholder="Load" style={{ width:72, background:"rgba(255,255,255,0.06)", border:"1px solid rgba(255,255,255,0.12)", borderRadius:6, color:"#fff", padding:"6px 6px", fontFamily:C.fm, fontSize:11, textAlign:"center" }} />
+                <button onClick={() => setBlocks((prev) => prev.map((b, bii) => bii !== bi ? b : { ...b, items: (b.items || []).filter((_, iii) => iii !== ii) }))} style={{ background:"none", border:"none", color:"#FF3B30", fontSize:12, cursor:"pointer", padding:0 }}>✕</button>
+              </div>
+            ))}
+            <button onClick={() => setBlocks((prev) => prev.map((b, bii) => bii !== bi ? b : { ...b, items: [...(b.items || []), { id: uid(), name: "", sets: "", reps: "", load: "", note: "" }] }))} style={{ marginTop:8, background:"none", border:"none", color:"#00F3FF", fontFamily:C.fm, fontSize:10, letterSpacing:2, cursor:"pointer", padding:0 }}>+ ADD EXERCISE</button>
+          </div>
+        ))}
+        <div style={{ display:"flex", gap:8, flexWrap:"wrap" }}>
+          {["STRENGTH","HYROX","CARDIO","CORE","MOBILITY"].map((kind) => (
+            <button key={kind} onClick={() => setBlocks((prev) => [...prev, { id: uid(), title: kind, type: kind.toLowerCase(), items: [] }])} style={{ background:"rgba(255,255,255,0.04)", border:"1px solid rgba(255,255,255,0.12)", borderRadius:999, color:"#ccc", fontFamily:C.fm, fontSize:10, letterSpacing:2, cursor:"pointer", padding:"8px 12px" }}>{kind}</button>
+          ))}
+        </div>
+        <button onClick={() => setBlocks((prev) => [...prev, { id: uid(), title: "NEW BLOCK", type: "general", items: [] }])} style={{ background:"none", border:"1px dashed rgba(255,255,255,0.2)", borderRadius:12, color:"#888", fontFamily:C.fm, fontSize:10, letterSpacing:2, cursor:"pointer", padding:"12px", width:"100%" }}>+ ADD BLOCK</button>
+      </div>
+
+      {showMovementPicker && (
+        <div style={{ position:"fixed", inset:0, zIndex:1001, background:"rgba(0,0,0,0.6)", display:"flex", alignItems:"flex-end" }}>
+          <div style={{ width:"100%", maxHeight:"72vh", background:"#0D0D0D", borderTopLeftRadius:18, borderTopRightRadius:18, borderTop:`1px solid ${C.border}`, display:"flex", flexDirection:"column" }}>
+            <div style={{ display:"flex", justifyContent:"center", padding:"8px 0 2px", flexShrink:0 }}>
+              <div style={{ width:36, height:4, borderRadius:999, background:"rgba(255,255,255,0.65)" }} />
+            </div>
+            <div style={{ padding:"10px 14px 12px", borderBottom:`1px solid ${C.border}` }}>
+              <input value={movementSearch} onChange={(e) => setMovementSearch(e.target.value)} placeholder="Search movement..." style={{ width:"100%", background:"rgba(255,255,255,0.06)", border:"1px solid rgba(255,255,255,0.12)", borderRadius:8, color:"#fff", padding:"10px 12px", fontFamily:C.fm, fontSize:12, outline:"none" }} />
+            </div>
+            <div style={{ overflowY:"auto", padding:"10px 14px 14px", display:"flex", flexDirection:"column", gap:12 }}>
+              {categories.map((group) => (
+                <div key={group.category}>
+                  <div style={{ fontFamily:C.fm, fontSize:9, color:"#00F3FF", letterSpacing:2, marginBottom:6 }}>{group.category}</div>
+                  <div style={{ display:"flex", flexDirection:"column", gap:4 }}>
+                    {group.items.map((mv) => (
+                      <button
+                        key={`${group.category}_${mv}`}
+                        onClick={() => {
+                          if (movementTarget) {
+                            setBlocks((prev) => prev.map((b, bi) => bi !== movementTarget.blockIndex ? b : { ...b, items: (b.items || []).map((it, ii) => ii !== movementTarget.itemIndex ? it : { ...it, name: mv }) }));
+                          }
+                          setShowMovementPicker(false);
+                          setMovementTarget(null);
+                          setMovementSearch("");
+                        }}
+                        style={{ textAlign:"left", background:"rgba(255,255,255,0.04)", border:"1px solid rgba(255,255,255,0.08)", borderRadius:8, color:"#fff", fontFamily:C.fs, fontSize:13, cursor:"pointer", padding:"8px 10px" }}
+                      >
+                        {mv}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              ))}
+              <button onClick={() => { setShowMovementPicker(false); setMovementTarget(null); setMovementSearch(""); }} style={{ marginTop:4, background:"transparent", border:`1px solid ${C.border}`, borderRadius:8, color:"#888", fontFamily:C.fm, fontSize:10, letterSpacing:2, cursor:"pointer", padding:"10px 12px" }}>CLOSE</button>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+};
+
 const whoopColor = (s) => s >= 67 ? C.green : s >= 34 ? C.yellow : C.red;
 const whoopLabel = (s) => s >= 67 ? "GREEN" : s >= 34 ? "YELLOW" : "RED";
 const whoopMsg   = (s) => s >= 67 ? "Execute today's plan as written" : s >= 34 ? "Reduce intensity 20% · Skip VO2 Max" : "Recovery only · Contrast therapy · Rest";
@@ -1291,16 +1413,11 @@ export default function App() {
   const [showRecoveryGates, setShowRecoveryGates] = useState(false);
   const [showAiAdjustments, setShowAiAdjustments] = useState(true);
   const [editBlocks, setEditBlocks] = useState([]);
-  const [expandedExerciseId, setExpandedExerciseId] = useState(null);
-  const [exerciseDraft, setExerciseDraft] = useState({});
-  const [exerciseQuery, setExerciseQuery] = useState("");
-  const [showMovementPickerFor, setShowMovementPickerFor] = useState(null);
-  const [showAddBlockPrompt, setShowAddBlockPrompt] = useState(false);
-  const [newBlockType, setNewBlockType] = useState("strength");
-  const [newBlockName, setNewBlockName] = useState("");
-  const [editSaving, setEditSaving] = useState(false);
-  const [editToast, setEditToast] = useState(null);
-  const [debugLog, setDebugLog] = useState([]);
+  const [showWorkoutEditor, setShowWorkoutEditor] = useState(false);
+  const [showMovementPicker, setShowMovementPicker] = useState(false);
+  const [movementSearch, setMovementSearch] = useState("");
+  const [movementTarget, setMovementTarget] = useState(null);
+  const [editorStatus, setEditorStatus] = useState("");
   const [labContext, setLabContext] = useState("");
   const [labTargetDay, setLabTargetDay] = useState(null);
   const [cqSelections, setCqSelections] = useState({});
@@ -1313,10 +1430,11 @@ export default function App() {
   const dataFetched = useRef(false);
 
   useEffect(() => {
-    console.log("[resetEffect] firing — selDay:", selDay, "weekId:", weekId, "sess:", sess);
-    setDebugLog((prev) => [...prev.slice(-2), `resetEffect fired ${Date.now()}`]);
     setPlanDetailView("overview");
     setFlipped(false);
+    setShowWorkoutEditor(false);
+    setShowMovementPicker(false);
+    setMovementTarget(null);
   }, [selDay, weekId, sess]);
 
   // Initialise auth on mount; listen for session changes
@@ -1899,7 +2017,6 @@ export default function App() {
   const selectedDayName = dayData?.day || selDay || "";
 
   const openEditMode = () => {
-    console.log("[openEditMode] called, setting planDetailView to edit");
     const baseBlocks = selectedBlocks.length > 0 ? selectedBlocks : [{ title: "WORKOUT", rounds: null, items: [] }];
     const normalizedEditBlocks = baseBlocks.map((block, bi) => ({
       id: block.id || uid(),
@@ -1917,84 +2034,13 @@ export default function App() {
       })),
     }));
     setEditBlocks(normalizedEditBlocks);
-    setExpandedExerciseId(null);
-    setExerciseDraft({});
-    setExerciseQuery("");
-    setShowMovementPickerFor(null);
-    setShowAddBlockPrompt(false);
-    setNewBlockType("strength");
-    setNewBlockName("");
-    setPlanDetailView("edit");
-    console.log("[openEditMode] setPlanDetailView called — current planDetailView should now be edit");
-    setDebugLog((prev) => [...prev.slice(-2), `openEditMode called ${Date.now()}`]);
+    setShowWorkoutEditor(true);
   };
 
   const cancelEditMode = () => {
-    setPlanDetailView("workout");
-    setFlipped(true);
-    setExpandedExerciseId(null);
-    setExerciseDraft({});
-    setShowMovementPickerFor(null);
-  };
-
-  const updateEditBlock = (blockId, updater) => {
-    setEditBlocks((prev) => prev.map((b) => (b.id === blockId ? updater(b) : b)));
-  };
-
-  const addExerciseToBlock = (blockId) => {
-    const ex = { id: uid(), name: "", sets: "", reps: "", load: "", note: "", detail: "" };
-    updateEditBlock(blockId, (block) => ({ ...block, items: [...(block.items || []), ex] }));
-    setExpandedExerciseId(ex.id);
-    setExerciseDraft(ex);
-  };
-
-  const beginExerciseEdit = (exercise) => {
-    setExpandedExerciseId(exercise.id);
-    setExerciseDraft({
-      id: exercise.id,
-      name: exercise.name || "",
-      sets: exercise.sets || "",
-      reps: exercise.reps || "",
-      load: exercise.load || exercise.detail || "",
-      note: exercise.note || "",
-      detail: exercise.detail || "",
-    });
-    setExerciseQuery(exercise.name || "");
-  };
-
-  const applyExerciseDraft = () => {
-    if (!expandedExerciseId) return;
-    setEditBlocks((prev) =>
-      prev.map((block) => ({
-        ...block,
-        items: (block.items || []).map((ex) => (ex.id === expandedExerciseId ? { ...ex, ...exerciseDraft } : ex)),
-      }))
-    );
-    setExpandedExerciseId(null);
-    setExerciseDraft({});
-    setShowMovementPickerFor(null);
-  };
-
-  const removeExercise = (blockId, exerciseId) => {
-    updateEditBlock(blockId, (block) => ({ ...block, items: (block.items || []).filter((ex) => ex.id !== exerciseId) }));
-    if (expandedExerciseId === exerciseId) {
-      setExpandedExerciseId(null);
-      setExerciseDraft({});
-      setShowMovementPickerFor(null);
-    }
-  };
-
-  const removeBlock = (blockId) => {
-    setEditBlocks((prev) => prev.filter((b) => b.id !== blockId));
-  };
-
-  const addBlock = () => {
-    const type = String(newBlockType || "custom").toLowerCase();
-    const title = newBlockName.trim() || type.toUpperCase();
-    setEditBlocks((prev) => [...prev, { id: uid(), type, title, rounds: null, items: [] }]);
-    setShowAddBlockPrompt(false);
-    setNewBlockType("strength");
-    setNewBlockName("");
+    setShowMovementPicker(false);
+    setShowWorkoutEditor(false);
+    setEditorStatus("");
   };
 
   const serializeBlocksForSave = () =>
@@ -2022,7 +2068,7 @@ export default function App() {
   const saveWorkoutEdits = async () => {
     if (!session?.access_token || !weekId || !selectedDayName) return;
     setEditSaving(true);
-    setEditToast(null);
+    setEditorStatus("SAVING...");
     try {
       const blocksKey = sess === "am" ? "am_session_blocks" : "pm_session_blocks";
       const payload = {
@@ -2046,13 +2092,13 @@ export default function App() {
       const body = await res.json().catch(() => ({}));
       if (!res.ok) throw new Error(body.error || "Failed to save workout");
       await fetchPlan(session.access_token);
-      setEditToast("✓ SAVED");
-      setPlanDetailView("workout");
-      setFlipped(true);
-      setTimeout(() => setEditToast(null), 2000);
+      setEditorStatus("✓ SAVED");
+      setTimeout(() => {
+        setEditorStatus("");
+        setShowWorkoutEditor(false);
+      }, 1000);
     } catch (e) {
-      setEditToast(e.message || "Save failed");
-      setTimeout(() => setEditToast(null), 2600);
+      setEditorStatus(e.message || "Save failed");
     } finally {
       setEditSaving(false);
     }
@@ -2612,71 +2658,7 @@ export default function App() {
                     ...C.glass,
                   }}
                 >
-                  {/* TEMPORARY DEBUG — remove after fixing */}
-                  <div style={{ background: "#ff3b30", color: "#fff", padding: "4px 8px", fontSize: 10, fontFamily: "monospace" }}>
-                    planDetailView: {planDetailView} | flipped: {String(flipped)}
-                  </div>
-                  {planDetailView === "edit" ? (
-                    <div style={{ padding:"14px 14px 16px" }}>
-                      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 16 }}>
-                        <button onClick={cancelEditMode} style={{ background: "none", border: "none", color: "#888", fontFamily: "monospace", fontSize: 11, letterSpacing: 2, cursor: "pointer" }}>← DONE</button>
-                        <div style={{ color: "#fff", fontFamily: "monospace", fontSize: 11, letterSpacing: 3 }}>EDIT WORKOUT</div>
-                        <button onClick={saveWorkoutEdits} style={{ background: "#00F3FF", border: "none", color: "#000", fontFamily: "monospace", fontSize: 11, letterSpacing: 2, borderRadius: 8, padding: "6px 12px", cursor: "pointer", fontWeight: 700 }}>SAVE</button>
-                      </div>
-                      <div style={{ display: "flex", flexDirection: "column", gap: 12, marginTop: 8 }}>
-                        {editBlocks.map((block, bi) => (
-                          <div key={block.id} style={{ background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.08)", borderRadius: 12, padding: 12 }}>
-                            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 10 }}>
-                              <div style={{ fontFamily: "monospace", fontSize: 9, color: "#00F3FF", letterSpacing: 3 }}>{block.title}</div>
-                              <button onClick={() => setEditBlocks(prev => prev.filter((_, i) => i !== bi))} style={{ background: "none", border: "none", color: "#FF3B30", fontSize: 14, cursor: "pointer" }}>✕</button>
-                            </div>
-                              {(block.items || []).map((item, ii) => (
-                              <div key={item.id} style={{ display: "flex", alignItems: "center", gap: 8, padding: "6px 0", borderBottom: "1px solid rgba(255,255,255,0.06)" }}>
-                                <input
-                                  value={item.name || ""}
-                                  onChange={(e) => setEditBlocks(prev => prev.map((b, bii) => bii !== bi ? b : { ...b, items: (b.items || []).map((it, iii) => iii !== ii ? it : { ...it, name: e.target.value }) }))}
-                                  placeholder="Exercise name"
-                                  style={{ flex: 1, background: "rgba(255,255,255,0.06)", border: "1px solid rgba(255,255,255,0.12)", borderRadius: 6, color: "#fff", padding: "4px 8px", fontFamily: "monospace", fontSize: 11 }}
-                                />
-                                <input
-                                  value={item.sets || ""}
-                                  onChange={(e) => setEditBlocks(prev => prev.map((b, bii) => bii !== bi ? b : { ...b, items: (b.items || []).map((it, iii) => iii !== ii ? it : { ...it, sets: e.target.value }) }))}
-                                  placeholder="Sets"
-                                  style={{ width: 40, background: "rgba(255,255,255,0.06)", border: "1px solid rgba(255,255,255,0.12)", borderRadius: 6, color: "#fff", padding: "4px 6px", fontFamily: "monospace", fontSize: 11, textAlign: "center" }}
-                                />
-                                <input
-                                  value={item.reps || ""}
-                                  onChange={(e) => setEditBlocks(prev => prev.map((b, bii) => bii !== bi ? b : { ...b, items: (b.items || []).map((it, iii) => iii !== ii ? it : { ...it, reps: e.target.value }) }))}
-                                  placeholder="Reps"
-                                  style={{ width: 48, background: "rgba(255,255,255,0.06)", border: "1px solid rgba(255,255,255,0.12)", borderRadius: 6, color: "#fff", padding: "4px 6px", fontFamily: "monospace", fontSize: 11, textAlign: "center" }}
-                                />
-                                  <input
-                                    value={item.load || ""}
-                                    onChange={(e) => setEditBlocks(prev => prev.map((b, bii) => bii !== bi ? b : { ...b, items: (b.items || []).map((it, iii) => iii !== ii ? it : { ...it, load: e.target.value }) }))}
-                                    placeholder="Dist/Load"
-                                    style={{ width: 88, background: "rgba(255,255,255,0.06)", border: "1px solid rgba(255,255,255,0.12)", borderRadius: 6, color: "#fff", padding: "4px 6px", fontFamily: "monospace", fontSize: 11, textAlign: "center" }}
-                                  />
-                                <button onClick={() => setEditBlocks(prev => prev.map((b, bii) => bii !== bi ? b : { ...b, items: (b.items || []).filter((_, iii) => iii !== ii) }))} style={{ background: "none", border: "none", color: "#FF3B30", fontSize: 12, cursor: "pointer", padding: 0 }}>✕</button>
-                              </div>
-                            ))}
-                            <button
-                              onClick={() => setEditBlocks(prev => prev.map((b, bii) => bii !== bi ? b : { ...b, items: [...(b.items || []), { id: uid(), name: "", sets: "", reps: "", load: "", note: "" }] }))}
-                              style={{ marginTop: 8, background: "none", border: "none", color: "#00F3FF", fontFamily: "monospace", fontSize: 10, letterSpacing: 2, cursor: "pointer", padding: 0 }}
-                            >
-                              + ADD EXERCISE
-                            </button>
-                          </div>
-                        ))}
-                        <button
-                          onClick={() => setEditBlocks(prev => [...prev, { id: uid(), title: "NEW BLOCK", type: "general", items: [] }])}
-                          style={{ background: "none", border: "1px dashed rgba(255,255,255,0.2)", borderRadius: 12, color: "#888", fontFamily: "monospace", fontSize: 10, letterSpacing: 2, cursor: "pointer", padding: "12px", width: "100%" }}
-                        >
-                          + ADD BLOCK
-                        </button>
-                      </div>
-                    </div>
-                  ) : (
-                    <div style={{ padding:"14px 14px 16px" }}>
+                  <div style={{ padding:"14px 14px 16px" }}>
                       <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:6 }}>
                         <button onClick={() => { setPlanDetailView("overview"); setFlipped(false); }} style={{ background:"transparent", border:"none", color:C.cyan, fontFamily:C.fm, fontSize:10, letterSpacing:2, textTransform:"uppercase", cursor:"pointer", padding:0 }}>
                           ← BACK
@@ -2688,11 +2670,7 @@ export default function App() {
                         {selectedWorkout?.duration || "65 MIN"} · {selectedWorkout?.type || selectedWorkout?.zone || selectedMeta.tag} · {selectedWorkout?.tag || selectedWorkout?.hr || "PUSH DOMINANT"}
                       </div>
                       <button
-                        onClick={() => {
-                          console.log("EDIT WORKOUT TAPPED");
-                          setDebugLog((prev) => [...prev.slice(-2), `BUTTON TAPPED ${Date.now()}`]);
-                          openEditMode();
-                        }}
+                        onClick={openEditMode}
                         style={{
                           background:"#ff3b30",
                           color:"#fff",
@@ -2764,7 +2742,7 @@ export default function App() {
                         <div style={{ height:1, background:`${C.cyan}66`, marginTop:8 }} />
                       </div>
                     </div>
-                  )}
+                  
                 </div>
               </div>
             </div>
@@ -3234,6 +3212,22 @@ export default function App() {
           await fetchPlan(session?.access_token);
           setNav("plan");
         }}
+      />
+
+      <WorkoutEditorSheet
+        open={showWorkoutEditor}
+        blocks={editBlocks}
+        setBlocks={setEditBlocks}
+        onCancel={cancelEditMode}
+        onSave={saveWorkoutEdits}
+        saving={editSaving}
+        status={editorStatus}
+        showMovementPicker={showMovementPicker}
+        setShowMovementPicker={setShowMovementPicker}
+        movementSearch={movementSearch}
+        setMovementSearch={setMovementSearch}
+        movementTarget={movementTarget}
+        setMovementTarget={setMovementTarget}
       />
 
       {labOpen && (
