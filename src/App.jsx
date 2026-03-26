@@ -2623,8 +2623,50 @@ export default function App() {
                         <div style={{ color: "#fff", fontFamily: "monospace", fontSize: 11, letterSpacing: 3 }}>EDIT WORKOUT</div>
                         <button onClick={saveWorkoutEdits} style={{ background: "#00F3FF", border: "none", color: "#000", fontFamily: "monospace", fontSize: 11, letterSpacing: 2, borderRadius: 8, padding: "6px 12px", cursor: "pointer", fontWeight: 700 }}>SAVE</button>
                       </div>
-                      <div style={{ fontFamily:C.fm, fontSize:9, color:C.muted, letterSpacing:2 }}>
-                        EDITOR BODY
+                      <div style={{ display: "flex", flexDirection: "column", gap: 12, marginTop: 8 }}>
+                        {editBlocks.map((block, bi) => (
+                          <div key={block.id} style={{ background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.08)", borderRadius: 12, padding: 12 }}>
+                            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 10 }}>
+                              <div style={{ fontFamily: "monospace", fontSize: 9, color: "#00F3FF", letterSpacing: 3 }}>{block.title}</div>
+                              <button onClick={() => setEditBlocks(prev => prev.filter((_, i) => i !== bi))} style={{ background: "none", border: "none", color: "#FF3B30", fontSize: 14, cursor: "pointer" }}>✕</button>
+                            </div>
+                            {(block.items || []).map((item, ii) => (
+                              <div key={item.id} style={{ display: "flex", alignItems: "center", gap: 8, padding: "6px 0", borderBottom: "1px solid rgba(255,255,255,0.06)" }}>
+                                <input
+                                  value={item.name || ""}
+                                  onChange={(e) => setEditBlocks(prev => prev.map((b, bii) => bii !== bi ? b : { ...b, items: (b.items || []).map((it, iii) => iii !== ii ? it : { ...it, name: e.target.value }) }))}
+                                  placeholder="Exercise name"
+                                  style={{ flex: 1, background: "rgba(255,255,255,0.06)", border: "1px solid rgba(255,255,255,0.12)", borderRadius: 6, color: "#fff", padding: "4px 8px", fontFamily: "monospace", fontSize: 11 }}
+                                />
+                                <input
+                                  value={item.sets || ""}
+                                  onChange={(e) => setEditBlocks(prev => prev.map((b, bii) => bii !== bi ? b : { ...b, items: (b.items || []).map((it, iii) => iii !== ii ? it : { ...it, sets: e.target.value }) }))}
+                                  placeholder="Sets"
+                                  style={{ width: 40, background: "rgba(255,255,255,0.06)", border: "1px solid rgba(255,255,255,0.12)", borderRadius: 6, color: "#fff", padding: "4px 6px", fontFamily: "monospace", fontSize: 11, textAlign: "center" }}
+                                />
+                                <input
+                                  value={item.reps || ""}
+                                  onChange={(e) => setEditBlocks(prev => prev.map((b, bii) => bii !== bi ? b : { ...b, items: (b.items || []).map((it, iii) => iii !== ii ? it : { ...it, reps: e.target.value }) }))}
+                                  placeholder="Reps"
+                                  style={{ width: 48, background: "rgba(255,255,255,0.06)", border: "1px solid rgba(255,255,255,0.12)", borderRadius: 6, color: "#fff", padding: "4px 6px", fontFamily: "monospace", fontSize: 11, textAlign: "center" }}
+                                />
+                                <button onClick={() => setEditBlocks(prev => prev.map((b, bii) => bii !== bi ? b : { ...b, items: (b.items || []).filter((_, iii) => iii !== ii) }))} style={{ background: "none", border: "none", color: "#FF3B30", fontSize: 12, cursor: "pointer", padding: 0 }}>✕</button>
+                              </div>
+                            ))}
+                            <button
+                              onClick={() => setEditBlocks(prev => prev.map((b, bii) => bii !== bi ? b : { ...b, items: [...(b.items || []), { id: uid(), name: "", sets: "", reps: "", load: "", note: "" }] }))}
+                              style={{ marginTop: 8, background: "none", border: "none", color: "#00F3FF", fontFamily: "monospace", fontSize: 10, letterSpacing: 2, cursor: "pointer", padding: 0 }}
+                            >
+                              + ADD EXERCISE
+                            </button>
+                          </div>
+                        ))}
+                        <button
+                          onClick={() => setEditBlocks(prev => [...prev, { id: uid(), title: "NEW BLOCK", type: "general", items: [] }])}
+                          style={{ background: "none", border: "1px dashed rgba(255,255,255,0.2)", borderRadius: 12, color: "#888", fontFamily: "monospace", fontSize: 10, letterSpacing: 2, cursor: "pointer", padding: "12px", width: "100%" }}
+                        >
+                          + ADD BLOCK
+                        </button>
                       </div>
                     </div>
                   ) : (
@@ -2640,9 +2682,7 @@ export default function App() {
                         {selectedWorkout?.duration || "65 MIN"} · {selectedWorkout?.type || selectedWorkout?.zone || selectedMeta.tag} · {selectedWorkout?.tag || selectedWorkout?.hr || "PUSH DOMINANT"}
                       </div>
                       <button
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          e.preventDefault();
+                        onClick={() => {
                           console.log("EDIT WORKOUT TAPPED");
                           setDebugLog((prev) => [...prev.slice(-2), `BUTTON TAPPED ${Date.now()}`]);
                           openEditMode();
