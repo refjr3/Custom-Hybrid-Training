@@ -2630,7 +2630,7 @@ export default function App() {
                               <div style={{ fontFamily: "monospace", fontSize: 9, color: "#00F3FF", letterSpacing: 3 }}>{block.title}</div>
                               <button onClick={() => setEditBlocks(prev => prev.filter((_, i) => i !== bi))} style={{ background: "none", border: "none", color: "#FF3B30", fontSize: 14, cursor: "pointer" }}>✕</button>
                             </div>
-                            {(block.items || []).map((item, ii) => (
+                              {(block.items || []).map((item, ii) => (
                               <div key={item.id} style={{ display: "flex", alignItems: "center", gap: 8, padding: "6px 0", borderBottom: "1px solid rgba(255,255,255,0.06)" }}>
                                 <input
                                   value={item.name || ""}
@@ -2650,6 +2650,12 @@ export default function App() {
                                   placeholder="Reps"
                                   style={{ width: 48, background: "rgba(255,255,255,0.06)", border: "1px solid rgba(255,255,255,0.12)", borderRadius: 6, color: "#fff", padding: "4px 6px", fontFamily: "monospace", fontSize: 11, textAlign: "center" }}
                                 />
+                                  <input
+                                    value={item.load || ""}
+                                    onChange={(e) => setEditBlocks(prev => prev.map((b, bii) => bii !== bi ? b : { ...b, items: (b.items || []).map((it, iii) => iii !== ii ? it : { ...it, load: e.target.value }) }))}
+                                    placeholder="Dist/Load"
+                                    style={{ width: 88, background: "rgba(255,255,255,0.06)", border: "1px solid rgba(255,255,255,0.12)", borderRadius: 6, color: "#fff", padding: "4px 6px", fontFamily: "monospace", fontSize: 11, textAlign: "center" }}
+                                  />
                                 <button onClick={() => setEditBlocks(prev => prev.map((b, bii) => bii !== bi ? b : { ...b, items: (b.items || []).filter((_, iii) => iii !== ii) }))} style={{ background: "none", border: "none", color: "#FF3B30", fontSize: 12, cursor: "pointer", padding: 0 }}>✕</button>
                               </div>
                             ))}

@@ -97,6 +97,8 @@ export default async function handler(req, res) {
         pm_session:        "pm_session",         // exact DB column — must be a known WL key
         am:                "am_session",         // legacy short alias
         pm:                "pm_session",         // legacy short alias
+        am_session_blocks: "am_session_blocks",  // structured editable block list
+        pm_session_blocks: "pm_session_blocks",  // structured editable block list
         am_session_custom: "am_session_custom",  // freeform markdown — AI custom workout
         pm_session_custom: "pm_session_custom",  // freeform markdown — AI custom workout
         note:              "note",
@@ -127,7 +129,7 @@ export default async function handler(req, res) {
 
       // Fix #2: treat note and ai_modification_note as valid standalone changes —
       // the AI frequently sends note-only modifications without touching am/pm_session.
-      const mutableFields = ["am_session", "pm_session", "am_session_custom", "pm_session_custom", "note", "is_race_day", "ai_modification_note"];
+      const mutableFields = ["am_session", "pm_session", "am_session_blocks", "pm_session_blocks", "am_session_custom", "pm_session_custom", "note", "is_race_day", "ai_modification_note"];
       const hasChange = mutableFields.some((f) => f in updatePayload);
       if (!hasChange) {
         console.log("[plan/update] no valid fields in changes:", changes);
