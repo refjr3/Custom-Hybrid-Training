@@ -1028,6 +1028,8 @@ const SessionModal = ({ name, dayData, sess, weekId, onClose, onSessSwitch, sund
   const [expandedBlock, setExpandedBlock] = useState(null);
   const [saving, setSaving] = useState(false);
   const [toast, setToast] = useState(null);
+  const [editSaving, setEditSaving] = useState(false);
+  const [editToast, setEditToast] = useState(null);
   const [dragIdx, setDragIdx] = useState(null);
 
   if (!name && !dayData?.isSunday && !dayData?.isRaceDay) return null;
