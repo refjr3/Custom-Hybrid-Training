@@ -3,6 +3,7 @@ import { createClient } from "@supabase/supabase-js";
 import AuthScreen from "./AuthScreen";
 import Onboarding from "./Onboarding";
 import PlanBuilder from "./PlanBuilder";
+import WorkoutEditorSheet from "./WorkoutEditorSheet";
 
 const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
 const supabaseKey = import.meta.env.VITE_SUPABASE_ANON_KEY;
@@ -194,171 +195,169 @@ const normalizeWorkoutBlocks = (sessionBlocks, workout) => {
   return blocks;
 };
 
-const MOVEMENT_LIBRARY = {
-  hyrox: [
-    "Sled Push", "Sled Pull", "SkiErg", "Rowing", "Burpee Broad Jump",
-    "Wall Balls", "Sandbag Lunges", "Farmers Carry", "1km Run", "500m Run",
-  ],
-  strength_lower: [
-    "Barbell Squat", "Front Squat", "Romanian Deadlift", "Deadlift",
-    "Bulgarian Split Squat", "Leg Press", "Leg Extension", "Leg Curl",
-    "Hip Thrust", "Step Up", "Walking Lunge", "Goblet Squat",
-  ],
-  strength_upper_push: [
-    "Bench Press", "Incline Bench Press", "Overhead Press", "Push Press",
-    "Dumbbell Shoulder Press", "Lateral Raise", "Arnold Press",
-    "Tricep Dip", "Skull Crusher", "Push Up", "Explosive Push Up",
-  ],
-  strength_upper_pull: [
-    "Pull Up", "Chin Up", "Barbell Row", "Dumbbell Row", "Cable Row",
-    "Lat Pulldown", "Face Pull", "Barbell Curl", "Hammer Curl",
-    "Band Pull Apart", "Trap Bar Shrug",
-  ],
-  core: [
-    "Dead Bug", "Plank", "Side Plank", "Copenhagen Plank", "Ab Wheel",
-    "Hanging Knee Raise", "Hanging Leg Raise", "Russian Twist",
-    "Pallof Press", "Bird Dog", "GHD Sit Up", "L-Sit",
-  ],
-  plyometrics: [
-    "Box Jump", "Broad Jump", "Single Leg Hop", "Depth Jump",
-    "Lateral Bound", "Bounding", "Jump Squat", "Explosive Step Up",
-    "Medicine Ball Slam", "Medicine Ball Throw",
-  ],
-  running: [
-    "Easy Run", "Tempo Run", "Interval Run", "Hill Sprint", "Fartlek",
-    "Strides", "Race Pace Run", "Long Run", "Shakeout Run",
-  ],
-  cardio: [
-    "SkiErg", "Rowing", "Assault Bike", "Bike Erg", "Treadmill",
-    "Stairmaster", "Swimming", "Jump Rope",
-  ],
-  mobility: [
-    "Hip 90/90 Stretch", "Pigeon Pose", "Couch Stretch", "Thoracic Rotation",
-    "Ankle Circles", "Cat Cow", "World Greatest Stretch", "Foam Roll Quads",
-    "Foam Roll IT Band", "Lacrosse Ball Glutes",
-  ],
+const inferWorkoutSport = (sessionName, sessionKey) => {
+  const s = String(sessionName || "").toLowerCase();
+  if (s.includes("ski")) return "ski_erg";
+  if (s.includes("row")) return "row_erg";
+  if (s.includes("bike") || s.includes("cycle")) return "bike";
+  if (s.includes("swim")) return "swim";
+  if (sessionKey === "strength") return "strength";
+  if (sessionKey === "hyrox") return "hyrox";
+  return "run";
 };
 
-const MOVEMENTS = {
-  HYROX: ["Sled Push", "Sled Pull", "SkiErg", "Rowing", "Burpee Broad Jump", "Wall Balls", "Sandbag Lunges", "Farmers Carry", "1km Run", "500m Run", "200m Run"],
-  "STRENGTH — LOWER": ["Barbell Squat", "Front Squat", "Deadlift", "Romanian Deadlift", "Bulgarian Split Squat", "Leg Press", "Leg Extension", "Leg Curl", "Hip Thrust", "Walking Lunge", "Goblet Squat", "Step Up"],
-  "STRENGTH — PUSH": ["Bench Press", "Incline Bench Press", "Overhead Press", "Push Press", "Dumbbell Press", "Lateral Raise", "Arnold Press", "Tricep Dip", "Skull Crusher", "Push Up", "Plyo Push Up"],
-  "STRENGTH — PULL": ["Pull Up", "Chin Up", "Barbell Row", "Dumbbell Row", "Cable Row", "Lat Pulldown", "Face Pull", "Bicep Curl", "Hammer Curl", "Band Pull Apart"],
-  CORE: ["Dead Bug", "Plank", "Side Plank", "Copenhagen Plank", "Ab Wheel", "Hanging Leg Raise", "Russian Twist", "Pallof Press", "Bird Dog", "GHD Sit Up"],
-  PLYOMETRICS: ["Box Jump", "Broad Jump", "Depth Jump", "Lateral Bound", "Jump Squat", "Med Ball Slam", "Med Ball Throw", "Bounding", "Single Leg Hop"],
-  RUNNING: ["Easy Run", "Tempo Run", "Interval", "Hill Sprint", "Strides", "Race Pace", "Long Run", "Fartlek"],
-  CARDIO: ["SkiErg", "Rowing", "Assault Bike", "Bike Erg", "Jump Rope", "Swimming"],
-  MOBILITY: ["Hip 90/90", "Pigeon Pose", "Couch Stretch", "Thoracic Rotation", "World Greatest Stretch", "Foam Roll", "Cat Cow"],
+const inferStepType = (rawType, blockTitle) => {
+  const text = `${rawType || ""} ${blockTitle || ""}`.toLowerCase();
+  if (text.includes("warm")) return "warmup";
+  if (text.includes("cool")) return "cooldown";
+  if (text.includes("recover")) return "recover";
+  if (text.includes("rest")) return "rest";
+  return "work";
 };
 
-const WorkoutEditorSheet = ({
-  open,
-  blocks,
-  setBlocks,
-  onCancel,
-  onSave,
-  saving,
-  status,
-  showMovementPicker,
-  setShowMovementPicker,
-  movementSearch,
-  setMovementSearch,
-  movementTarget,
-  setMovementTarget,
-}) => {
-  if (!open) return null;
-  const categories = Object.entries(MOVEMENTS).map(([category, items]) => {
-    const filtered = items.filter((name) => name.toLowerCase().includes((movementSearch || "").toLowerCase()));
-    return { category, items: filtered };
-  }).filter((c) => c.items.length > 0);
+const parseDurationFromText = (text = "", sport = "run") => {
+  const source = String(text);
+  const distance = source.match(/(\d+(?:\.\d+)?)\s*(km|mi|m|yd)\b/i);
+  if (distance) {
+    return { type: "distance", value: Number(distance[1]), unit: distance[2].toLowerCase() };
+  }
+  const time = source.match(/(\d+(?:\.\d+)?)\s*(min|sec)\b/i);
+  if (time) {
+    return { type: "time", value: Number(time[1]), unit: time[2].toLowerCase() };
+  }
+  return {
+    type: sport === "strength" ? "time" : "distance",
+    value: sport === "strength" ? 10 : 1,
+    unit: sport === "strength" ? "min" : "km",
+  };
+};
 
-  return (
-    <div style={{ position:"fixed", inset:0, zIndex:1000, background:"#0D0D0D", transform: open ? "translateY(0)" : "translateY(100%)", transition:"transform 0.35s cubic-bezier(0.4,0,0.2,1)", display:"flex", flexDirection:"column" }}>
-      <div style={{ display:"flex", justifyContent:"center", padding:"8px 0 2px", flexShrink:0 }}>
-        <div style={{ width:36, height:4, borderRadius:999, background:"rgba(255,255,255,0.65)" }} />
-      </div>
-      <div style={{ position:"sticky", top:0, zIndex:2, display:"flex", alignItems:"center", justifyContent:"space-between", padding:"10px 14px 12px", borderBottom:`1px solid ${C.border}`, background:"#0D0D0D" }}>
-        <button onClick={onCancel} style={{ background:"none", border:"none", color:"#888", fontFamily:C.fm, fontSize:11, letterSpacing:2, cursor:"pointer" }}>CANCEL</button>
-        <div style={{ color:"#fff", fontFamily:C.fm, fontSize:11, letterSpacing:3 }}>EDIT WORKOUT</div>
-        <button onClick={onSave} disabled={saving} style={{ background:"#00F3FF", border:"none", color:"#000", fontFamily:C.fm, fontSize:11, letterSpacing:2, borderRadius:8, padding:"6px 12px", cursor:saving ? "default" : "pointer", fontWeight:700 }}>{saving ? "SAVING..." : "SAVE"}</button>
-      </div>
-      {status && <div style={{ padding:"6px 14px", fontFamily:C.fm, fontSize:10, color: status.startsWith("✓") ? C.green : C.red, letterSpacing:2 }}>{status}</div>}
-      <div style={{ flex:1, overflowY:"auto", padding:"12px 14px 16px", display:"flex", flexDirection:"column", gap:12 }}>
-        {blocks.map((block, bi) => (
-          <div key={block.id} style={{ background:"rgba(255,255,255,0.04)", border:"1px solid rgba(255,255,255,0.08)", borderRadius:12, padding:12 }}>
-            <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:10 }}>
-              <div style={{ fontFamily:C.fm, fontSize:9, color:"#00F3FF", letterSpacing:3 }}>{block.title || "BLOCK"}</div>
-              <button onClick={() => setBlocks((prev) => prev.filter((_, i) => i !== bi))} style={{ background:"none", border:"none", color:"#FF3B30", fontSize:14, cursor:"pointer" }}>✕</button>
-            </div>
-            {(block.items || []).map((item, ii) => (
-              <div key={item.id || `${bi}_${ii}`} style={{ display:"flex", alignItems:"center", gap:8, padding:"6px 0", borderBottom:"1px solid rgba(255,255,255,0.06)" }}>
-                <button
-                  onClick={() => {
-                    setMovementTarget({ blockIndex: bi, itemIndex: ii });
-                    setShowMovementPicker(true);
-                  }}
-                  style={{ flex:1, background:"rgba(255,255,255,0.06)", border:"1px solid rgba(255,255,255,0.12)", borderRadius:6, color:"#fff", padding:"6px 8px", fontFamily:C.fm, fontSize:11, textAlign:"left", cursor:"pointer" }}
-                >
-                  {item.name || "Select movement"}
-                </button>
-                <input value={item.sets || ""} onChange={(e) => setBlocks((prev) => prev.map((b, bii) => bii !== bi ? b : { ...b, items: (b.items || []).map((it, iii) => iii !== ii ? it : { ...it, sets: e.target.value }) }))} placeholder="S" style={{ width:48, background:"rgba(255,255,255,0.06)", border:"1px solid rgba(255,255,255,0.12)", borderRadius:6, color:"#fff", padding:"6px 6px", fontFamily:C.fm, fontSize:11, textAlign:"center" }} />
-                <span style={{ color:"#888", fontFamily:C.fm, fontSize:11 }}>×</span>
-                <input value={item.reps || ""} onChange={(e) => setBlocks((prev) => prev.map((b, bii) => bii !== bi ? b : { ...b, items: (b.items || []).map((it, iii) => iii !== ii ? it : { ...it, reps: e.target.value }) }))} placeholder="R" style={{ width:56, background:"rgba(255,255,255,0.06)", border:"1px solid rgba(255,255,255,0.12)", borderRadius:6, color:"#fff", padding:"6px 6px", fontFamily:C.fm, fontSize:11, textAlign:"center" }} />
-                <input value={item.load || ""} onChange={(e) => setBlocks((prev) => prev.map((b, bii) => bii !== bi ? b : { ...b, items: (b.items || []).map((it, iii) => iii !== ii ? it : { ...it, load: e.target.value }) }))} placeholder="Load" style={{ width:72, background:"rgba(255,255,255,0.06)", border:"1px solid rgba(255,255,255,0.12)", borderRadius:6, color:"#fff", padding:"6px 6px", fontFamily:C.fm, fontSize:11, textAlign:"center" }} />
-                <button onClick={() => setBlocks((prev) => prev.map((b, bii) => bii !== bi ? b : { ...b, items: (b.items || []).filter((_, iii) => iii !== ii) }))} style={{ background:"none", border:"none", color:"#FF3B30", fontSize:12, cursor:"pointer", padding:0 }}>✕</button>
-              </div>
-            ))}
-            <button onClick={() => setBlocks((prev) => prev.map((b, bii) => bii !== bi ? b : { ...b, items: [...(b.items || []), { id: uid(), name: "", sets: "", reps: "", load: "", note: "" }] }))} style={{ marginTop:8, background:"none", border:"none", color:"#00F3FF", fontFamily:C.fm, fontSize:10, letterSpacing:2, cursor:"pointer", padding:0 }}>+ ADD EXERCISE</button>
-          </div>
-        ))}
-        <div style={{ display:"flex", gap:8, flexWrap:"wrap" }}>
-          {["STRENGTH","HYROX","CARDIO","CORE","MOBILITY"].map((kind) => (
-            <button key={kind} onClick={() => setBlocks((prev) => [...prev, { id: uid(), title: kind, type: kind.toLowerCase(), items: [] }])} style={{ background:"rgba(255,255,255,0.04)", border:"1px solid rgba(255,255,255,0.12)", borderRadius:999, color:"#ccc", fontFamily:C.fm, fontSize:10, letterSpacing:2, cursor:"pointer", padding:"8px 12px" }}>{kind}</button>
-          ))}
-        </div>
-        <button onClick={() => setBlocks((prev) => [...prev, { id: uid(), title: "NEW BLOCK", type: "general", items: [] }])} style={{ background:"none", border:"1px dashed rgba(255,255,255,0.2)", borderRadius:12, color:"#888", fontFamily:C.fm, fontSize:10, letterSpacing:2, cursor:"pointer", padding:"12px", width:"100%" }}>+ ADD BLOCK</button>
-      </div>
+const parseIntensityFromText = (text = "") => {
+  const source = String(text);
+  const zone = source.match(/\bZ([1-7])\b/i);
+  if (zone) {
+    return { type: "heart_rate_zone", zone: Number(zone[1]), min: null, max: null };
+  }
+  const hrRange = source.match(/(\d{2,3})\s*[-–]\s*(\d{2,3})\s*bpm/i);
+  if (hrRange) {
+    return { type: "custom_hr", zone: null, min: Number(hrRange[1]), max: Number(hrRange[2]) };
+  }
+  if (source.toLowerCase().includes("pace")) {
+    return { type: "pace", zone: null, min: null, max: null };
+  }
+  return { type: "none", zone: 2, min: null, max: null };
+};
 
-      {showMovementPicker && (
-        <div style={{ position:"fixed", inset:0, zIndex:1001, background:"rgba(0,0,0,0.6)", display:"flex", alignItems:"flex-end" }}>
-          <div style={{ width:"100%", maxHeight:"72vh", background:"#0D0D0D", borderTopLeftRadius:18, borderTopRightRadius:18, borderTop:`1px solid ${C.border}`, display:"flex", flexDirection:"column" }}>
-            <div style={{ display:"flex", justifyContent:"center", padding:"8px 0 2px", flexShrink:0 }}>
-              <div style={{ width:36, height:4, borderRadius:999, background:"rgba(255,255,255,0.65)" }} />
-            </div>
-            <div style={{ padding:"10px 14px 12px", borderBottom:`1px solid ${C.border}` }}>
-              <input value={movementSearch} onChange={(e) => setMovementSearch(e.target.value)} placeholder="Search movement..." style={{ width:"100%", background:"rgba(255,255,255,0.06)", border:"1px solid rgba(255,255,255,0.12)", borderRadius:8, color:"#fff", padding:"10px 12px", fontFamily:C.fm, fontSize:12, outline:"none" }} />
-            </div>
-            <div style={{ overflowY:"auto", padding:"10px 14px 14px", display:"flex", flexDirection:"column", gap:12 }}>
-              {categories.map((group) => (
-                <div key={group.category}>
-                  <div style={{ fontFamily:C.fm, fontSize:9, color:"#00F3FF", letterSpacing:2, marginBottom:6 }}>{group.category}</div>
-                  <div style={{ display:"flex", flexDirection:"column", gap:4 }}>
-                    {group.items.map((mv) => (
-                      <button
-                        key={`${group.category}_${mv}`}
-                        onClick={() => {
-                          if (movementTarget) {
-                            setBlocks((prev) => prev.map((b, bi) => bi !== movementTarget.blockIndex ? b : { ...b, items: (b.items || []).map((it, ii) => ii !== movementTarget.itemIndex ? it : { ...it, name: mv }) }));
-                          }
-                          setShowMovementPicker(false);
-                          setMovementTarget(null);
-                          setMovementSearch("");
-                        }}
-                        style={{ textAlign:"left", background:"rgba(255,255,255,0.04)", border:"1px solid rgba(255,255,255,0.08)", borderRadius:8, color:"#fff", fontFamily:C.fs, fontSize:13, cursor:"pointer", padding:"8px 10px" }}
-                      >
-                        {mv}
-                      </button>
-                    ))}
-                  </div>
-                </div>
-              ))}
-              <button onClick={() => { setShowMovementPicker(false); setMovementTarget(null); setMovementSearch(""); }} style={{ marginTop:4, background:"transparent", border:`1px solid ${C.border}`, borderRadius:8, color:"#888", fontFamily:C.fm, fontSize:10, letterSpacing:2, cursor:"pointer", padding:"10px 12px" }}>CLOSE</button>
-            </div>
-          </div>
-        </div>
-      )}
-    </div>
-  );
+const asStep = (raw, blockTitle, sport) => {
+  const parsed = typeof raw === "string" ? parseExerciseLine(raw) : {
+    name: raw?.name || raw?.exercise || raw?.title || "Step",
+    detail: raw?.detail || [raw?.sets, raw?.reps, raw?.distance, raw?.duration, raw?.target].filter(Boolean).join(" · "),
+  };
+  const type = inferStepType(raw?.type, blockTitle);
+  return {
+    id: raw?.id || uid(),
+    type,
+    name: parsed.name || "Step",
+    duration: parseDurationFromText(parsed.detail, sport),
+    intensity: parseIntensityFromText(parsed.detail),
+    notes: raw?.note || parsed.detail || "",
+    color: {
+      warmup: "#e74c3c",
+      work: "#4a90c4",
+      recover: "#f39c12",
+      rest: "#7f8c8d",
+      cooldown: "#27ae60",
+      repeat: "#9b59b6",
+      other: "#888888",
+    }[type] || "#888888",
+  };
+};
+
+const blocksToWorkout = (blocks, sport) => {
+  const steps = [];
+  (Array.isArray(blocks) ? blocks : []).forEach((block) => {
+    const title = String(block?.title || block?.name || block?.type || "").toUpperCase();
+    const rows = Array.isArray(block?.exercises)
+      ? block.exercises
+      : Array.isArray(block?.items)
+        ? block.items
+        : [];
+    if (rows.length === 0) return;
+
+    if ((Number(block?.rounds) || 0) > 1 || title.includes("REPEAT")) {
+      steps.push({
+        id: block?.id || uid(),
+        type: "repeat",
+        name: "Repeat",
+        count: Number(block?.rounds) || 2,
+        color: "#9b59b6",
+        steps: rows.map((row) => asStep(row, title, sport)),
+      });
+      return;
+    }
+
+    rows.forEach((row) => steps.push(asStep(row, title, sport)));
+  });
+  return { sport, steps };
+};
+
+const formatStepDuration = (duration) => {
+  if (!duration) return null;
+  if (duration.type === "distance" && duration.value) return `${duration.value}${duration.unit || ""}`;
+  if (duration.type === "time" && duration.value) return `${duration.value} ${duration.unit || "min"}`;
+  if (duration.type === "lap_button") return "Lap Button";
+  if (duration.type === "heart_rate" && duration.value) return `${duration.value} ${duration.unit || "bpm"}`;
+  return null;
+};
+
+const formatStepTarget = (intensity) => {
+  if (!intensity || intensity.type === "none") return null;
+  if ((intensity.type === "heart_rate_zone" || intensity.type === "power_zone") && intensity.zone) {
+    return `${intensity.type === "power_zone" ? "PZ" : "Z"}${intensity.zone}`;
+  }
+  if ((intensity.type === "custom_hr" || intensity.type === "custom_power") && intensity.min && intensity.max) {
+    return `${intensity.min}-${intensity.max}`;
+  }
+  return String(intensity.type || "").replace(/_/g, " ");
+};
+
+const workoutToBlocks = (workout) => {
+  const toExercise = (step) => ({
+    id: step.id || uid(),
+    name: step.name || "Step",
+    sets: null,
+    reps: null,
+    load: null,
+    distance: step?.duration?.type === "distance" ? formatStepDuration(step.duration) : null,
+    duration: step?.duration?.type !== "distance" ? formatStepDuration(step.duration) : null,
+    target: formatStepTarget(step.intensity),
+    note: step.notes || null,
+    is_ai_generated: false,
+    is_modified: true,
+  });
+
+  return (Array.isArray(workout?.steps) ? workout.steps : []).map((step, index) => {
+    if (step.type === "repeat") {
+      return {
+        id: step.id || uid(),
+        type: "REPEAT",
+        order: index,
+        rounds: Number(step.count) || 2,
+        is_ai_generated: false,
+        is_modified: true,
+        exercises: (Array.isArray(step.steps) ? step.steps : []).map((child) => toExercise(child)),
+      };
+    }
+    return {
+      id: step.id || uid(),
+      type: String(step.type || "work").toUpperCase(),
+      order: index,
+      rounds: null,
+      is_ai_generated: false,
+      is_modified: true,
+      exercises: [toExercise(step)],
+    };
+  });
 };
 
 const whoopColor = (s) => s >= 67 ? C.green : s >= 34 ? C.yellow : C.red;
@@ -1414,13 +1413,9 @@ export default function App() {
   const [flipped, setFlipped] = useState(false);
   const [showRecoveryGates, setShowRecoveryGates] = useState(false);
   const [showAiAdjustments, setShowAiAdjustments] = useState(true);
-  const [editBlocks, setEditBlocks] = useState([]);
-  const [editSaving, setEditSaving] = useState(false);
-  const [editToast, setEditToast] = useState(null);
+  const [editWorkout, setEditWorkout] = useState({ sport: null, steps: [] });
   const [showWorkoutEditor, setShowWorkoutEditor] = useState(false);
-  const [showMovementPicker, setShowMovementPicker] = useState(false);
-  const [movementSearch, setMovementSearch] = useState("");
-  const [movementTarget, setMovementTarget] = useState(null);
+  const [editSaving, setEditSaving] = useState(false);
   const [editorStatus, setEditorStatus] = useState("");
   const [labContext, setLabContext] = useState("");
   const [labTargetDay, setLabTargetDay] = useState(null);
@@ -1437,8 +1432,8 @@ export default function App() {
     setPlanDetailView("overview");
     setFlipped(false);
     setShowWorkoutEditor(false);
-    setShowMovementPicker(false);
-    setMovementTarget(null);
+    setEditSaving(false);
+    setEditWorkout({ sport: null, steps: [] });
   }, [selDay, weekId, sess]);
 
   // Initialise auth on mount; listen for session changes
@@ -2021,53 +2016,24 @@ export default function App() {
   const selectedDayName = dayData?.day || selDay || "";
 
   const openEditMode = () => {
-    const baseBlocks = selectedBlocks.length > 0 ? selectedBlocks : [{ title: "WORKOUT", rounds: null, items: [] }];
-    const normalizedEditBlocks = baseBlocks.map((block, bi) => ({
-      id: block.id || uid(),
-      type: block.type || String(block.title || "WORKOUT").toLowerCase().replace(/\s+/g, "_"),
-      title: block.title || `BLOCK ${bi + 1}`,
-      rounds: block.rounds || null,
-      items: (block.items || []).map((item) => ({
-        id: item.id || uid(),
-        name: item.name || "",
-        sets: item.sets || "",
-        reps: item.reps || "",
-        load: item.load || item.detail || "",
-        note: item.note || "",
-        detail: item.detail || "",
-      })),
-    }));
-    setEditBlocks(normalizedEditBlocks);
+    const blocksSource = sess === "am" ? dayData?.am_session_blocks : dayData?.pm_session_blocks;
+    const sport = inferWorkoutSport(selectedSessionName, selectedMeta.key);
+    const workout = blocksToWorkout(blocksSource, sport);
+    if (!Array.isArray(workout.steps) || workout.steps.length === 0) {
+      const fallback = blocksToWorkout(selectedBlocks, sport);
+      setEditWorkout(fallback);
+    } else {
+      setEditWorkout(workout);
+    }
+    setEditorStatus("");
     setShowWorkoutEditor(true);
   };
 
   const cancelEditMode = () => {
-    setShowMovementPicker(false);
     setShowWorkoutEditor(false);
     setEditorStatus("");
+    setEditSaving(false);
   };
-
-  const serializeBlocksForSave = () =>
-    editBlocks.map((block, bi) => ({
-      id: block.id || uid(),
-      type: String(block.type || block.title || "custom").toUpperCase().replace(/\s+/g, "_"),
-      order: bi,
-      rounds: block.rounds || null,
-      is_ai_generated: false,
-      is_modified: true,
-      exercises: (block.items || [])
-        .filter((ex) => ex.name && ex.name.trim())
-        .map((ex) => ({
-          id: ex.id || uid(),
-          name: ex.name.trim(),
-          sets: ex.sets || null,
-          reps: ex.reps || null,
-          load: ex.load || null,
-          note: ex.note || null,
-          is_ai_generated: false,
-          is_modified: true,
-        })),
-    }));
 
   const saveWorkoutEdits = async () => {
     if (!session?.access_token || !weekId || !selectedDayName) return;
@@ -2075,12 +2041,13 @@ export default function App() {
     setEditorStatus("SAVING...");
     try {
       const blocksKey = sess === "am" ? "am_session_blocks" : "pm_session_blocks";
+      const serialized = workoutToBlocks(editWorkout);
       const payload = {
         type: "modify_day",
         week_id: weekId,
         day: selectedDayName,
         changes: {
-          [blocksKey]: serializeBlocksForSave(),
+          [blocksKey]: serialized,
           ai_modified: false,
           ai_modification_note: null,
         },
@@ -3220,18 +3187,12 @@ export default function App() {
 
       <WorkoutEditorSheet
         open={showWorkoutEditor}
-        blocks={editBlocks}
-        setBlocks={setEditBlocks}
+        workout={editWorkout}
+        onWorkoutChange={setEditWorkout}
         onCancel={cancelEditMode}
         onSave={saveWorkoutEdits}
         saving={editSaving}
         status={editorStatus}
-        showMovementPicker={showMovementPicker}
-        setShowMovementPicker={setShowMovementPicker}
-        movementSearch={movementSearch}
-        setMovementSearch={setMovementSearch}
-        movementTarget={movementTarget}
-        setMovementTarget={setMovementTarget}
       />
 
       {labOpen && (
