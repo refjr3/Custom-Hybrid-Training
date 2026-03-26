@@ -1290,6 +1290,7 @@ export default function App() {
   const [flipped, setFlipped] = useState(false);
   const [showRecoveryGates, setShowRecoveryGates] = useState(false);
   const [showAiAdjustments, setShowAiAdjustments] = useState(true);
+  const [editBlocks, setEditBlocks] = useState([]);
   const [expandedExerciseId, setExpandedExerciseId] = useState(null);
   const [exerciseDraft, setExerciseDraft] = useState({});
   const [exerciseQuery, setExerciseQuery] = useState("");
