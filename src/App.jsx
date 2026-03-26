@@ -2547,6 +2547,7 @@ export default function App() {
                     position:"absolute",
                     inset:0,
                     width:"100%",
+                    pointerEvents: flipped ? "none" : "auto",
                     backfaceVisibility:"hidden",
                     WebkitBackfaceVisibility:"hidden",
                     background:C.card,
@@ -2598,6 +2599,8 @@ export default function App() {
                     position:"absolute",
                     inset:0,
                     width:"100%",
+                    pointerEvents:"auto",
+                    zIndex:10,
                     backfaceVisibility:"hidden",
                     WebkitBackfaceVisibility:"hidden",
                     transform:"rotateY(180deg)",
@@ -2629,20 +2632,36 @@ export default function App() {
                         <button onClick={() => { setPlanDetailView("overview"); setFlipped(false); }} style={{ background:"transparent", border:"none", color:C.cyan, fontFamily:C.fm, fontSize:10, letterSpacing:2, textTransform:"uppercase", cursor:"pointer", padding:0 }}>
                           ← BACK
                         </button>
-                        <div style={{ display:"flex", alignItems:"center", gap:8 }}>
-                          <button
-                            onClick={openEditMode}
-                            style={{ background:"transparent", border:`1px solid ${C.cyan}55`, color:C.cyan, borderRadius:8, padding:"6px 10px", fontFamily:C.fm, fontSize:9, letterSpacing:2, textTransform:"uppercase", cursor:"pointer" }}
-                          >
-                            EDIT WORKOUT
-                          </button>
-                          <span style={{ fontFamily:C.fm, fontSize:8, color:selectedMeta.color, letterSpacing:2, textTransform:"uppercase", background:`${selectedMeta.color}22`, border:`1px solid ${selectedMeta.color}55`, borderRadius:4, padding:"2px 8px" }}>{selectedMeta.tag}</span>
-                        </div>
+                        <span style={{ fontFamily:C.fm, fontSize:8, color:selectedMeta.color, letterSpacing:2, textTransform:"uppercase", background:`${selectedMeta.color}22`, border:`1px solid ${selectedMeta.color}55`, borderRadius:4, padding:"2px 8px" }}>{selectedMeta.tag}</span>
                       </div>
                       <div style={{ fontFamily:C.ff, fontSize:24, color:C.text, lineHeight:1.1, letterSpacing:0.6, textTransform:"uppercase" }}>{selectedMeta.label}</div>
                       <div style={{ marginTop:8, marginBottom:14, fontFamily:C.fm, fontSize:9, color:C.muted, letterSpacing:2, textTransform:"uppercase" }}>
                         {selectedWorkout?.duration || "65 MIN"} · {selectedWorkout?.type || selectedWorkout?.zone || selectedMeta.tag} · {selectedWorkout?.tag || selectedWorkout?.hr || "PUSH DOMINANT"}
                       </div>
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          e.preventDefault();
+                          console.log("EDIT WORKOUT TAPPED");
+                          setDebugLog((prev) => [...prev.slice(-2), `BUTTON TAPPED ${Date.now()}`]);
+                          openEditMode();
+                        }}
+                        style={{
+                          background:"#ff3b30",
+                          color:"#fff",
+                          border:"none",
+                          padding:"12px 20px",
+                          fontSize:14,
+                          fontFamily:"monospace",
+                          cursor:"pointer",
+                          borderRadius:8,
+                          width:"100%",
+                          marginTop:16,
+                          marginBottom:16,
+                        }}
+                      >
+                        EDIT WORKOUT
+                      </button>
 
                       {isHyroxSession ? (
                         <div style={{ display:"flex", flexDirection:"column", gap:14 }}>
