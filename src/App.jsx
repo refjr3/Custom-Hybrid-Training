@@ -1299,6 +1299,7 @@ export default function App() {
   const [newBlockName, setNewBlockName] = useState("");
   const [editSaving, setEditSaving] = useState(false);
   const [editToast, setEditToast] = useState(null);
+  const [debugLog, setDebugLog] = useState([]);
   const [labContext, setLabContext] = useState("");
   const [labTargetDay, setLabTargetDay] = useState(null);
   const [cqSelections, setCqSelections] = useState({});
@@ -1311,6 +1312,8 @@ export default function App() {
   const dataFetched = useRef(false);
 
   useEffect(() => {
+    console.log("[resetEffect] firing — selDay:", selDay, "weekId:", weekId, "sess:", sess);
+    setDebugLog((prev) => [...prev.slice(-2), `resetEffect fired ${Date.now()}`]);
     setPlanDetailView("overview");
     setFlipped(false);
   }, [selDay, weekId, sess]);
@@ -1921,6 +1924,8 @@ export default function App() {
     setNewBlockType("strength");
     setNewBlockName("");
     setPlanDetailView("edit");
+    console.log("[openEditMode] setPlanDetailView called — current planDetailView should now be edit");
+    setDebugLog((prev) => [...prev.slice(-2), `openEditMode called ${Date.now()}`]);
   };
 
   const cancelEditMode = () => {
