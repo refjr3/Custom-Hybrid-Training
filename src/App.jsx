@@ -1415,6 +1415,8 @@ export default function App() {
   const [showRecoveryGates, setShowRecoveryGates] = useState(false);
   const [showAiAdjustments, setShowAiAdjustments] = useState(true);
   const [editBlocks, setEditBlocks] = useState([]);
+  const [editSaving, setEditSaving] = useState(false);
+  const [editToast, setEditToast] = useState(null);
   const [showWorkoutEditor, setShowWorkoutEditor] = useState(false);
   const [showMovementPicker, setShowMovementPicker] = useState(false);
   const [movementSearch, setMovementSearch] = useState("");
