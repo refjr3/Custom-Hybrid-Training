@@ -2092,11 +2092,16 @@ export default function App() {
   const selectedSessionName = dayData ? getSessionNameForDay(dayData, sess) : null;
   const selectedWorkout = selectedSessionName ? WL[selectedSessionName] : null;
   const selectedMeta = deriveSessionMeta(selectedSessionName, dayData);
+  const selectedCustomContent = sess === "am" ? dayData?.am_session_custom : dayData?.pm_session_custom;
+  const selectedShowCustom = !!(selectedCustomContent && dayData?.ai_modified);
+  const selectedCanViewWorkout = !!(dayData?.isRaceDay || selectedShowCustom || selectedWorkout);
+  const selectedCoachingNote = dayData?.ai_modification_note || dayData?.note2a || dayData?.note || selectedWorkout?.note || "";
+  const selectedKeyPoints = selectedWorkout?.steps?.filter((s) => !s.startsWith("—")).slice(0, 5) || [];
   const selectedSessionDisplayName = dayData?.am_session_custom?.split("\n")[0] || selectedMeta.label || "SESSION";
   const selectedWhoopRule = dayData?.note || "Execute as programmed.";
   const selectedWhoopGate = whoopLabel(whoopData?.recovery?.score ?? 0);
   const selectedBlocks = normalizeWorkoutBlocks(
-    dayData?.am_session_blocks,
+    sess === "am" ? dayData?.am_session_blocks : dayData?.pm_session_blocks,
     selectedWorkout
   );
   const selectedDayName = dayData?.day || selDay || "";
