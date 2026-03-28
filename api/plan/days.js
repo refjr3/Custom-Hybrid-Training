@@ -98,8 +98,19 @@ export default async function handler(req, res) {
     weeks: blockMap[id].weeks,
   }));
 
-  // Sort blocks into the correct display order regardless of UUID ordering
-  const BLOCK_LABEL_ORDER = ["MIAMI TAPER", "PHASE 1", "PHASE 2", "PHASE 3", "PHASE 4"];
+  // Sort blocks into the correct display order regardless of UUID ordering.
+  // Include seeded HYROX 12-week phases so Base Rebuild shows first.
+  const BLOCK_LABEL_ORDER = [
+    "MIAMI TAPER",
+    "BASE REBUILD",
+    "ACCUMULATION",
+    "INTENSIFICATION",
+    "PEAK & TEST",
+    "PHASE 1",
+    "PHASE 2",
+    "PHASE 3",
+    "PHASE 4",
+  ];
   blocks.sort((a, b) => {
     const ai = BLOCK_LABEL_ORDER.indexOf(a.label);
     const bi = BLOCK_LABEL_ORDER.indexOf(b.label);

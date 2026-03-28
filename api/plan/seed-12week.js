@@ -35,14 +35,20 @@ const START_DATE = new Date(2026, 3, 13); // April 13, 2026 — month is 0-index
 
 const addDays = (date, days) => {
   const d = new Date(date);
-  d.setUTCDate(d.getUTCDate() + days);
+  d.setDate(d.getDate() + days);
   return d;
 };
 
 const fmtDateLabel = (d) =>
-  d.toLocaleDateString("en-US", { month: "short", day: "numeric", timeZone: "UTC" });
+  d.toLocaleDateString("en-US", { month: "short", day: "numeric" });
 
 const fmtWeekRange = (start, end) => `${fmtDateLabel(start)}–${fmtDateLabel(end)}`;
+const fmtIsoDate = (d) => {
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, "0");
+  const day = String(d.getDate()).padStart(2, "0");
+  return `${y}-${m}-${day}`;
+};
 
 const getWeekStartDate = (weekNum) => addDays(START_DATE, (weekNum - 1) * 7);
 const getDayDate = (weekNum, dayIndex) => fmtDateLabel(addDays(getWeekStartDate(weekNum), dayIndex));
@@ -234,6 +240,11 @@ export default async function handler(req, res) {
       weeks_inserted: weeks.length,
       days_inserted: days.length,
       start_date: fmtDateLabel(START_DATE),
+      first_monday: fmtIsoDate(START_DATE),
+      phase_week_counts: PHASES.reduce((acc, phase) => {
+        acc[phase.label] = phase.weeks.length;
+        return acc;
+      }, {}),
     });
   } catch (err) {
     console.error("[plan/seed-12week] error:", err.message);
