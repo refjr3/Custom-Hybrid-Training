@@ -1423,8 +1423,6 @@ export default function App() {
   const [labToast, setLabToast] = useState(null);
   const [planBuilderOpen, setPlanBuilderOpen] = useState(false);
   const [planBuilderDismissUntil, setPlanBuilderDismissUntil] = useState(0);
-  const [planDetailView, setPlanDetailView] = useState("overview");
-  const [flipped, setFlipped] = useState(false);
   const [showRecoveryGates, setShowRecoveryGates] = useState(false);
   const [showAiAdjustments, setShowAiAdjustments] = useState(true);
   const [showWorkoutEditor, setShowWorkoutEditor] = useState(false);
@@ -1440,8 +1438,6 @@ export default function App() {
   const dataFetched = useRef(false);
 
   useEffect(() => {
-    setPlanDetailView("overview");
-    setFlipped(false);
     setShowWorkoutEditor(false);
   }, [selDay, weekId, sess]);
 
@@ -2096,28 +2092,24 @@ export default function App() {
   const selectedSessionName = dayData ? getSessionNameForDay(dayData, sess) : null;
   const selectedWorkout = selectedSessionName ? WL[selectedSessionName] : null;
   const selectedMeta = deriveSessionMeta(selectedSessionName, dayData);
-  const selectedCustomContent = sess === "am" ? dayData?.am_session_custom : dayData?.pm_session_custom;
-  const selectedShowCustom = !!(selectedCustomContent && dayData?.ai_modified);
-  const selectedCanViewWorkout = !!(dayData?.isRaceDay || selectedShowCustom || selectedWorkout);
-  const selectedCoachingNote = dayData?.am_session_custom || dayData?.note || selectedWorkout?.note || "";
-  const selectedKeyPoints = selectedWorkout?.steps?.filter((s) => !s.startsWith("—")).slice(0, 5) || [];
+  const selectedSessionDisplayName = dayData?.am_session_custom?.split("\n")[0] || selectedMeta.label || "SESSION";
+  const selectedWhoopRule = dayData?.note || "Execute as programmed.";
+  const selectedWhoopGate = whoopLabel(whoopData?.recovery?.score ?? 0);
   const selectedBlocks = normalizeWorkoutBlocks(
-    sess === "am" ? dayData?.am_session_blocks : dayData?.pm_session_blocks,
+    dayData?.am_session_blocks,
     selectedWorkout
   );
-  const isHyroxSession = selectedMeta.key === "hyrox";
   const selectedDayName = dayData?.day || selDay || "";
 
   const saveWorkoutEdits = async (blocks) => {
     if (!session?.access_token || !weekId || !selectedDayName) return;
     try {
-      const blocksKey = sess === "am" ? "am_session_blocks" : "pm_session_blocks";
       const payload = {
         type: "modify_day",
         week_id: weekId,
         day: selectedDayName,
         changes: {
-          [blocksKey]: blocks || [],
+          am_session_blocks: blocks || [],
           ai_modified: false,
           ai_modification_note: null,
         },
@@ -2176,7 +2168,7 @@ export default function App() {
     setPlanBuilderOpen(true);
   };
 
-  console.log("[FlipCard] flipped:", flipped, "planDetailView:", planDetailView);
+  console.log("[PlanDetail] selected day:", selDay, "session:", sess);
 
   const NoPlanState = () => {
     return (
@@ -2390,7 +2382,6 @@ export default function App() {
                         setNav("plan");
                         setSelDay(todayDayData.day);
                         setSess("am");
-                        setPlanDetailView("overview");
                       }}
                       style={{ background: "transparent", border: "none", color: C.cyan, fontFamily: C.ff, fontSize: 14, letterSpacing: 2, cursor: "pointer" }}
                     >
@@ -2480,7 +2471,6 @@ export default function App() {
                       setBlockId(b.id);
                       setWeekId(b.weeks[0].id);
                       setSelDay(null);
-                      setPlanDetailView("overview");
                     }}
                     style={{
                       flexShrink:0,
@@ -2513,7 +2503,6 @@ export default function App() {
                   onClick={() => {
                     setWeekId(w.id);
                     setSelDay(null);
-                    setPlanDetailView("overview");
                   }}
                   style={{
                     flexShrink:0,
@@ -2559,12 +2548,10 @@ export default function App() {
                   onClick={() => {
                     if (isSelected) {
                       setSelDay(null);
-                      setPlanDetailView("overview");
                       return;
                     }
                     setSelDay(d.day);
                     setSess("am");
-                    setPlanDetailView("overview");
                   }}
                   style={{
                     minHeight:128,
@@ -2615,172 +2602,74 @@ export default function App() {
           </div>
 
           {dayData && (
-            <div style={{ marginTop:16, perspective:"1000px" }}>
-              <div
-                style={{
-                  position:"relative",
-                  minHeight:420,
-                  transition:"transform 0.6s cubic-bezier(0.4, 0.2, 0.2, 1)",
-                  transformStyle:"preserve-3d",
-                  WebkitTransformStyle:"preserve-3d",
-                  transform: flipped ? "rotateY(180deg)" : "rotateY(0deg)",
-                }}
-              >
-                <div
-                  style={{
-                    position:"absolute",
-                    inset:0,
-                    width:"100%",
-                    pointerEvents: flipped ? "none" : "auto",
-                    backfaceVisibility:"hidden",
-                    WebkitBackfaceVisibility:"hidden",
-                    background:C.card,
-                    border:`1px solid ${C.border}`,
-                    borderRadius:16,
-                    overflow:"hidden",
-                    ...C.glass,
-                  }}
-                >
-                  {dayData.pm && (
-                    <div style={{ display:"flex", borderBottom:`1px solid ${C.border}` }}>
-                      {[["am","AM"],["pm","PM"]].map(([s,l]) => (
-                        <button
-                          key={s}
-                          onClick={() => { setSess(s); setPlanDetailView("overview"); setFlipped(false); }}
-                          style={{ flex:1, padding:"10px 12px", background:"transparent", border:"none", borderBottom: sess===s ? `1.5px solid ${C.cyan}` : "1.5px solid transparent", color: sess===s ? C.text : C.muted, cursor:"pointer", fontFamily:C.fm, fontSize:9, letterSpacing:2, textTransform:"uppercase" }}
-                        >
-                          {l}
-                        </button>
-                      ))}
-                    </div>
-                  )}
+            <div
+              style={{
+                marginTop: 16,
+                background: C.card,
+                border: `1px solid ${C.border}`,
+                borderRadius: 16,
+                overflow: "hidden",
+                maxHeight: dayData ? 520 : 0,
+                opacity: dayData ? 1 : 0,
+                transform: dayData ? "translateY(0)" : "translateY(-6px)",
+                transition: "max-height 200ms ease, opacity 200ms ease, transform 200ms ease",
+                ...C.glass,
+              }}
+            >
+              {dayData.pm && (
+                <div style={{ display:"flex", borderBottom:`1px solid ${C.border}` }}>
+                  {[["am","AM"],["pm","PM"]].map(([s,l]) => (
+                    <button
+                      key={s}
+                      onClick={() => setSess(s)}
+                      style={{ flex:1, padding:"10px 12px", background:"transparent", border:"none", borderBottom: sess===s ? `1.5px solid ${C.cyan}` : "1.5px solid transparent", color: sess===s ? C.text : C.muted, cursor:"pointer", fontFamily:C.fm, fontSize:9, letterSpacing:2, textTransform:"uppercase" }}
+                    >
+                      {l}
+                    </button>
+                  ))}
+                </div>
+              )}
 
-                  <div style={{ padding:"14px 14px 16px" }}>
-                    <div style={{ display:"flex", alignItems:"center", gap:10, marginBottom:6 }}>
-                      <span style={{ fontFamily:C.fm, fontSize:8, color:selectedMeta.color, letterSpacing:2, textTransform:"uppercase", background:`${selectedMeta.color}22`, border:`1px solid ${selectedMeta.color}55`, borderRadius:4, padding:"2px 8px" }}>{selectedMeta.tag}</span>
-                      {dayData?.ai_modified && <span style={{ fontFamily:C.fm, fontSize:8, color:"#9b59b6", letterSpacing:2, textTransform:"uppercase" }}>✦ AI MODIFIED</span>}
-                    </div>
-                    <div style={{ fontFamily:C.ff, fontSize:24, color:C.text, lineHeight:1.1, letterSpacing:0.6 }}>{selectedMeta.label}</div>
-                    <div style={{ marginTop:8, fontFamily:C.fm, fontSize:9, color:C.muted, letterSpacing:2, textTransform:"uppercase" }}>
-                      {selectedWorkout?.duration || "45-75 MIN"} · {selectedWorkout?.zone || "ADAPTIVE"} · {selectedWorkout?.hr || "SEE GATE"}
-                    </div>
-                    <div style={{ marginTop:10, fontFamily:C.fs, fontSize:13, color:"#aaa", fontStyle:"italic", lineHeight:1.55 }}>
-                      {selectedCoachingNote || "Execute with controlled effort and clean transitions."}
-                    </div>
-                    {selectedCanViewWorkout && (
-                      <button
-                        onClick={() => { setPlanDetailView("workout"); setFlipped(true); }}
-                        style={{ marginTop:12, marginLeft:"auto", display:"block", background:"transparent", border:"none", color:C.cyan, fontFamily:C.fm, fontSize:11, letterSpacing:2, textTransform:"uppercase", cursor:"pointer", padding:0 }}
-                      >
-                        VIEW WORKOUT →
-                      </button>
-                    )}
+              <div style={{ padding:"14px 14px 16px", display:"flex", flexDirection:"column", gap:12 }}>
+                <div style={{ display:"flex", alignItems:"center", gap:10 }}>
+                  <span style={{ fontFamily:C.fm, fontSize:8, color:selectedMeta.color, letterSpacing:2, textTransform:"uppercase", background:`${selectedMeta.color}22`, border:`1px solid ${selectedMeta.color}55`, borderRadius:4, padding:"2px 8px" }}>{selectedMeta.tag}</span>
+                  {dayData?.ai_modified && <span style={{ fontFamily:C.fm, fontSize:8, color:"#9b59b6", letterSpacing:2, textTransform:"uppercase" }}>✦ AI MODIFIED</span>}
+                </div>
+
+                <div style={{ fontFamily:C.ff, fontSize:24, color:C.text, lineHeight:1.1, letterSpacing:0.6 }}>
+                  {selectedMeta.label}
+                </div>
+
+                <div style={{ fontFamily:C.fs, fontSize:13, color:"#aaa", lineHeight:1.55, whiteSpace:"pre-wrap" }}>
+                  {selectedCoachingNote || "Execute with controlled effort and clean transitions."}
+                </div>
+
+                <div style={{ background:C.card2, border:`1px solid ${C.border}`, borderRadius:12, padding:"10px 12px" }}>
+                  <div style={{ fontFamily:C.fm, fontSize:9, color:C.cyan, letterSpacing:2, textTransform:"uppercase", marginBottom:6 }}>
+                    WHOOP GATE RULES
+                  </div>
+                  <div style={{ fontFamily:C.fs, fontSize:12, color:C.muted, lineHeight:1.6, whiteSpace:"pre-wrap" }}>
+                    {dayData?.note2a || dayData?.note || "Green: Execute as programmed.\nYellow: Reduce 30–40% volume.\nRed: Full rest."}
                   </div>
                 </div>
 
-                <div
+                <button
+                  onClick={() => setShowWorkoutEditor(true)}
                   style={{
-                    position:"absolute",
-                    inset:0,
+                    marginTop: 2,
+                    background:"#ff3b30",
+                    color:"#fff",
+                    border:"none",
+                    padding:"12px 20px",
+                    fontSize:14,
+                    fontFamily:"monospace",
+                    cursor:"pointer",
+                    borderRadius:8,
                     width:"100%",
-                    pointerEvents:"auto",
-                    zIndex:10,
-                    backfaceVisibility:"hidden",
-                    WebkitBackfaceVisibility:"hidden",
-                    transform:"rotateY(180deg)",
-                    background:C.card,
-                    border:`1px solid ${C.border}`,
-                    borderRadius:16,
-                    overflowY:"auto",
-                    ...C.glass,
                   }}
                 >
-                  <div style={{ padding:"14px 14px 16px" }}>
-                      <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:6 }}>
-                        <button onClick={() => { setPlanDetailView("overview"); setFlipped(false); }} style={{ background:"transparent", border:"none", color:C.cyan, fontFamily:C.fm, fontSize:10, letterSpacing:2, textTransform:"uppercase", cursor:"pointer", padding:0 }}>
-                          ← BACK
-                        </button>
-                        <span style={{ fontFamily:C.fm, fontSize:8, color:selectedMeta.color, letterSpacing:2, textTransform:"uppercase", background:`${selectedMeta.color}22`, border:`1px solid ${selectedMeta.color}55`, borderRadius:4, padding:"2px 8px" }}>{selectedMeta.tag}</span>
-                      </div>
-                      <div style={{ fontFamily:C.ff, fontSize:24, color:C.text, lineHeight:1.1, letterSpacing:0.6, textTransform:"uppercase" }}>{selectedMeta.label}</div>
-                      <div style={{ marginTop:8, marginBottom:14, fontFamily:C.fm, fontSize:9, color:C.muted, letterSpacing:2, textTransform:"uppercase" }}>
-                        {selectedWorkout?.duration || "65 MIN"} · {selectedWorkout?.type || selectedWorkout?.zone || selectedMeta.tag} · {selectedWorkout?.tag || selectedWorkout?.hr || "PUSH DOMINANT"}
-                      </div>
-                      <button
-                        onClick={() => setShowWorkoutEditor(true)}
-                        style={{
-                          background:"#ff3b30",
-                          color:"#fff",
-                          border:"none",
-                          padding:"12px 20px",
-                          fontSize:14,
-                          fontFamily:"monospace",
-                          cursor:"pointer",
-                          borderRadius:8,
-                          width:"100%",
-                          marginTop:16,
-                          marginBottom:16,
-                        }}
-                      >
-                        EDIT WORKOUT
-                      </button>
-
-                      {isHyroxSession ? (
-                        <div style={{ display:"flex", flexDirection:"column", gap:14 }}>
-                          {selectedBlocks.flatMap((block, bi) =>
-                            block.items.map((item, ii) => (
-                              <div key={`hyrox_${bi}_${ii}`} style={{ borderRadius:10, border:`1px solid ${C.border}`, borderLeft:"3px solid #9b59b6", padding:"10px 12px", background: ii % 2 === 0 ? "rgba(255,255,255,0.02)" : "transparent" }}>
-                                <div style={{ display:"flex", alignItems:"center", gap:10 }}>
-                                  <span style={{ fontSize:16, color:item.name.toLowerCase().includes("run") ? "#4a90c4" : "#9b59b6" }}>
-                                    {item.name.toLowerCase().includes("run") ? "◉" : "⬡"}
-                                  </span>
-                                  <span style={{ fontFamily:C.ff, fontSize:15, color:C.text, letterSpacing:1 }}>{item.name.toUpperCase()}</span>
-                                </div>
-                                {item.detail && (
-                                  <div style={{ marginTop:4, marginLeft:26, fontFamily:C.fs, fontSize:12, color:C.muted }}>
-                                    {item.detail}
-                                  </div>
-                                )}
-                              </div>
-                            ))
-                          )}
-                        </div>
-                      ) : (
-                        <div style={{ display:"flex", flexDirection:"column", gap:20 }}>
-                          {selectedBlocks.map((block, bi) => (
-                            <div key={`block_${bi}`}>
-                              <div style={{ borderLeft:`3px solid ${selectedMeta.color}`, paddingLeft:10, marginBottom:8 }}>
-                                <div style={{ fontFamily:C.fm, fontSize:10, color:C.cyan, letterSpacing:3, textTransform:"uppercase" }}>
-                                  {block.title}{block.rounds ? ` · ${block.rounds} ROUNDS` : ""}
-                                </div>
-                              </div>
-                              <div style={{ display:"flex", flexDirection:"column", gap:2 }}>
-                                {block.items.map((item, ii) => (
-                                  <div key={`row_${bi}_${ii}`} style={{ display:"flex", alignItems:"center", justifyContent:"space-between", gap:10, padding:"8px 10px", background: ii % 2 === 0 ? "rgba(255,255,255,0.02)" : "transparent", borderRadius:6 }}>
-                                    <div style={{ display:"flex", alignItems:"center", gap:8, minWidth:0 }}>
-                                      <span style={{ color:selectedMeta.color, fontSize:14 }}>○</span>
-                                      <span style={{ fontFamily:C.fs, fontSize:13, color:C.text, overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>{item.name}</span>
-                                    </div>
-                                    <span style={{ fontFamily:C.fm, fontSize:11, color:"#888", letterSpacing:1, textAlign:"right", flexShrink:0 }}>{item.detail}</span>
-                                  </div>
-                                ))}
-                              </div>
-                            </div>
-                          ))}
-                        </div>
-                      )}
-
-                      <div style={{ marginTop:16 }}>
-                        <div style={{ height:1, background:`${C.cyan}66`, marginBottom:8 }} />
-                        <div style={{ fontFamily:C.fm, fontSize:10, color:C.cyan, letterSpacing:3, textTransform:"uppercase", marginBottom:6 }}>Coach Note</div>
-                        <div style={{ fontFamily:C.fs, fontSize:13, color:"#aaa", fontStyle:"italic", lineHeight:1.6 }}>
-                          {selectedCoachingNote || selectedWorkout?.note || "Maintain quality and pace discipline through every set."}
-                        </div>
-                        <div style={{ height:1, background:`${C.cyan}66`, marginTop:8 }} />
-                      </div>
-                    </div>
-                  
-                </div>
+                  EDIT WORKOUT
+                </button>
               </div>
             </div>
           )}
