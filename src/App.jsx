@@ -2267,8 +2267,25 @@ export default function App() {
           day: "numeric",
         }).toUpperCase();
         const athleteName = profile?.name?.toUpperCase() || "ATHLETE";
-        const todaySessionName = todayDayData ? getSessionNameForDay(todayDayData, "am") : null;
-        const todayMeta = deriveSessionMeta(todaySessionName, todayDayData);
+        const weekDays = week?.days || [];
+        const todayDateLabel = new Date().toLocaleDateString("en-US", { month: "short", day: "numeric" });
+        const tomorrowDateObj = new Date();
+        tomorrowDateObj.setDate(tomorrowDateObj.getDate() + 1);
+        const tomorrowDateLabel = tomorrowDateObj.toLocaleDateString("en-US", { month: "short", day: "numeric" });
+        const selectedDayIndex = selDay ? weekDays.findIndex((d) => d.day === selDay) : -1;
+        const todayIndexInWeek = selectedDayIndex >= 0
+          ? selectedDayIndex
+          : weekDays.findIndex((d) => (d?.date || "").trim() === todayDateLabel || d.day === todayDayName);
+        const todayCardData = todayIndexInWeek >= 0 ? weekDays[todayIndexInWeek] : (todayDayData || weekDays[0] || null);
+        const todaySessionName = todayCardData ? getSessionNameForDay(todayCardData, "am") : null;
+        const todaySessionKey = todayCardData?.am_session || todayCardData?.am;
+        const todaySessionLabel = todayCardData?.am_session_custom?.split("\n")[0]
+          || WL[todaySessionKey]?.title
+          || todaySessionKey
+          || "REST DAY";
+        const todayCoachingNote = todayCardData?.note || todayCardData?.note2a || todayCardData?.am_session_custom?.split("\n").slice(1).join(" ") || "";
+        const hasTodaySession = !!(todaySessionName || todayCardData?.am_session_custom || todaySessionKey);
+        const todayMeta = deriveSessionMeta(todaySessionName, todayCardData);
         const todayWorkout = todaySessionName ? WL[todaySessionName] : null;
         const zoneByKey = {
           hyrox: { zone: "RACE PACE", hr: "150-170 BPM" },
@@ -2284,8 +2301,16 @@ export default function App() {
         const todayDuration = todayWorkout?.duration || "—";
 
         const tomorrowDayName = todayDayNames[(new Date().getDay() + 1) % 7];
-        const tomorrowDayData = week ? (week.days.find((d) => d.day === tomorrowDayName) || null) : null;
+        const tomorrowDayData = weekDays.find((d) => (d?.date || "").trim() === tomorrowDateLabel)
+          || (todayIndexInWeek >= 0 && todayIndexInWeek + 1 < weekDays.length ? weekDays[todayIndexInWeek + 1] : null)
+          || weekDays.find((d) => d.day === tomorrowDayName)
+          || null;
         const tomorrowSessionName = tomorrowDayData ? getSessionNameForDay(tomorrowDayData, "am") : null;
+        const tomorrowSessionKey = tomorrowDayData?.am_session || tomorrowDayData?.am;
+        const tomorrowSessionLabel = tomorrowDayData?.am_session_custom?.split("\n")[0]
+          || WL[tomorrowSessionKey]?.title
+          || tomorrowSessionKey
+          || "REST DAY";
         const tomorrowMeta = deriveSessionMeta(tomorrowSessionName, tomorrowDayData);
         const tomorrowWorkout = tomorrowSessionName ? WL[tomorrowSessionName] : null;
         const tomorrowDuration = tomorrowWorkout?.duration || "—";
@@ -2421,7 +2446,7 @@ export default function App() {
 
             <div style={cardGlass}>
               <div style={{ fontFamily: C.fm, fontSize: 8, color: C.cyan, letterSpacing: 2.5, textTransform: "uppercase", marginBottom: 10 }}>TODAY'S SESSION</div>
-              {todaySessionName ? (
+              {hasTodaySession ? (
                 <>
             <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 8 }}>
                     <span style={{ fontSize: 34, lineHeight: 1, color: todayMeta.color }}>{todayMeta.icon}</span>
@@ -2429,16 +2454,21 @@ export default function App() {
                       {todayMeta.tag}
                     </span>
                   </div>
-                  <div style={{ fontFamily: C.ff, fontSize: 30, color: C.text, lineHeight: 1.05 }}>{todayMeta.label}</div>
+                  <div style={{ fontFamily: C.ff, fontSize: 30, color: C.text, lineHeight: 1.05 }}>{todaySessionLabel}</div>
                   <div style={{ fontFamily: C.fm, fontSize: 9, color: C.muted, letterSpacing: 1.5, marginTop: 8 }}>
                     {todayDuration} · {todayZone.zone} · {todayZone.hr}
                   </div>
+                  {todayCoachingNote && (
+                    <div style={{ fontFamily: C.fs, fontSize: 12, color: "#aaa", lineHeight: 1.55, marginTop: 8 }}>
+                      {todayCoachingNote}
+                    </div>
+                  )}
                   <div style={{ display: "flex", justifyContent: "flex-end", marginTop: 12 }}>
                     <button
                       onClick={() => {
-                        if (!todayDayData) return;
+                        if (!todayCardData) return;
                         setNav("plan");
-                        setSelDay(todayDayData.day);
+                        setSelDay(todayCardData.day);
                         setSess("am");
                       }}
                       style={{ background: "transparent", border: "none", color: C.cyan, fontFamily: C.ff, fontSize: 14, letterSpacing: 2, cursor: "pointer" }}
@@ -2459,7 +2489,7 @@ export default function App() {
               <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
                 <span style={{ fontSize: 24, color: tomorrowMeta.color }}>{tomorrowMeta.icon}</span>
                 <div>
-                  <div style={{ fontFamily: C.ff, fontSize: 22, color: C.text, lineHeight: 1.1 }}>{tomorrowMeta.label}</div>
+                  <div style={{ fontFamily: C.ff, fontSize: 22, color: C.text, lineHeight: 1.1 }}>{tomorrowSessionLabel}</div>
                   <div style={{ fontFamily: C.fm, fontSize: 8, color: C.muted, letterSpacing: 1.5, marginTop: 3 }}>{tomorrowDuration}</div>
                 </div>
               </div>
