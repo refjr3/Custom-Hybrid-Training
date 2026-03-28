@@ -20,69 +20,18 @@ const SESSION_MAP = {
   "Long Z2 Run": "LONG RUN — Zone 2 Base",
 };
 
-const LABEL_DETAIL = {
-  HYROX:
-    "Compromised HYROX simulation. Alternate 1k runs with station efforts. Build sustainable race pace under fatigue.",
-  "Z2 Erg + Mobility":
-    "45-60 min zone 2 erg (Ski/Row/Bike) + 15 min mobility reset. Keep breathing controlled and conversational.",
-  "Upper + Z2 Erg Cap":
-    "Upper body strength superset work, then capped 20-30 min zone 2 erg flush. Leave reps in reserve.",
-  "Z2 Run + Mobility":
-    "Easy zone 2 run focused on economy, followed by tissue quality and range-of-motion mobility work.",
-  "Upper Body":
-    "Upper dominant strength session. Prioritize quality pushes/pulls and trunk stability with controlled tempo.",
-  Track:
-    "Structured track intervals. Hit quality reps with complete recoveries and consistent pacing across all rounds.",
-  Threshold:
-    "Continuous or broken threshold effort. Stay just below redline, maintain rhythm, and finish strong.",
-  Benchmark:
-    "Benchmark test session at race intent. Track splits, transitions, and station execution for comparison.",
-  "Long Z2 Run":
-    "Progressive long aerobic run in zone 2. Fuel and hydrate consistently, preserve relaxed mechanics.",
-};
-
-const LABEL_GREEN_RULE = {
-  HYROX: "GREEN: Execute as prescribed at race-intent quality.",
-  "Z2 Erg + Mobility": "GREEN: Extend duration up to +10 min if HR remains controlled.",
-  "Upper + Z2 Erg Cap": "GREEN: Add one quality top set and keep erg cap smooth.",
-  "Z2 Run + Mobility": "GREEN: Keep full aerobic volume and complete mobility flow.",
-  "Upper Body": "GREEN: Load primary lifts to RPE 7-8 with strict form.",
-  Track: "GREEN: Hit target paces and keep every rep technically clean.",
-  Threshold: "GREEN: Hold steady threshold line; no surging early.",
-  Benchmark: "GREEN: Full benchmark effort; log splits and station transitions.",
-  "Long Z2 Run": "GREEN: Complete full long run with fueling every 35-45 min.",
-};
-
 const DAY_NAMES = ["MON", "TUE", "WED", "THU", "FRI", "SAT", "SUN"];
 
 const PHASES = [
-  {
-    block_id: "base_rebuild",
-    label: "Base Rebuild",
-    weeks: 3,
-    template: ["HYROX", "Z2 Erg + Mobility", "Upper + Z2 Erg Cap", "Track", "Upper Body", "Long Z2 Run", "Z2 Run + Mobility"],
-  },
-  {
-    block_id: "accumulation",
-    label: "Accumulation",
-    weeks: 3,
-    template: ["HYROX", "Track", "Upper + Z2 Erg Cap", "Threshold", "HYROX", "Long Z2 Run", "Z2 Run + Mobility"],
-  },
-  {
-    block_id: "intensification",
-    label: "Intensification",
-    weeks: 3,
-    template: ["HYROX", "Track", "Upper Body", "Threshold", "HYROX", "Benchmark", "Z2 Run + Mobility"],
-  },
-  {
-    block_id: "peak_test",
-    label: "Peak & Test",
-    weeks: 3,
-    template: ["HYROX", "Z2 Erg + Mobility", "Upper Body", "Threshold", "Benchmark", "Long Z2 Run", "Z2 Run + Mobility"],
-  },
+  { id: 0, block_id: "base_rebuild", label: "Base Rebuild", short: "BASE", color: "#38bdf8", desc: "Re-establish aerobic floor post-Miami. Light HYROX loads, strict Z2 discipline." },
+  { id: 1, block_id: "accumulation", label: "Accumulation", short: "ACCUM", color: "#a3e635", desc: "Volume and HYROX loads climb. Track work introduced. Building the engine." },
+  { id: 2, block_id: "intensification", label: "Intensification", short: "INTENS", color: "#fb923c", desc: "Heavier sleds, faster track, harder threshold sessions. Fatigue managed strictly." },
+  { id: 3, block_id: "peak_test", label: "Peak & Test", short: "PEAK", color: "#f43f5e", desc: "W10-11 max load. W12 deload + full benchmark. Compare everything to Week 1." },
 ];
 
-const START_DATE = new Date("2026-04-13T00:00:00.000Z"); // Monday
+const phaseFor = (w) => (w <= 3 ? 0 : w <= 6 ? 1 : w <= 9 ? 2 : 3);
+
+const START_DATE = new Date(Date.UTC(2026, 3, 13)); // Monday Apr 13 2026 UTC
 
 const addDays = (date, days) => {
   const d = new Date(date);
@@ -90,18 +39,113 @@ const addDays = (date, days) => {
   return d;
 };
 
-const monthShort = (d) => d.toLocaleDateString("en-US", { month: "short", timeZone: "UTC" });
-const dayNum = (d) => d.toLocaleDateString("en-US", { day: "numeric", timeZone: "UTC" });
-const fmtDateLabel = (d) => `${monthShort(d)} ${dayNum(d)}`;
+const fmtDateLabel = (d) =>
+  d.toLocaleDateString("en-US", { month: "short", day: "numeric", timeZone: "UTC" });
+
 const fmtWeekRange = (start, end) => `${fmtDateLabel(start)}–${fmtDateLabel(end)}`;
+
+const getWeekStartDate = (weekNum) => addDays(START_DATE, (weekNum - 1) * 7);
+const getDayDate = (weekNum, dayIndex) => fmtDateLabel(addDays(getWeekStartDate(weekNum), dayIndex));
+
+const HYROX_ROTATION = [
+  "Sled push/pull, compromised running, wall ball finisher",
+  "Ski + run intervals, compromised running, wall ball finisher",
+  "Sled push/pull, sandbag lunges, wall ball finisher",
+  "Ski + row engine work, compromised running, wall ball finisher",
+  "Sled push/pull, farmers carry, sandbag lunges, wall ball finisher",
+  "Full race simulation — all stations in order, log every split",
+];
+
+const SAT_EVEN = [
+  "Track: speed work at race pace",
+  "Track: race pace intervals, longer reps",
+  "Track: mixed pyramid at race pace",
+  "Track: race pace + speed reserve work",
+  "Track: extended race pace reps",
+  "Track benchmark — log all splits vs Week 2",
+];
+
+const SAT_ODD = [
+  "Threshold run at comfortably hard effort",
+  "Threshold erg + run combo",
+  "Threshold run, extended duration",
+  "Threshold erg intervals + run",
+  "Threshold run at race pace effort",
+  "Threshold benchmark — log time vs Week 1",
+];
+
+const buildWeek = (w) => {
+  const p = phaseFor(w);
+  const isDeload = w === 12;
+  const hyrox = HYROX_ROTATION[Math.min(Math.floor((w - 1) / 2), 5)];
+  const satSession = w % 2 === 0
+    ? SAT_EVEN[Math.min(Math.floor((w - 1) / 2), 5)]
+    : SAT_ODD[Math.min(Math.floor((w - 1) / 2), 5)];
+  const satLabel = w % 2 === 0 ? "Track" : "Threshold";
+
+  return {
+    week: w,
+    phase: p,
+    days: [
+      {
+        day: "MON", label: "HYROX",
+        detail: isDeload ? "HYROX: full race simulation — log all splits" : `HYROX: ${hyrox}`,
+        green: "Full session, full load.",
+        yellow: "Reduce rounds by one. Keep all stations.",
+        red: "Full rest.",
+      },
+      {
+        day: "TUE", label: "Z2 Erg + Mobility",
+        detail: "Z2 erg to WHOOP strain target — SkiErg / Echo Bike / Row. Dynamic mobility after.",
+        green: "Erg to strain target. HR ceiling strict.",
+        yellow: "Cut 30–40% short of strain target.",
+        red: "Full rest.",
+      },
+      {
+        day: "WED", label: "Upper + Z2 Erg Cap",
+        detail: "Upper body lift. Cap with Z2 erg to strain target — SkiErg / Echo Bike / Row. Legs off the floor.",
+        green: "Full lift + Z2 cap to strain.",
+        yellow: "Full lift. Skip Z2 cap.",
+        red: "Full rest.",
+      },
+      {
+        day: "THU", label: "Z2 Run + Mobility",
+        detail: "Z2 run to WHOOP strain target. HR ceiling 133–148bpm strict. Static stretch after.",
+        green: "Run to strain target. Walk if HR drifts.",
+        yellow: "Cut 30–40% short of strain target. Same HR ceiling.",
+        red: "Full rest.",
+      },
+      {
+        day: "FRI", label: "Upper Body",
+        detail: "Upper body lift only. No cardio. Legs arrive Saturday fresh.",
+        green: "Full session.",
+        yellow: "Reduce volume 20%. Drop accessories.",
+        red: "Full rest.",
+      },
+      {
+        day: "SAT", label: isDeload ? "Benchmark" : satLabel,
+        detail: isDeload ? "Benchmark: track + threshold combo. Log everything vs Week 1." : satSession,
+        green: "Full output. 5 days from HYROX — take it.",
+        yellow: "Convert to Z2 run. Don't force quality on yellow.",
+        red: "Full rest.",
+      },
+      {
+        day: "SUN", label: "Long Z2 Run",
+        detail: "Long Z2 run to WHOOP strain target. HR ceiling 133–148bpm. Walk breaks as needed.",
+        green: "Full duration to strain target.",
+        yellow: "Cut 30–40% short. Same HR ceiling.",
+        red: "Full rest.",
+      },
+    ],
+  };
+};
+
+const WEEKS = Array.from({ length: 12 }, (_, i) => buildWeek(i + 1));
 
 const buildPlanRows = () => {
   const blocks = [];
   const weeks = [];
   const days = [];
-
-  let globalWeekOrder = 1;
-  let weekStart = new Date(START_DATE);
 
   for (const phase of PHASES) {
     blocks.push({
@@ -110,49 +154,47 @@ const buildPlanRows = () => {
       phase: phase.label,
       label: phase.label,
     });
+  }
 
-    for (let phaseWeekIdx = 0; phaseWeekIdx < phase.weeks; phaseWeekIdx++) {
-      const weekEnd = addDays(weekStart, 6);
-      const weekSlug = `hyrox12_${phase.block_id}_w${phaseWeekIdx + 1}`;
-      const weekLabel = `${phase.label.toUpperCase()} WK ${phaseWeekIdx + 1}`;
+  for (const weekData of WEEKS) {
+    const weekNum = weekData.week;
+    const phase = PHASES[weekData.phase];
+    const weekStart = getWeekStartDate(weekNum);
+    const weekEnd = addDays(weekStart, 6);
+    const phaseWeekIdx = phase.weeks.indexOf(weekNum);
+    const weekSlug = `hyrox12_${phase.block_id}_w${phaseWeekIdx + 1}`;
 
-      weeks.push({
+    weeks.push({
+      user_id: TARGET_USER_ID,
+      week_id: weekSlug,
+      block_id: phase.block_id,
+      label: `${phase.label.toUpperCase()} WK ${phaseWeekIdx + 1}`,
+      dates: fmtWeekRange(weekStart, weekEnd),
+      phase: phase.label,
+      subtitle: `Week ${weekNum} of 12`,
+      week_order: weekNum,
+    });
+
+    for (let dayIdx = 0; dayIdx < 7; dayIdx++) {
+      const dayPlan = weekData.days[dayIdx];
+      const mappedSession = SESSION_MAP[dayPlan.label] || null;
+      days.push({
         user_id: TARGET_USER_ID,
         week_id: weekSlug,
-        block_id: phase.block_id,
-        label: weekLabel,
-        dates: fmtWeekRange(weekStart, weekEnd),
-        phase: phase.label,
-        subtitle: `Week ${globalWeekOrder} of 12`,
-        week_order: globalWeekOrder,
+        day_name: DAY_NAMES[dayIdx],
+        date_label: getDayDate(weekNum, dayIdx),
+        am_session: mappedSession,
+        pm_session: null,
+        // Exact detail text from HyroxPlan buildWeek() output
+        am_session_custom: dayPlan.detail,
+        pm_session_custom: null,
+        // Use GREEN guidance text from HyroxPlan
+        note: dayPlan.green,
+        is_race_day: false,
+        is_sunday: DAY_NAMES[dayIdx] === "SUN",
+        ai_modified: false,
+        ai_modification_note: null,
       });
-
-      for (let dayIdx = 0; dayIdx < 7; dayIdx++) {
-        const dayDate = addDays(weekStart, dayIdx);
-        const label = phase.template[dayIdx];
-        const amSession = SESSION_MAP[label] || null;
-        const detail = LABEL_DETAIL[label] || `${label} session details from HYROX plan.`;
-        const greenRule = LABEL_GREEN_RULE[label] || "GREEN: Execute session as prescribed.";
-
-        days.push({
-          user_id: TARGET_USER_ID,
-          week_id: weekSlug,
-          day_name: DAY_NAMES[dayIdx],
-          date_label: fmtDateLabel(dayDate),
-          am_session: amSession,
-          pm_session: null,
-          am_session_custom: detail,
-          pm_session_custom: null,
-          note: greenRule,
-          is_race_day: false,
-          is_sunday: DAY_NAMES[dayIdx] === "SUN",
-          ai_modified: false,
-          ai_modification_note: null,
-        });
-      }
-
-      weekStart = addDays(weekStart, 7);
-      globalWeekOrder += 1;
     }
   }
 
