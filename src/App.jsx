@@ -2322,17 +2322,75 @@ export default function App() {
         const readinessScore = Math.max(0, Math.min(100, Math.round(recoveryTrend * 0.6 + compliance * 0.4)));
         const readinessColor = readinessScore > 75 ? C.green : readinessScore >= 50 ? C.yellow : C.red;
 
+        const whoopDisconnected = !whoopData
+          || (
+            Number(rec || 0) <= 0
+            && Number(strain || 0) <= 0
+            && Number(sleep || 0) <= 0
+          );
+
         return (
           <div style={{ padding: "0 16px 16px", display: "flex", flexDirection: "column", gap: 16, overflowX: "hidden" }}>
             <div style={{ ...cardGlass, paddingBottom: 14 }}>
-              <div style={{ fontFamily: C.fm, fontSize: 9, color: C.muted, letterSpacing: 2.5, textTransform: "uppercase" }}>
-                {headerDate}
+              <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12 }}>
+                <div style={{ fontFamily: C.fm, fontSize: 9, color: C.muted, letterSpacing: 2.5, textTransform: "uppercase" }}>
+                  {headerDate}
+                </div>
+                <a
+                  href="/api/auth/login"
+                  style={{
+                    fontFamily: C.fm,
+                    fontSize: 9,
+                    color: "#444",
+                    letterSpacing: 2,
+                    textDecoration: "none",
+                    textTransform: "uppercase",
+                  }}
+                >
+                  ↺ WHOOP
+                </a>
               </div>
               <div style={{ fontFamily: C.ff, fontSize: 38, color: C.text, lineHeight: 1, letterSpacing: 1, marginTop: 8 }}>
                 {athleteName}
               </div>
               <div style={{ height: 1, background: "rgba(0,243,255,0.7)", marginTop: 12 }} />
             </div>
+
+            {whoopDisconnected && (
+              <div
+                style={{
+                  background: "rgba(255,59,48,0.1)",
+                  border: "1px solid rgba(255,59,48,0.3)",
+                  borderRadius: 12,
+                  padding: "12px 16px",
+                  display: "flex",
+                  justifyContent: "space-between",
+                  alignItems: "center",
+                }}
+              >
+                <div>
+                  <div style={{ fontFamily: C.fm, fontSize: 10, color: "#FF3B30", letterSpacing: 2 }}>WHOOP DISCONNECTED</div>
+                  <div style={{ fontFamily: C.fm, fontSize: 9, color: "#888", marginTop: 2 }}>Tap to reconnect</div>
+                </div>
+                <a
+                  href="/api/auth/login"
+                  style={{
+                    background: "#FF3B30",
+                    color: "#fff",
+                    border: "none",
+                    borderRadius: 8,
+                    padding: "8px 14px",
+                    fontFamily: C.fm,
+                    fontSize: 10,
+                    letterSpacing: 2,
+                    textDecoration: "none",
+                    cursor: "pointer",
+                  }}
+                >
+                  RECONNECT
+                </a>
+              </div>
+            )}
 
             <div style={{ ...cardGlass, boxShadow: `0 0 18px ${rc}33` }}>
               <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 12, marginBottom: 14 }}>
