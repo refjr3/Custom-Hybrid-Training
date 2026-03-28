@@ -3,7 +3,6 @@ import { createClient } from "@supabase/supabase-js";
 import AuthScreen from "./AuthScreen";
 import Onboarding from "./Onboarding";
 import PlanBuilder from "./PlanBuilder";
-import WorkoutEditorSheet from "./WorkoutEditorSheet";
 
 const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
 const supabaseKey = import.meta.env.VITE_SUPABASE_ANON_KEY;
@@ -1425,7 +1424,6 @@ export default function App() {
   const [planBuilderDismissUntil, setPlanBuilderDismissUntil] = useState(0);
   const [showRecoveryGates, setShowRecoveryGates] = useState(false);
   const [showAiAdjustments, setShowAiAdjustments] = useState(true);
-  const [showWorkoutEditor, setShowWorkoutEditor] = useState(false);
   const [labContext, setLabContext] = useState("");
   const [labTargetDay, setLabTargetDay] = useState(null);
   const [cqSelections, setCqSelections] = useState({});
@@ -1438,7 +1436,6 @@ export default function App() {
   const dataFetched = useRef(false);
 
   useEffect(() => {
-    setShowWorkoutEditor(false);
   }, [selDay, weekId, sess]);
 
   // Initialise auth on mount; listen for session changes
@@ -2092,48 +2089,15 @@ export default function App() {
   const selectedSessionName = dayData ? getSessionNameForDay(dayData, sess) : null;
   const selectedWorkout = selectedSessionName ? WL[selectedSessionName] : null;
   const selectedMeta = deriveSessionMeta(selectedSessionName, dayData);
+  const detailTitle = dayData?.am_session_custom?.split("\n")[0] || selectedMeta?.label || "SESSION";
   const selectedCustomContent = sess === "am" ? dayData?.am_session_custom : dayData?.pm_session_custom;
   const selectedShowCustom = !!(selectedCustomContent && dayData?.ai_modified);
   const selectedCanViewWorkout = !!(dayData?.isRaceDay || selectedShowCustom || selectedWorkout);
   const selectedCoachingNote = dayData?.ai_modification_note || dayData?.note2a || dayData?.note || selectedWorkout?.note || "";
   const selectedKeyPoints = selectedWorkout?.steps?.filter((s) => !s.startsWith("—")).slice(0, 5) || [];
-  const selectedSessionDisplayName = dayData?.am_session_custom?.split("\n")[0] || selectedMeta.label || "SESSION";
   const selectedWhoopRule = dayData?.note || "Execute as programmed.";
   const selectedWhoopGate = whoopLabel(whoopData?.recovery?.score ?? 0);
-  const selectedBlocks = normalizeWorkoutBlocks(
-    sess === "am" ? dayData?.am_session_blocks : dayData?.pm_session_blocks,
-    selectedWorkout
-  );
   const selectedDayName = dayData?.day || selDay || "";
-
-  const saveWorkoutEdits = async (blocks) => {
-    if (!session?.access_token || !weekId || !selectedDayName) return;
-    try {
-      const payload = {
-        type: "modify_day",
-        week_id: weekId,
-        day: selectedDayName,
-        changes: {
-          am_session_blocks: blocks || [],
-          ai_modified: false,
-          ai_modification_note: null,
-        },
-      };
-      const res = await fetch("/api/plan/update", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          "Authorization": `Bearer ${session.access_token}`,
-        },
-        body: JSON.stringify(payload),
-      });
-      const body = await res.json().catch(() => ({}));
-      if (!res.ok) throw new Error(body.error || "Failed to save workout");
-      await fetchPlan(session.access_token);
-    } catch (e) {
-      throw e;
-    }
-  };
 
   const weeklyAiAdjustments = (week?.days || [])
     .filter((d) => d?.ai_modified === true)
@@ -2542,9 +2506,8 @@ export default function App() {
               const completed = isDayCompleted(d);
               const dateLabel = d?.date?.split(" ")[1] || d?.date || "";
               const isToday = d.day === todayDayName;
-              const cardLabel = getCardLabel(d);
               const cardTag = getCardTag(d);
-              const shortLabel = cardLabel.length > 26 ? `${cardLabel.slice(0, 25)}…` : cardLabel;
+              const displayTag = String(cardTag || "SESSION").toUpperCase().slice(0, 8);
               const isRest = !cardTag || cardTag === "REST";
               const iconMeta = getSessionIcon(d?.am, d?.am_session_custom);
               return (
@@ -2559,7 +2522,7 @@ export default function App() {
                     setSess("am");
                   }}
                   style={{
-                    minHeight:128,
+                    minHeight:140,
                     background: isSelected ? "rgba(255,255,255,0.08)" : C.card,
                     border: isSelected ? "1.5px solid rgba(255,255,255,0.35)" : isToday ? `1.5px solid ${C.cyan}` : `1px solid ${C.border}`,
                     boxShadow: isToday ? "0 0 12px rgba(0,243,255,0.15)" : "none",
@@ -2578,7 +2541,7 @@ export default function App() {
                 >
                   <div style={{ width:"100%", display:"flex", justifyContent:"space-between", alignItems:"center" }}>
                     <span style={{ fontFamily:C.fm, fontSize:9, color:"#555", letterSpacing:2, textTransform:"uppercase" }}>{d.day}</span>
-                    <span style={{ fontFamily:C.fm, fontSize:10, color:"#888" }}>{dateLabel}</span>
+                    <span style={{ fontFamily:C.fm, fontSize:10, color:C.text }}>{dateLabel}</span>
                   </div>
                   {completed && (
                     <div style={{ position:"absolute", top:6, right:d?.ai_modified ? 20 : 6, fontSize:11, color:C.green }}>
@@ -2593,12 +2556,7 @@ export default function App() {
                   <div style={{ fontSize:24, lineHeight:1, color:iconMeta.color }}>{iconMeta.icon}</div>
                   {!isRest && (
                     <div style={{ background:`${meta.color}22`, border:`1px solid ${meta.color}55`, borderRadius:4, padding:"2px 6px", fontFamily:C.fm, fontSize:7, color:meta.color, letterSpacing:2, textTransform:"uppercase", maxWidth:"100%", overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>
-                      {cardTag}
-                    </div>
-                  )}
-                  {!isRest && (
-                    <div style={{ fontFamily:C.fm, fontSize:8, color:"#aaa", textAlign:"center", lineHeight:1.25, minHeight:20, display:"-webkit-box", WebkitLineClamp:2, WebkitBoxOrient:"vertical", overflow:"hidden", textTransform:"uppercase", letterSpacing:1 }}>
-                      {shortLabel}
+                      {displayTag}
                     </div>
                   )}
                 </button>
@@ -2642,7 +2600,7 @@ export default function App() {
                 </div>
 
                 <div style={{ fontFamily:C.ff, fontSize:24, color:C.text, lineHeight:1.1, letterSpacing:0.6 }}>
-                  {selectedMeta.label}
+                  {detailTitle}
                 </div>
 
                 <div style={{ fontFamily:C.fs, fontSize:13, color:"#aaa", lineHeight:1.55, whiteSpace:"pre-wrap" }}>
@@ -2651,30 +2609,12 @@ export default function App() {
 
                 <div style={{ background:C.card2, border:`1px solid ${C.border}`, borderRadius:12, padding:"10px 12px" }}>
                   <div style={{ fontFamily:C.fm, fontSize:9, color:C.cyan, letterSpacing:2, textTransform:"uppercase", marginBottom:6 }}>
-                    WHOOP GATE RULES
+                    WHOOP GATE RULES · {selectedWhoopGate}
                   </div>
                   <div style={{ fontFamily:C.fs, fontSize:12, color:C.muted, lineHeight:1.6, whiteSpace:"pre-wrap" }}>
-                    {dayData?.note2a || dayData?.note || "Green: Execute as programmed.\nYellow: Reduce 30–40% volume.\nRed: Full rest."}
+                    {selectedWhoopRule || "Green: Execute as programmed.\nYellow: Reduce 30–40% volume.\nRed: Full rest."}
                   </div>
                 </div>
-
-                <button
-                  onClick={() => setShowWorkoutEditor(true)}
-                  style={{
-                    marginTop: 2,
-                    background:"#ff3b30",
-                    color:"#fff",
-                    border:"none",
-                    padding:"12px 20px",
-                    fontSize:14,
-                    fontFamily:"monospace",
-                    cursor:"pointer",
-                    borderRadius:8,
-                    width:"100%",
-                  }}
-                >
-                  EDIT WORKOUT
-                </button>
               </div>
             </div>
           )}
@@ -2732,7 +2672,7 @@ export default function App() {
                   <div key={`${d.day}_${idx}`} style={{ display:"flex", alignItems:"center", gap:10, padding:"10px 12px", borderBottom: idx === (week?.days || []).length - 1 ? "none" : "1px solid #88888833" }}>
                     <span style={{ width:6, height:6, borderRadius:"50%", background:rowColor, flexShrink:0 }} />
                     <span style={{ fontFamily:C.fm, fontSize:9, color:C.text, letterSpacing:2, textTransform:"uppercase", minWidth:38 }}>{d.day}</span>
-                    <span style={{ fontFamily:C.fs, fontSize:12, color:C.muted, lineHeight:1.4 }}>{getStructureLabel(d)}</span>
+                    <span style={{ fontFamily:C.fs, fontSize:11, color:"#ccc", display:"-webkit-box", WebkitLineClamp:2, WebkitBoxOrient:"vertical", overflow:"hidden", lineHeight:1.4 }}>{getStructureLabel(d)}</span>
                   </div>
                 );
               })}
@@ -3144,17 +3084,6 @@ export default function App() {
           await fetchPlan(session?.access_token);
           setNav("plan");
         }}
-      />
-
-      <WorkoutEditorSheet
-        open={showWorkoutEditor}
-        sport={selectedMeta?.key || "run"}
-        blocks={selectedBlocks}
-        onSave={async (blocks) => {
-          await saveWorkoutEdits(blocks);
-          setShowWorkoutEditor(false);
-        }}
-        onCancel={() => setShowWorkoutEditor(false)}
       />
 
       {labOpen && (
