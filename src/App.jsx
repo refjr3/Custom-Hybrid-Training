@@ -2104,7 +2104,7 @@ export default function App() {
   const getStructureLabel = (d) => {
     const customText = d?.am_session_custom || d?.pm_session_custom || "";
     if (customText) {
-      return customText.split("\n")[0]?.slice(0, 30) || "SESSION";
+      return customText.split("\n")[0] || "SESSION";
     }
     return getTypeLabel(d?.am || d?.am_session || d?.pm || d?.pm_session) || "REST";
   };
@@ -2791,7 +2791,7 @@ export default function App() {
                   <div key={`${d.day}_${idx}`} style={{ display:"flex", alignItems:"center", gap:10, padding:"10px 12px", borderBottom: idx === (week?.days || []).length - 1 ? "none" : "1px solid #88888833" }}>
                     <span style={{ width:6, height:6, borderRadius:"50%", background:rowColor, flexShrink:0 }} />
                     <span style={{ fontFamily:C.fm, fontSize:9, color:C.text, letterSpacing:2, textTransform:"uppercase", minWidth:38 }}>{d.day}</span>
-                    <span style={{ fontFamily:C.fs, fontSize:11, color:"#ccc", display:"-webkit-box", WebkitLineClamp:2, WebkitBoxOrient:"vertical", overflow:"hidden", lineHeight:1.4 }}>{getStructureLabel(d)}</span>
+                    <span style={{ fontFamily:C.fs, fontSize:11, color:"#ccc", lineHeight:1.4, display:"-webkit-box", WebkitLineClamp:2, WebkitBoxOrient:"vertical", overflow:"hidden", flex:1 }}>{getStructureLabel(d)}</span>
                   </div>
                 );
               })}
