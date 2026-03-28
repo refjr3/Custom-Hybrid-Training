@@ -1413,10 +1413,7 @@ export default function App() {
   const [flipped, setFlipped] = useState(false);
   const [showRecoveryGates, setShowRecoveryGates] = useState(false);
   const [showAiAdjustments, setShowAiAdjustments] = useState(true);
-  const [editWorkout, setEditWorkout] = useState({ sport: null, steps: [] });
   const [showWorkoutEditor, setShowWorkoutEditor] = useState(false);
-  const [editSaving, setEditSaving] = useState(false);
-  const [editorStatus, setEditorStatus] = useState("");
   const [labContext, setLabContext] = useState("");
   const [labTargetDay, setLabTargetDay] = useState(null);
   const [cqSelections, setCqSelections] = useState({});
@@ -1432,8 +1429,6 @@ export default function App() {
     setPlanDetailView("overview");
     setFlipped(false);
     setShowWorkoutEditor(false);
-    setEditSaving(false);
-    setEditWorkout({ sport: null, steps: [] });
   }, [selDay, weekId, sess]);
 
   // Initialise auth on mount; listen for session changes
@@ -2015,39 +2010,16 @@ export default function App() {
   const isHyroxSession = selectedMeta.key === "hyrox";
   const selectedDayName = dayData?.day || selDay || "";
 
-  const openEditMode = () => {
-    const blocksSource = sess === "am" ? dayData?.am_session_blocks : dayData?.pm_session_blocks;
-    const sport = inferWorkoutSport(selectedSessionName, selectedMeta.key);
-    const workout = blocksToWorkout(blocksSource, sport);
-    if (!Array.isArray(workout.steps) || workout.steps.length === 0) {
-      const fallback = blocksToWorkout(selectedBlocks, sport);
-      setEditWorkout(fallback);
-    } else {
-      setEditWorkout(workout);
-    }
-    setEditorStatus("");
-    setShowWorkoutEditor(true);
-  };
-
-  const cancelEditMode = () => {
-    setShowWorkoutEditor(false);
-    setEditorStatus("");
-    setEditSaving(false);
-  };
-
-  const saveWorkoutEdits = async () => {
+  const saveWorkoutEdits = async (blocks) => {
     if (!session?.access_token || !weekId || !selectedDayName) return;
-    setEditSaving(true);
-    setEditorStatus("SAVING...");
     try {
       const blocksKey = sess === "am" ? "am_session_blocks" : "pm_session_blocks";
-      const serialized = workoutToBlocks(editWorkout);
       const payload = {
         type: "modify_day",
         week_id: weekId,
         day: selectedDayName,
         changes: {
-          [blocksKey]: serialized,
+          [blocksKey]: blocks || [],
           ai_modified: false,
           ai_modification_note: null,
         },
@@ -2063,15 +2035,8 @@ export default function App() {
       const body = await res.json().catch(() => ({}));
       if (!res.ok) throw new Error(body.error || "Failed to save workout");
       await fetchPlan(session.access_token);
-      setEditorStatus("✓ SAVED");
-      setTimeout(() => {
-        setEditorStatus("");
-        setShowWorkoutEditor(false);
-      }, 1000);
     } catch (e) {
-      setEditorStatus(e.message || "Save failed");
-    } finally {
-      setEditSaving(false);
+      throw e;
     }
   };
 
@@ -2641,7 +2606,7 @@ export default function App() {
                         {selectedWorkout?.duration || "65 MIN"} · {selectedWorkout?.type || selectedWorkout?.zone || selectedMeta.tag} · {selectedWorkout?.tag || selectedWorkout?.hr || "PUSH DOMINANT"}
                       </div>
                       <button
-                        onClick={openEditMode}
+                        onClick={() => setShowWorkoutEditor(true)}
                         style={{
                           background:"#ff3b30",
                           color:"#fff",
@@ -3187,12 +3152,13 @@ export default function App() {
 
       <WorkoutEditorSheet
         open={showWorkoutEditor}
-        workout={editWorkout}
-        onWorkoutChange={setEditWorkout}
-        onCancel={cancelEditMode}
-        onSave={saveWorkoutEdits}
-        saving={editSaving}
-        status={editorStatus}
+        sport={selectedMeta?.key || "run"}
+        blocks={selectedBlocks}
+        onSave={async (blocks) => {
+          await saveWorkoutEdits(blocks);
+          setShowWorkoutEditor(false);
+        }}
+        onCancel={() => setShowWorkoutEditor(false)}
       />
 
       {labOpen && (
