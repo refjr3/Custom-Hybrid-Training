@@ -39,7 +39,7 @@ export default async function handler(req, res) {
     const newTokens = await refreshToken(refresh);
     if (!newTokens.access_token) return res.status(401).json({ error: "whoop_reconnect_required" });
     access = newTokens.access_token;
-    const opts = "Path=/; HttpOnly; SameSite=Lax";
+    const opts = "Path=/; HttpOnly; Secure; SameSite=Lax";
     res.setHeader("Set-Cookie", [
       `whoop_access=${newTokens.access_token}; ${opts}; Max-Age=3600`,
       `whoop_refresh=${newTokens.refresh_token || refresh}; ${opts}; Max-Age=2592000`,
@@ -91,7 +91,7 @@ export default async function handler(req, res) {
       const newTokens = await refreshToken(refresh);
       if (newTokens.access_token) {
         access = newTokens.access_token;
-        const opts = "Path=/; HttpOnly; SameSite=Lax";
+        const opts = "Path=/; HttpOnly; Secure; SameSite=Lax";
         res.setHeader("Set-Cookie", [
           `whoop_access=${newTokens.access_token}; ${opts}; Max-Age=3600`,
           `whoop_refresh=${newTokens.refresh_token || refresh}; ${opts}; Max-Age=2592000`,

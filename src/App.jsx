@@ -377,10 +377,13 @@ const whoopColor = (s) => s >= 67 ? C.green : s >= 34 ? C.yellow : C.red;
 const whoopLabel = (s) => s >= 67 ? "GREEN" : s >= 34 ? "YELLOW" : "RED";
 const whoopMsg   = (s) => s >= 67 ? "Execute today's plan as written" : s >= 34 ? "Reduce intensity 20% · Skip VO2 Max" : "Recovery only · Contrast therapy · Rest";
 
-const Ring = ({ score, size=120, stroke=10, color, label, sublabel, glowEffect }) => {
+const Ring = ({ score, size=120, stroke=10, color, label, sublabel, glowEffect, progress, formatValue }) => {
+  const numericScore = Number(score) || 0;
+  const ringProgress = Number.isFinite(progress) ? progress : numericScore;
   const r = (size - stroke) / 2;
   const circ = 2 * Math.PI * r;
-  const offset = circ - (Math.min(score,100) / 100) * circ;
+  const offset = circ - (Math.max(0, Math.min(ringProgress, 100)) / 100) * circ;
+  const displayValue = typeof formatValue === "function" ? formatValue(numericScore) : numericScore;
   return (
     <div style={{ position:"relative", width:size, height:size, flexShrink:0, filter: glowEffect ? `drop-shadow(0 0 12px ${color}66)` : "none" }}>
       <svg width={size} height={size} style={{ transform:"rotate(-90deg)" }}>
@@ -390,11 +393,31 @@ const Ring = ({ score, size=120, stroke=10, color, label, sublabel, glowEffect }
           style={{ transition:"stroke-dashoffset 0.8s cubic-bezier(.4,0,.2,1)" }} />
       </svg>
       <div style={{ position:"absolute", inset:0, display:"flex", flexDirection:"column", alignItems:"center", justifyContent:"center" }}>
-        <div style={{ fontFamily:C.ff, fontSize:size*0.32, color, lineHeight:1, letterSpacing:-1, fontWeight:700 }}>{score}</div>
+        <div style={{ fontFamily:C.ff, fontSize:size*0.32, color, lineHeight:1, letterSpacing:-1, fontWeight:700 }}>{displayValue}</div>
         {label && <div style={{ fontFamily:C.fm, fontSize:size*0.065, color:C.muted, letterSpacing:3, marginTop:3, textTransform:"uppercase" }}>{label}</div>}
         {sublabel && <div style={{ fontFamily:C.fm, fontSize:size*0.06, color, letterSpacing:2, marginTop:1, fontWeight:700 }}>{sublabel}</div>}
       </div>
     </div>
+  );
+};
+
+const MetricRing = ({ label, value, color, unit = "", max = 100, sublabel = null }) => {
+  const numeric = Number(value);
+  const safeValue = Number.isFinite(numeric) ? numeric : 0;
+  const displayValue = label === "STRAIN" ? Math.round(safeValue * 10) / 10 : Math.round(safeValue);
+  const progress = max > 0 ? (safeValue / max) * 100 : 0;
+  return (
+    <Ring
+      score={displayValue}
+      progress={progress}
+      size={108}
+      stroke={10}
+      color={color}
+      label={label}
+      sublabel={sublabel || unit}
+      glowEffect
+      formatValue={(v) => (label === "STRAIN" ? (Math.round(v * 10) / 10).toFixed(1) : `${Math.round(v)}`)}
+    />
   );
 };
 
