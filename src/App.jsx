@@ -2335,11 +2335,19 @@ export default function App() {
             </div>
 
             <div style={{ ...cardGlass, boxShadow: `0 0 18px ${rc}33` }}>
-              <div style={{ display: "flex", justifyContent: "center", marginBottom: 16 }}>
-                <Ring score={rec} size={170} stroke={14} color={rc} label="RECOVERY" sublabel={whoopLabel(rec)} glowEffect />
+              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 12, marginBottom: 14 }}>
+                <div style={{ display: "flex", justifyContent: "center" }}>
+                  <Ring score={rec} size={110} stroke={10} color={rc} label="RECOVERY" sublabel={whoopLabel(rec)} glowEffect />
+                </div>
+                <div style={{ display: "flex", justifyContent: "center" }}>
+                  <Ring score={strain} size={110} stroke={10} color="#4a90c4" label="STRAIN" />
+                </div>
+                <div style={{ display: "flex", justifyContent: "center" }}>
+                  <Ring score={sleep} size={110} stroke={10} color="#9b59b6" label="SLEEP" />
+                </div>
               </div>
               <div style={{ display: "flex", justifyContent: "space-between", gap: 10, marginBottom: 14 }}>
-                {[["HRV", `${hrv}`], ["RHR", `${rhr}`], ["SLEEP", `${sleep}`]].map(([label, value]) => (
+                {[["HRV", `${hrv}`], ["RHR", `${rhr}`], ["SLEEP HRS", `${sleepHours}`]].map(([label, value]) => (
                   <div key={label} style={{ flex: 1, textAlign: "center" }}>
                     <div style={{ fontFamily: C.ff, fontSize: 28, color: C.cyan, lineHeight: 1 }}>{value}</div>
                     <div style={{ fontFamily: C.fm, fontSize: 8, color: C.muted, letterSpacing: 2, marginTop: 4 }}>{label}</div>

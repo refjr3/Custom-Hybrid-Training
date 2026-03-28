@@ -40,9 +40,10 @@ export default async function handler(req, res) {
     if (!newTokens.access_token) return res.status(401).json({ error: "whoop_reconnect_required" });
     access = newTokens.access_token;
     const opts = "Path=/; HttpOnly; Secure; SameSite=Lax";
+    const refreshedToken = newTokens.refresh_token || newTokens.refreshToken || refresh;
     res.setHeader("Set-Cookie", [
       `whoop_access=${newTokens.access_token}; ${opts}; Max-Age=3600`,
-      `whoop_refresh=${newTokens.refresh_token || refresh}; ${opts}; Max-Age=2592000`,
+      `whoop_refresh=${refreshedToken}; ${opts}; Max-Age=2592000`,
     ]);
   }
 
@@ -92,9 +93,13 @@ export default async function handler(req, res) {
       if (newTokens.access_token) {
         access = newTokens.access_token;
         const opts = "Path=/; HttpOnly; Secure; SameSite=Lax";
+        const refreshedToken = newTokens.refresh_token || newTokens.refreshToken || refresh;
+        if (!refreshedToken) {
+          return res.status(401).json({ error: "whoop_reconnect_required" });
+        }
         res.setHeader("Set-Cookie", [
           `whoop_access=${newTokens.access_token}; ${opts}; Max-Age=3600`,
-          `whoop_refresh=${newTokens.refresh_token || refresh}; ${opts}; Max-Age=2592000`,
+          `whoop_refresh=${refreshedToken}; ${opts}; Max-Age=2592000`,
         ]);
         ({ recRes, sleepRes, cycleRes } = await fetchWhoop(access));
       } else {
