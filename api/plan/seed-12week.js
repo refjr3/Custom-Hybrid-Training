@@ -31,7 +31,7 @@ const PHASES = [
 
 const phaseFor = (w) => (w <= 3 ? 0 : w <= 6 ? 1 : w <= 9 ? 2 : 3);
 
-const START_DATE = new Date(Date.UTC(2026, 3, 13)); // Monday Apr 13 2026 UTC
+const START_DATE = new Date(2026, 3, 13); // April 13, 2026 — month is 0-indexed
 
 const addDays = (date, days) => {
   const d = new Date(date);

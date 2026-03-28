@@ -1995,16 +1995,18 @@ export default function App() {
   };
 
   const getCardLabel = (d) => {
-    if (d?.am_session_custom) {
-      const lines = d.am_session_custom.split("\n").filter((l) => l.trim());
+    const customText = d?.am_session_custom || d?.pm_session_custom || "";
+    if (customText) {
+      const lines = customText.split("\n").filter((l) => l.trim());
       return lines[0]?.slice(0, 20) || "SESSION";
     }
-    return getTypeLabel(d?.am || d?.am_session) || "SESSION";
+    return getTypeLabel(d?.am || d?.am_session || d?.pm || d?.pm_session) || "SESSION";
   };
 
   const getCardTag = (d) => {
-    if (d?.am_session_custom) {
-      const label = d.am_session_custom.split("\n")[0] || "";
+    const customText = d?.am_session_custom || d?.pm_session_custom || "";
+    if (customText) {
+      const label = customText.split("\n")[0] || "";
       if (label.toLowerCase().includes("hyrox")) return "HYROX";
       if (label.toLowerCase().includes("z2") || label.toLowerCase().includes("zone 2")) return "Z2";
       if (label.toLowerCase().includes("upper") || label.toLowerCase().includes("lift")) return "STRENGTH";
@@ -2013,14 +2015,15 @@ export default function App() {
       if (label.toLowerCase().includes("track")) return "TRACK";
       return label.split(" ").slice(0, 2).join(" ").toUpperCase();
     }
-    return getTypeLabel(d?.am || d?.am_session) || "SESSION";
+    return getTypeLabel(d?.am || d?.am_session || d?.pm || d?.pm_session) || "SESSION";
   };
 
   const getStructureLabel = (d) => {
-    if (d?.am_session_custom) {
-      return d.am_session_custom.split("\n")[0]?.slice(0, 30) || "SESSION";
+    const customText = d?.am_session_custom || d?.pm_session_custom || "";
+    if (customText) {
+      return customText.split("\n")[0]?.slice(0, 30) || "SESSION";
     }
-    return getTypeLabel(d?.am || d?.am_session) || "REST";
+    return getTypeLabel(d?.am || d?.am_session || d?.pm || d?.pm_session) || "REST";
   };
 
   const selectedSessionName = dayData ? getSessionNameForDay(dayData, sess) : null;
@@ -2481,7 +2484,7 @@ export default function App() {
               const cardLabel = getCardLabel(d);
               const cardTag = getCardTag(d);
               const shortLabel = cardLabel.length > 26 ? `${cardLabel.slice(0, 25)}…` : cardLabel;
-              const isRest = meta.key === "rest";
+              const isRest = !cardTag || cardTag === "REST";
               const iconMeta = getSessionIcon(d?.am, d?.am_session_custom);
               return (
                 <button
@@ -2535,7 +2538,7 @@ export default function App() {
                     </div>
                   )}
                   {!isRest && (
-                    <div style={{ fontFamily:C.fm, fontSize:9, color:"#aaa", textAlign:"center", lineHeight:1.25, minHeight:24, display:"-webkit-box", WebkitLineClamp:2, WebkitBoxOrient:"vertical", overflow:"hidden", textTransform:"uppercase", letterSpacing:1 }}>
+                    <div style={{ fontFamily:C.fm, fontSize:8, color:"#aaa", textAlign:"center", lineHeight:1.25, minHeight:20, display:"-webkit-box", WebkitLineClamp:2, WebkitBoxOrient:"vertical", overflow:"hidden", textTransform:"uppercase", letterSpacing:1 }}>
                       {shortLabel}
                     </div>
                   )}
