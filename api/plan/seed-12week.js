@@ -161,14 +161,15 @@ const buildPlanRows = () => {
     const phase = PHASES[weekData.phase];
     const weekStart = getWeekStartDate(weekNum);
     const weekEnd = addDays(weekStart, 6);
-    const phaseWeekIdx = phase.weeks.indexOf(weekNum);
-    const weekSlug = `hyrox12_${phase.block_id}_w${phaseWeekIdx + 1}`;
+    const phaseWeekIdx = (weekNum - 1) % 3;
+    const phaseWeekOrder = phaseWeekIdx + 1;
+    const weekSlug = `hyrox12_${phase.block_id}_w${phaseWeekOrder}`;
 
     weeks.push({
       user_id: TARGET_USER_ID,
       week_id: weekSlug,
       block_id: phase.block_id,
-      label: `${phase.label.toUpperCase()} WK ${phaseWeekIdx + 1}`,
+      label: `${phase.label.toUpperCase()} WK ${phaseWeekOrder}`,
       dates: fmtWeekRange(weekStart, weekEnd),
       phase: phase.label,
       subtitle: `Week ${weekNum} of 12`,
