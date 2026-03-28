@@ -95,8 +95,11 @@ function makeStep(type) {
 }
 
 export default function WorkoutEditorSheet({ open, sport: initialSport, blocks, onSave, onCancel }) {
-  const [sport, setSport] = useState(initialSport || "run");
+  const safeSport = (initialSport && SPORT_CONFIG[initialSport]) ? initialSport : "run";
+
+  const [sport, setSport] = useState(safeSport);
   const [steps, setSteps] = useState(() => {
+    const config = SPORT_CONFIG[safeSport];
     if (blocks && blocks.length > 0) {
       return blocks.flatMap(b => (b.items || []).map(item => ({
         id: uid(),
@@ -107,13 +110,12 @@ export default function WorkoutEditorSheet({ open, sport: initialSport, blocks, 
         note: item.load || item.note || "",
       })));
     }
-    const config = SPORT_CONFIG[initialSport || "run"];
     return config.defaultSteps.map(makeStep);
   });
   const [expandedId, setExpandedId] = useState(null);
   const [saving, setSaving] = useState(false);
 
-  const config = SPORT_CONFIG[sport];
+  const config = SPORT_CONFIG[sport] || SPORT_CONFIG["run"];
 
   const updateStep = (id, patch) =>
     setSteps(prev => prev.map(s => s.id === id ? { ...s, ...patch } : s));
