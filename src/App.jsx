@@ -100,6 +100,21 @@ const SESSION_ICONS = {
   travel: "→",
 };
 
+const MONTH_TO_INDEX = {
+  jan: 0,
+  feb: 1,
+  mar: 2,
+  apr: 3,
+  may: 4,
+  jun: 5,
+  jul: 6,
+  aug: 7,
+  sep: 8,
+  oct: 9,
+  nov: 10,
+  dec: 11,
+};
+
 const SESSION_COLORS = {
   hyrox: "#9b59b6",
   strength: "#e07b3a",
@@ -1584,6 +1599,48 @@ export default function App() {
     } catch (_) {}
   };
 
+  const parseDateLabelToUtc = (label, year = new Date().getUTCFullYear()) => {
+    if (!label || typeof label !== "string") return null;
+    const match = label.trim().match(/^([A-Za-z]{3})\s+(\d{1,2})$/);
+    if (!match) return null;
+    const monthIdx = MONTH_TO_INDEX[match[1].toLowerCase()];
+    if (monthIdx === undefined) return null;
+    return new Date(Date.UTC(year, monthIdx, Number(match[2])));
+  };
+
+  const selectDefaultPlanPosition = (blocks) => {
+    if (!Array.isArray(blocks) || blocks.length === 0) return null;
+    const todayIso = new Date().toISOString().split("T")[0];
+    const todayUtc = new Date(`${todayIso}T00:00:00.000Z`);
+    const currentYear = todayUtc.getUTCFullYear();
+    let earliestWeek = null;
+
+    for (const block of blocks) {
+      for (const wk of (block?.weeks || [])) {
+        const weekDates = (wk?.days || [])
+          .map((d) => parseDateLabelToUtc(d?.date, currentYear))
+          .filter(Boolean)
+          .sort((a, b) => a.getTime() - b.getTime());
+
+        const weekStart = weekDates[0] || null;
+        const weekEnd = weekDates[weekDates.length - 1] || null;
+
+        if (weekStart && (!earliestWeek || weekStart < earliestWeek.weekStart)) {
+          earliestWeek = { blockId: block.id, weekId: wk.id, weekStart };
+        }
+
+        if (weekStart && weekEnd && todayUtc >= weekStart && todayUtc <= weekEnd) {
+          return { blockId: block.id, weekId: wk.id };
+        }
+      }
+    }
+
+    if (earliestWeek) {
+      return { blockId: earliestWeek.blockId, weekId: earliestWeek.weekId };
+    }
+    return null;
+  };
+
   // Fix #5: accept token as a parameter so callers always pass the live token —
   // avoids stale-closure reads of session?.access_token captured at definition time.
   const fetchPlan = async (token) => {
@@ -1605,6 +1662,16 @@ export default function App() {
       console.log("[fetchPlan] hasDays:", hasDays, "| res.ok:", res.ok, "| will update state:", res.ok && hasDays);
       if (res.ok && hasDays) {
         setPlanBlocks(data.blocks);
+        const hasCurrentSelection = data.blocks.some(
+          (b) => b.id === blockId && (b.weeks || []).some((w) => w.id === weekId)
+        );
+        if (!hasCurrentSelection) {
+          const target = selectDefaultPlanPosition(data.blocks);
+          if (target) {
+            setBlockId(target.blockId);
+            setWeekId(target.weekId);
+          }
+        }
       }
       console.log("[fetchPlan] planBlocks.length after fetch:", data.blocks?.length ?? 0);
     } catch (e) {

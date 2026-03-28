@@ -31,27 +31,32 @@ const PHASES = [
 
 const phaseFor = (w) => (w <= 3 ? 0 : w <= 6 ? 1 : w <= 9 ? 2 : 3);
 
-const START_DATE = new Date(2026, 3, 13); // April 13, 2026 — month is 0-indexed
+const START_DATE = new Date("2026-04-13T00:00:00.000Z");
 
-const addDays = (date, days) => {
-  const d = new Date(date);
-  d.setDate(d.getDate() + days);
+const getUtcDateForOffset = (weekNum, dayIndex = 0) => {
+  const d = new Date(START_DATE);
+  d.setUTCDate(d.getUTCDate() + ((weekNum - 1) * 7) + dayIndex);
   return d;
 };
 
 const fmtDateLabel = (d) =>
-  d.toLocaleDateString("en-US", { month: "short", day: "numeric" });
+  d.toLocaleDateString("en-US", { timeZone: "UTC", month: "short", day: "numeric" });
 
-const fmtWeekRange = (start, end) => `${fmtDateLabel(start)}–${fmtDateLabel(end)}`;
+const fmtWeekRange = (weekNum) => {
+  const weekStart = getUtcDateForOffset(weekNum, 0);
+  const weekEnd = getUtcDateForOffset(weekNum, 6);
+  return `${fmtDateLabel(weekStart)} – ${fmtDateLabel(weekEnd)}`;
+};
+
 const fmtIsoDate = (d) => {
-  const y = d.getFullYear();
-  const m = String(d.getMonth() + 1).padStart(2, "0");
-  const day = String(d.getDate()).padStart(2, "0");
+  const y = d.getUTCFullYear();
+  const m = String(d.getUTCMonth() + 1).padStart(2, "0");
+  const day = String(d.getUTCDate()).padStart(2, "0");
   return `${y}-${m}-${day}`;
 };
 
-const getWeekStartDate = (weekNum) => addDays(START_DATE, (weekNum - 1) * 7);
-const getDayDate = (weekNum, dayIndex) => fmtDateLabel(addDays(getWeekStartDate(weekNum), dayIndex));
+const getWeekStartDate = (weekNum) => getUtcDateForOffset(weekNum, 0);
+const getDayDate = (weekNum, dayIndex) => fmtDateLabel(getUtcDateForOffset(weekNum, dayIndex));
 
 const HYROX_ROTATION = [
   "Sled push/pull, compromised running, wall ball finisher",
@@ -165,8 +170,6 @@ const buildPlanRows = () => {
   for (const weekData of WEEKS) {
     const weekNum = weekData.week;
     const phase = PHASES[weekData.phase];
-    const weekStart = getWeekStartDate(weekNum);
-    const weekEnd = addDays(weekStart, 6);
     const phaseWeekIdx = (weekNum - 1) % 3;
     const phaseWeekOrder = phaseWeekIdx + 1;
     const weekSlug = `hyrox12_${phase.block_id}_w${phaseWeekOrder}`;
@@ -176,7 +179,7 @@ const buildPlanRows = () => {
       week_id: weekSlug,
       block_id: phase.block_id,
       label: `${phase.label.toUpperCase()} WK ${phaseWeekOrder}`,
-      dates: fmtWeekRange(weekStart, weekEnd),
+      dates: fmtWeekRange(weekNum),
       phase: phase.label,
       subtitle: `Week ${weekNum} of 12`,
       week_order: weekNum,
@@ -241,6 +244,8 @@ export default async function handler(req, res) {
       days_inserted: days.length,
       start_date: fmtDateLabel(START_DATE),
       first_monday: fmtIsoDate(START_DATE),
+      week_1_range: fmtWeekRange(1),
+      week_4_range: fmtWeekRange(4),
       phase_week_counts: PHASES.reduce((acc, phase) => {
         acc[phase.label] = phase.weeks.length;
         return acc;
