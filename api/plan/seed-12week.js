@@ -23,10 +23,10 @@ const SESSION_MAP = {
 const DAY_NAMES = ["MON", "TUE", "WED", "THU", "FRI", "SAT", "SUN"];
 
 const PHASES = [
-  { id: 0, block_id: "base_rebuild", label: "Base Rebuild", short: "BASE", color: "#38bdf8", desc: "Re-establish aerobic floor post-Miami. Light HYROX loads, strict Z2 discipline." },
-  { id: 1, block_id: "accumulation", label: "Accumulation", short: "ACCUM", color: "#a3e635", desc: "Volume and HYROX loads climb. Track work introduced. Building the engine." },
-  { id: 2, block_id: "intensification", label: "Intensification", short: "INTENS", color: "#fb923c", desc: "Heavier sleds, faster track, harder threshold sessions. Fatigue managed strictly." },
-  { id: 3, block_id: "peak_test", label: "Peak & Test", short: "PEAK", color: "#f43f5e", desc: "W10-11 max load. W12 deload + full benchmark. Compare everything to Week 1." },
+  { id: 0, weeks: [1, 2, 3], block_id: "base_rebuild", label: "Base Rebuild", short: "BASE", color: "#38bdf8", desc: "Re-establish aerobic floor post-Miami. Light HYROX loads, strict Z2 discipline." },
+  { id: 1, weeks: [4, 5, 6], block_id: "accumulation", label: "Accumulation", short: "ACCUM", color: "#a3e635", desc: "Volume and HYROX loads climb. Track work introduced. Building the engine." },
+  { id: 2, weeks: [7, 8, 9], block_id: "intensification", label: "Intensification", short: "INTENS", color: "#fb923c", desc: "Heavier sleds, faster track, harder threshold sessions. Fatigue managed strictly." },
+  { id: 3, weeks: [10, 11, 12], block_id: "peak_test", label: "Peak & Test", short: "PEAK", color: "#f43f5e", desc: "W10-11 max load. W12 deload + full benchmark. Compare everything to Week 1." },
 ];
 
 const phaseFor = (w) => (w <= 3 ? 0 : w <= 6 ? 1 : w <= 9 ? 2 : 3);
