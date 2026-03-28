@@ -128,17 +128,16 @@ const resolveSessionKey = (sessionName, dayRow) => {
   return "rest";
 };
 
-function getSessionIcon(amSession) {
-  if (!amSession) return "—";
-  const s = String(amSession).toLowerCase();
-  if (s.includes("hyrox") || s.includes("for time") || s.includes("amrap") || s.includes("emom")) return "⬡";
-  if (s.includes("strength")) return "▲";
-  if (s.includes("zone 2") || s.includes("easy aerobic") || s.includes("long run")) return "◉";
-  if (s.includes("threshold") || s.includes("vo2") || s.includes("tempo")) return "◈";
-  if (s.includes("recovery") || s.includes("active reset")) return "○";
-  if (s.includes("race") || s.includes("simulation")) return "◆";
-  if (s.includes("mobility")) return "✦";
-  return "—";
+function getSessionIcon(amSession, customSession) {
+  const text = (customSession || amSession || "").toLowerCase();
+  if (text.includes("hyrox")) return { icon: "⬡", color: "#9b59b6" };
+  if (text.includes("z2") || text.includes("zone 2") || text.includes("long")) return { icon: "◉", color: "#4a90c4" };
+  if (text.includes("upper") || text.includes("strength") || text.includes("lift")) return { icon: "▲", color: "#e07b3a" };
+  if (text.includes("threshold") || text.includes("track")) return { icon: "◈", color: "#e74c3c" };
+  if (text.includes("tempo")) return { icon: "▷", color: "#f39c12" };
+  if (text.includes("run")) return { icon: "▷", color: "#27ae60" };
+  if (text.includes("mobility") || text.includes("recover")) return { icon: "○", color: "#27ae60" };
+  return { icon: "—", color: "#444" };
 }
 
 const parseExerciseLine = (line) => {
@@ -1995,13 +1994,42 @@ export default function App() {
     return { key, color, icon, emoji: icon, tag, label };
   };
 
+  const getCardLabel = (d) => {
+    if (d?.am_session_custom) {
+      const lines = d.am_session_custom.split("\n").filter((l) => l.trim());
+      return lines[0]?.slice(0, 20) || "SESSION";
+    }
+    return getTypeLabel(d?.am || d?.am_session) || "SESSION";
+  };
+
+  const getCardTag = (d) => {
+    if (d?.am_session_custom) {
+      const label = d.am_session_custom.split("\n")[0] || "";
+      if (label.toLowerCase().includes("hyrox")) return "HYROX";
+      if (label.toLowerCase().includes("z2") || label.toLowerCase().includes("zone 2")) return "Z2";
+      if (label.toLowerCase().includes("upper") || label.toLowerCase().includes("lift")) return "STRENGTH";
+      if (label.toLowerCase().includes("run")) return "RUN";
+      if (label.toLowerCase().includes("threshold")) return "THRESHOLD";
+      if (label.toLowerCase().includes("track")) return "TRACK";
+      return label.split(" ").slice(0, 2).join(" ").toUpperCase();
+    }
+    return getTypeLabel(d?.am || d?.am_session) || "SESSION";
+  };
+
+  const getStructureLabel = (d) => {
+    if (d?.am_session_custom) {
+      return d.am_session_custom.split("\n")[0]?.slice(0, 30) || "SESSION";
+    }
+    return getTypeLabel(d?.am || d?.am_session) || "REST";
+  };
+
   const selectedSessionName = dayData ? getSessionNameForDay(dayData, sess) : null;
   const selectedWorkout = selectedSessionName ? WL[selectedSessionName] : null;
   const selectedMeta = deriveSessionMeta(selectedSessionName, dayData);
   const selectedCustomContent = sess === "am" ? dayData?.am_session_custom : dayData?.pm_session_custom;
   const selectedShowCustom = !!(selectedCustomContent && dayData?.ai_modified);
   const selectedCanViewWorkout = !!(dayData?.isRaceDay || selectedShowCustom || selectedWorkout);
-  const selectedCoachingNote = dayData?.ai_modification_note || dayData?.note2a || selectedWorkout?.note || "";
+  const selectedCoachingNote = dayData?.am_session_custom || dayData?.note || selectedWorkout?.note || "";
   const selectedKeyPoints = selectedWorkout?.steps?.filter((s) => !s.startsWith("—")).slice(0, 5) || [];
   const selectedBlocks = normalizeWorkoutBlocks(
     sess === "am" ? dayData?.am_session_blocks : dayData?.pm_session_blocks,
@@ -2450,8 +2478,11 @@ export default function App() {
               const completed = isDayCompleted(d);
               const dateLabel = d?.date?.split(" ")[1] || d?.date || "";
               const isToday = d.day === todayDayName;
-              const shortLabel = meta.label.length > 26 ? `${meta.label.slice(0, 25)}…` : meta.label;
+              const cardLabel = getCardLabel(d);
+              const cardTag = getCardTag(d);
+              const shortLabel = cardLabel.length > 26 ? `${cardLabel.slice(0, 25)}…` : cardLabel;
               const isRest = meta.key === "rest";
+              const iconMeta = getSessionIcon(d?.am, d?.am_session_custom);
               return (
                 <button
                   key={d.day}
@@ -2497,10 +2528,10 @@ export default function App() {
                       ✦
                     </div>
                   )}
-                  <div style={{ fontSize:24, lineHeight:1, color:meta.color }}>{getSessionIcon(d?.am)}</div>
+                  <div style={{ fontSize:24, lineHeight:1, color:iconMeta.color }}>{iconMeta.icon}</div>
                   {!isRest && (
                     <div style={{ background:`${meta.color}22`, border:`1px solid ${meta.color}55`, borderRadius:4, padding:"2px 6px", fontFamily:C.fm, fontSize:7, color:meta.color, letterSpacing:2, textTransform:"uppercase", maxWidth:"100%", overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>
-                      {meta.tag}
+                      {cardTag}
                     </div>
                   )}
                   {!isRest && (
@@ -2731,12 +2762,13 @@ export default function App() {
             <div style={{ background:C.card, border:`1px solid ${C.border}`, borderRadius:16, overflow:"hidden", ...C.glass }}>
               {(week?.days || []).map((d, idx) => {
                 const sessionName = getSessionNameForDay(d, "am");
-                const meta = deriveSessionMeta(sessionName, d);
+                const iconMeta = getSessionIcon(d?.am, d?.am_session_custom);
+                const rowColor = iconMeta?.color || deriveSessionMeta(sessionName, d).color;
                 return (
                   <div key={`${d.day}_${idx}`} style={{ display:"flex", alignItems:"center", gap:10, padding:"10px 12px", borderBottom: idx === (week?.days || []).length - 1 ? "none" : "1px solid #88888833" }}>
-                    <span style={{ width:6, height:6, borderRadius:"50%", background:meta.color, flexShrink:0 }} />
+                    <span style={{ width:6, height:6, borderRadius:"50%", background:rowColor, flexShrink:0 }} />
                     <span style={{ fontFamily:C.fm, fontSize:9, color:C.text, letterSpacing:2, textTransform:"uppercase", minWidth:38 }}>{d.day}</span>
-                    <span style={{ fontFamily:C.fs, fontSize:12, color:C.muted, lineHeight:1.4 }}>{meta.key === "rest" ? "Rest" : sessionName || "Open session"}</span>
+                    <span style={{ fontFamily:C.fs, fontSize:12, color:C.muted, lineHeight:1.4 }}>{getStructureLabel(d)}</span>
                   </div>
                 );
               })}
