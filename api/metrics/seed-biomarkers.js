@@ -81,21 +81,89 @@ export default async function handler(req, res) {
       date_collected: row.date_collected,
     }));
 
-    const { data, error } = await supabase
+    // Preferred path: schema includes user_id
+    const withUser = await supabase
       .from("biomarkers")
       .upsert(rows, { onConflict: "user_id,label,date_collected" })
       .select("id");
 
-    if (error) throw new Error(`Failed seeding biomarkers: ${error.message}`);
+    if (!withUser.error) {
+      return res.status(200).json({
+        success: true,
+        mode: "upsert_user_id",
+        user_id: TARGET_USER_ID,
+        rows_submitted: rows.length,
+        rows_returned: withUser.data?.length || 0,
+        dexa_rows: dexa.length,
+        blood_rows: blood.length,
+        total_rows_inserted: rows.length,
+      });
+    }
+
+    // Fallback path: production schema without user_id column
+    const missingUserId = String(withUser.error.message || "").toLowerCase().includes("user_id");
+    if (!missingUserId) {
+      throw new Error(`Failed seeding biomarkers: ${withUser.error.message}`);
+    }
+
+    const rowsNoUser = rows.map(({ user_id, ...rest }) => rest);
+    const noUserUpsert = await supabase
+      .from("biomarkers")
+      .upsert(rowsNoUser, { onConflict: "label,date_collected" })
+      .select("id");
+
+    if (!noUserUpsert.error) {
+      return res.status(200).json({
+        success: true,
+        mode: "upsert_label_date",
+        user_id_requested: TARGET_USER_ID,
+        warning: "biomarkers.user_id column not found; seeded without user_id",
+        rows_submitted: rowsNoUser.length,
+        rows_returned: noUserUpsert.data?.length || 0,
+        dexa_rows: dexa.length,
+        blood_rows: blood.length,
+        total_rows_inserted: rowsNoUser.length,
+      });
+    }
+
+    // Last-resort dedupe when no upsert conflict is available.
+    let inserted = 0;
+    let updated = 0;
+    for (const row of rowsNoUser) {
+      const existing = await supabase
+        .from("biomarkers")
+        .select("id")
+        .eq("label", row.label)
+        .eq("date_collected", row.date_collected)
+        .limit(1)
+        .maybeSingle();
+
+      if (existing.error && existing.error.code !== "PGRST116") {
+        throw new Error(`Lookup failed for ${row.label}: ${existing.error.message}`);
+      }
+
+      if (existing.data?.id) {
+        const upd = await supabase.from("biomarkers").update(row).eq("id", existing.data.id);
+        if (upd.error) throw new Error(`Update failed for ${row.label}: ${upd.error.message}`);
+        updated += 1;
+      } else {
+        const ins = await supabase.from("biomarkers").insert(row);
+        if (ins.error) throw new Error(`Insert failed for ${row.label}: ${ins.error.message}`);
+        inserted += 1;
+      }
+    }
 
     return res.status(200).json({
       success: true,
-      user_id: TARGET_USER_ID,
-      rows_submitted: rows.length,
-      rows_returned: data?.length || 0,
+      mode: "manual_dedupe",
+      user_id_requested: TARGET_USER_ID,
+      warning: "biomarkers.user_id column not found; seeded without user_id",
+      rows_submitted: rowsNoUser.length,
+      inserted,
+      updated,
       dexa_rows: dexa.length,
       blood_rows: blood.length,
-      total_rows_inserted: rows.length,
+      total_rows_inserted: inserted + updated,
     });
   } catch (err) {
     console.error("[metrics/seed-biomarkers] error:", err.message);
