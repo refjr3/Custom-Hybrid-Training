@@ -43,11 +43,11 @@ const SAT_SESSIONS = {
 };
 
 const HYROX_NOTES = {
-  base: "Light loads. Technique focus. Full rig — sleds, lunges, wall balls. Build movement quality.",
-  accum: "Moderate loads. More rounds. Full rig. Volume climbing.",
-  intens: "Heavy loads. Race-level intensity. Full rig. Push the sleds.",
-  peak: "Race simulation loads. Full rig. Log every split.",
-  benchmark: "BENCHMARK — full race simulation. Log all splits vs Week 1.",
+  base: "Your session. Sled push/pull, lunges, wall balls. Technique focus, moderate loads.",
+  accum: "Your session. Sled push/pull, lunges, wall balls. Loads climbing, more rounds.",
+  intens: "Your session. Sled push/pull, lunges, wall balls. Heavy loads, race intensity.",
+  peak: "Your session. Sled push/pull, lunges, wall balls. Race simulation loads. Log splits.",
+  benchmark: "BENCHMARK — log all splits vs Week 1.",
 };
 
 const SESSION_MAP = {
@@ -129,10 +129,19 @@ const buildPlanRows = () => {
     for (let dayIndex = 0; dayIndex < 7; dayIndex++) {
       const template = { ...WEEKLY_TEMPLATE[dayIndex] };
 
-      // Override Saturday session by week
+      // Saturday on odd weeks is HYROX Motion group class.
+      // Even weeks keep the programmed quality (track) session.
+      if (dayIndex === 5 && weekNum % 2 === 1) {
+        template.label = "HYROX Motion";
+        template.note = "Group class — coach-led. Just show up and work.";
+      }
+
+      // Override Saturday session by week (for non-Motion Saturdays)
       if (dayIndex === 5) {
-        template.label = SAT_SESSIONS[weekNum].label;
-        template.note = SAT_SESSIONS[weekNum].note;
+        if (template.label !== "HYROX Motion") {
+          template.label = SAT_SESSIONS[weekNum].label;
+          template.note = SAT_SESSIONS[weekNum].note;
+        }
       }
 
       // Override Monday HYROX note by phase
