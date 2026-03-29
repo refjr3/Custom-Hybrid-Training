@@ -8,30 +8,61 @@ const supabase = createClient(
 const TARGET_USER_ID = "5285440e-a3dd-4f29-9b09-29715f0a04fc";
 const REQUIRED_SECRET = "triad2026";
 
-const SESSION_MAP = {
-  HYROX: "FOR TIME — Hyrox Full Runs Half Stations",
-  "Z2 Erg + Mobility": "ZONE 2 — Easy Aerobic",
-  "Upper + Z2 Erg Cap": "STRENGTH C — Upper Dominant",
-  "Z2 Run + Mobility": "ZONE 2 — Easy Aerobic",
-  "Upper Body": "STRENGTH C — Upper Dominant",
-  Track: "THRESHOLD — 10x2 Min",
-  Threshold: "TEMPO — 20 Min Sustained",
-  Benchmark: "RACE SIMULATION — Full HYROX",
-  "Long Z2 Run": "LONG RUN — Zone 2 Base",
-};
-
 const DAY_NAMES = ["MON", "TUE", "WED", "THU", "FRI", "SAT", "SUN"];
 
-const PHASES = [
-  { id: 0, weeks: [1, 2, 3], block_id: "base_rebuild", label: "Base Rebuild", short: "BASE", color: "#38bdf8", desc: "Re-establish aerobic floor post-Miami. Light HYROX loads, strict Z2 discipline." },
-  { id: 1, weeks: [4, 5, 6], block_id: "accumulation", label: "Accumulation", short: "ACCUM", color: "#a3e635", desc: "Volume and HYROX loads climb. Track work introduced. Building the engine." },
-  { id: 2, weeks: [7, 8, 9], block_id: "intensification", label: "Intensification", short: "INTENS", color: "#fb923c", desc: "Heavier sleds, faster track, harder threshold sessions. Fatigue managed strictly." },
-  { id: 3, weeks: [10, 11, 12], block_id: "peak_test", label: "Peak & Test", short: "PEAK", color: "#f43f5e", desc: "W10-11 max load. W12 deload + full benchmark. Compare everything to Week 1." },
+const WEEKLY_TEMPLATE = [
+  { day: "MON", label: "HYROX", note: "Full rig available. Sleds, lunges, wall balls." },
+  { day: "TUE", label: "Z2 Erg/Echo + Mobility", note: "Row, Ski or Echo Bike. Cap at WHOOP strain target. HR 133-148 bpm. Dynamic mobility after." },
+  { day: "WED", label: "Upper Lift + Z2 Run", note: "Upper body lift followed by Z2 run. Cap at WHOOP strain target." },
+  { day: "THU", label: "Z2 Echo Bike", note: "Echo Bike only. Cap at WHOOP strain target. HR ceiling strict." },
+  { day: "FRI", label: "Upper Lift + Recovery", note: "Upper body lift. Focused recovery work after — mobility, soft tissue, breathwork." },
+  { day: "SAT", label: "Threshold/Track", note: "Quality session. Full send or skip on yellow WHOOP." },
+  { day: "SUN", label: "Long Run", note: "Optional — full rest or long Z2 run. HR 133-148 bpm. Your call based on feel." },
 ];
 
-const phaseFor = (w) => (w <= 3 ? 0 : w <= 6 ? 1 : w <= 9 ? 2 : 3);
+const PHASES = [
+  { label: "Base Rebuild", weeks: [1, 2, 3], short: "BASE", block_id: "base_rebuild" },
+  { label: "Accumulation", weeks: [4, 5, 6], short: "ACCUM", block_id: "accumulation" },
+  { label: "Intensification", weeks: [7, 8, 9], short: "INTENS", block_id: "intensification" },
+  { label: "Peak & Test", weeks: [10, 11, 12], short: "PEAK", block_id: "peak_test" },
+];
 
-const START_DATE = new Date("2026-04-13T00:00:00.000Z");
+const SAT_SESSIONS = {
+  1: { label: "Threshold Run", note: "Comfortably hard continuous effort. 20-35 min at threshold HR." },
+  2: { label: "Track Workout", note: "Structured intervals at race pace. Log all splits." },
+  3: { label: "Threshold Run", note: "Extended threshold. Push duration vs Week 1." },
+  4: { label: "Track Workout", note: "Race pace intervals. Longer reps than Week 2." },
+  5: { label: "Threshold Run", note: "Threshold + tempo combo. Build duration." },
+  6: { label: "Track Workout", note: "Mixed track session. Speed reserve work." },
+  7: { label: "Threshold Run", note: "Hard threshold. Race effort for 25-35 min." },
+  8: { label: "Track Workout", note: "Fast track intervals. Log vs Week 4." },
+  9: { label: "Threshold Run", note: "Race pace threshold. Peak effort." },
+  10: { label: "Track Workout", note: "Speed work. Race pace + above." },
+  11: { label: "Threshold Run", note: "Final threshold before deload. Log time." },
+  12: { label: "Benchmark", note: "BENCHMARK WEEK — log all splits vs Week 1. Track + threshold combo. Compare everything." },
+};
+
+const HYROX_NOTES = {
+  base: "Light loads. Technique focus. Full rig — sleds, lunges, wall balls. Build movement quality.",
+  accum: "Moderate loads. More rounds. Full rig. Volume climbing.",
+  intens: "Heavy loads. Race-level intensity. Full rig. Push the sleds.",
+  peak: "Race simulation loads. Full rig. Log every split.",
+  benchmark: "BENCHMARK — full race simulation. Log all splits vs Week 1.",
+};
+
+const SESSION_MAP = {
+  HYROX: "FOR TIME — Hyrox Full Runs Half Stations",
+  "Z2 Erg/Echo + Mobility": "ZONE 2 — Easy Aerobic",
+  "Upper Lift + Z2 Run": "STRENGTH C — Full Body Hybrid",
+  "Z2 Echo Bike": "ZONE 2 — Easy Aerobic",
+  "Upper Lift + Recovery": "STRENGTH C — Full Body Hybrid",
+  "Threshold Run": "TEMPO — 20 Min Sustained",
+  "Track Workout": "THRESHOLD — 10×2 Min",
+  Benchmark: "THRESHOLD — 10×2 Min",
+  "Long Run": "LONG RUN — Base Builder",
+};
+
+const START_DATE = new Date("2026-04-13T12:00:00.000Z");
 
 const getUtcDateForOffset = (weekNum, dayIndex = 0) => {
   const d = new Date(START_DATE);
@@ -42,12 +73,6 @@ const getUtcDateForOffset = (weekNum, dayIndex = 0) => {
 const fmtDateLabel = (d) =>
   d.toLocaleDateString("en-US", { timeZone: "UTC", month: "short", day: "numeric" });
 
-const fmtWeekRange = (weekNum) => {
-  const weekStart = getUtcDateForOffset(weekNum, 0);
-  const weekEnd = getUtcDateForOffset(weekNum, 6);
-  return `${fmtDateLabel(weekStart)} – ${fmtDateLabel(weekEnd)}`;
-};
-
 const fmtIsoDate = (d) => {
   const y = d.getUTCFullYear();
   const m = String(d.getUTCMonth() + 1).padStart(2, "0");
@@ -55,103 +80,19 @@ const fmtIsoDate = (d) => {
   return `${y}-${m}-${day}`;
 };
 
-const getWeekStartDate = (weekNum) => getUtcDateForOffset(weekNum, 0);
-const getDayDate = (weekNum, dayIndex) => fmtDateLabel(getUtcDateForOffset(weekNum, dayIndex));
-
-const HYROX_ROTATION = [
-  "Sled push/pull, compromised running, wall ball finisher",
-  "Ski + run intervals, compromised running, wall ball finisher",
-  "Sled push/pull, sandbag lunges, wall ball finisher",
-  "Ski + row engine work, compromised running, wall ball finisher",
-  "Sled push/pull, farmers carry, sandbag lunges, wall ball finisher",
-  "Full race simulation — all stations in order, log every split",
-];
-
-const SAT_EVEN = [
-  "Track: speed work at race pace",
-  "Track: race pace intervals, longer reps",
-  "Track: mixed pyramid at race pace",
-  "Track: race pace + speed reserve work",
-  "Track: extended race pace reps",
-  "Track benchmark — log all splits vs Week 2",
-];
-
-const SAT_ODD = [
-  "Threshold run at comfortably hard effort",
-  "Threshold erg + run combo",
-  "Threshold run, extended duration",
-  "Threshold erg intervals + run",
-  "Threshold run at race pace effort",
-  "Threshold benchmark — log time vs Week 1",
-];
-
-const buildWeek = (w) => {
-  const p = phaseFor(w);
-  const isDeload = w === 12;
-  const hyrox = HYROX_ROTATION[Math.min(Math.floor((w - 1) / 2), 5)];
-  const satSession = w % 2 === 0
-    ? SAT_EVEN[Math.min(Math.floor((w - 1) / 2), 5)]
-    : SAT_ODD[Math.min(Math.floor((w - 1) / 2), 5)];
-  const satLabel = w % 2 === 0 ? "Track" : "Threshold";
-
-  return {
-    week: w,
-    phase: p,
-    days: [
-      {
-        day: "MON", label: "HYROX",
-        detail: isDeload ? "HYROX: full race simulation — log all splits" : `HYROX: ${hyrox}`,
-        green: "Full session, full load.",
-        yellow: "Reduce rounds by one. Keep all stations.",
-        red: "Full rest.",
-      },
-      {
-        day: "TUE", label: "Z2 Erg + Mobility",
-        detail: "Z2 erg to WHOOP strain target — SkiErg / Echo Bike / Row. Dynamic mobility after.",
-        green: "Erg to strain target. HR ceiling strict.",
-        yellow: "Cut 30–40% short of strain target.",
-        red: "Full rest.",
-      },
-      {
-        day: "WED", label: "Upper + Z2 Erg Cap",
-        detail: "Upper body lift. Cap with Z2 erg to strain target — SkiErg / Echo Bike / Row. Legs off the floor.",
-        green: "Full lift + Z2 cap to strain.",
-        yellow: "Full lift. Skip Z2 cap.",
-        red: "Full rest.",
-      },
-      {
-        day: "THU", label: "Z2 Run + Mobility",
-        detail: "Z2 run to WHOOP strain target. HR ceiling 133–148bpm strict. Static stretch after.",
-        green: "Run to strain target. Walk if HR drifts.",
-        yellow: "Cut 30–40% short of strain target. Same HR ceiling.",
-        red: "Full rest.",
-      },
-      {
-        day: "FRI", label: "Upper Body",
-        detail: "Upper body lift only. No cardio. Legs arrive Saturday fresh.",
-        green: "Full session.",
-        yellow: "Reduce volume 20%. Drop accessories.",
-        red: "Full rest.",
-      },
-      {
-        day: "SAT", label: isDeload ? "Benchmark" : satLabel,
-        detail: isDeload ? "Benchmark: track + threshold combo. Log everything vs Week 1." : satSession,
-        green: "Full output. 5 days from HYROX — take it.",
-        yellow: "Convert to Z2 run. Don't force quality on yellow.",
-        red: "Full rest.",
-      },
-      {
-        day: "SUN", label: "Long Z2 Run",
-        detail: "Long Z2 run to WHOOP strain target. HR ceiling 133–148bpm. Walk breaks as needed.",
-        green: "Full duration to strain target.",
-        yellow: "Cut 30–40% short. Same HR ceiling.",
-        red: "Full rest.",
-      },
-    ],
-  };
+const fmtWeekRange = (weekNum) => {
+  const weekStart = getUtcDateForOffset(weekNum, 0);
+  const weekEnd = getUtcDateForOffset(weekNum, 6);
+  return `${fmtDateLabel(weekStart)} – ${fmtDateLabel(weekEnd)}`;
 };
 
-const WEEKS = Array.from({ length: 12 }, (_, i) => buildWeek(i + 1));
+const phaseKeyForWeek = (weekNum) => (
+  weekNum <= 3 ? "base" : weekNum <= 6 ? "accum" : weekNum <= 9 ? "intens" : "peak"
+);
+
+const phaseObjForWeek = (weekNum) => (
+  weekNum <= 3 ? PHASES[0] : weekNum <= 6 ? PHASES[1] : weekNum <= 9 ? PHASES[2] : PHASES[3]
+);
 
 const buildPlanRows = () => {
   const blocks = [];
@@ -167,9 +108,9 @@ const buildPlanRows = () => {
     });
   }
 
-  for (const weekData of WEEKS) {
-    const weekNum = weekData.week;
-    const phase = PHASES[weekData.phase];
+  for (let weekNum = 1; weekNum <= 12; weekNum++) {
+    const phaseKey = phaseKeyForWeek(weekNum);
+    const phase = phaseObjForWeek(weekNum);
     const phaseWeekIdx = (weekNum - 1) % 3;
     const phaseWeekOrder = phaseWeekIdx + 1;
     const weekSlug = `hyrox12_${phase.block_id}_w${phaseWeekOrder}`;
@@ -185,23 +126,36 @@ const buildPlanRows = () => {
       week_order: weekNum,
     });
 
-    for (let dayIdx = 0; dayIdx < 7; dayIdx++) {
-      const dayPlan = weekData.days[dayIdx];
-      const mappedSession = SESSION_MAP[dayPlan.label] || null;
+    for (let dayIndex = 0; dayIndex < 7; dayIndex++) {
+      const template = { ...WEEKLY_TEMPLATE[dayIndex] };
+
+      // Override Saturday session by week
+      if (dayIndex === 5) {
+        template.label = SAT_SESSIONS[weekNum].label;
+        template.note = SAT_SESSIONS[weekNum].note;
+      }
+
+      // Override Monday HYROX note by phase
+      if (dayIndex === 0) {
+        template.note = weekNum === 12 ? HYROX_NOTES.benchmark : HYROX_NOTES[phaseKey];
+      }
+
+      const dayDate = getUtcDateForOffset(weekNum, dayIndex);
+      const dateLabel = dayDate.toLocaleDateString("en-US", { timeZone: "UTC", month: "short", day: "numeric" });
+      const mappedSession = SESSION_MAP[template.label] || null;
+
       days.push({
         user_id: TARGET_USER_ID,
         week_id: weekSlug,
-        day_name: DAY_NAMES[dayIdx],
-        date_label: getDayDate(weekNum, dayIdx),
+        day_name: DAY_NAMES[dayIndex],
+        date_label: dateLabel,
         am_session: mappedSession,
         pm_session: null,
-        // Exact detail text from HyroxPlan buildWeek() output
-        am_session_custom: dayPlan.detail,
+        am_session_custom: template.label,
         pm_session_custom: null,
-        // Use GREEN guidance text from HyroxPlan
-        note: dayPlan.green,
+        note: template.note,
         is_race_day: false,
-        is_sunday: DAY_NAMES[dayIdx] === "SUN",
+        is_sunday: DAY_NAMES[dayIndex] === "SUN",
         ai_modified: false,
         ai_modification_note: null,
       });
@@ -239,11 +193,12 @@ export default async function handler(req, res) {
     return res.status(200).json({
       success: true,
       user_id: TARGET_USER_ID,
-      blocks_inserted: blocks.length,
-      weeks_inserted: weeks.length,
-      days_inserted: days.length,
+      blocks_seeded: blocks.length,
+      weeks_seeded: weeks.length,
+      days_seeded: days.length,
       start_date: fmtDateLabel(START_DATE),
-      first_monday: fmtIsoDate(START_DATE),
+      first_monday: fmtDateLabel(getUtcDateForOffset(1, 0)),
+      first_monday_iso: fmtIsoDate(getUtcDateForOffset(1, 0)),
       week_1_range: fmtWeekRange(1),
       week_4_range: fmtWeekRange(4),
       phase_week_counts: PHASES.reduce((acc, phase) => {
