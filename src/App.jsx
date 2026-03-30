@@ -2361,19 +2361,34 @@ export default function App() {
                 <div style={{ fontFamily: C.fm, fontSize: 9, color: C.muted, letterSpacing: 2.5, textTransform: "uppercase" }}>
                   {headerDate}
                 </div>
-                <a
-                  href="/api/auth/login"
-                  style={{
-                    fontFamily: C.fm,
-                    fontSize: 9,
-                    color: "#444",
-                    letterSpacing: 2,
-                    textDecoration: "none",
-                    textTransform: "uppercase",
-                  }}
-                >
-                  ↺ WHOOP
-                </a>
+                <div style={{ display:"flex", alignItems:"center", gap:10 }}>
+                  <a
+                    href="/api/auth/login"
+                    style={{
+                      fontFamily: C.fm,
+                      fontSize: 9,
+                      color: "#444",
+                      letterSpacing: 2,
+                      textDecoration: "none",
+                      textTransform: "uppercase",
+                    }}
+                  >
+                    ↺ WHOOP
+                  </a>
+                  <a
+                    href="/api/auth/garmin-login"
+                    style={{
+                      fontFamily: C.fm,
+                      fontSize: 9,
+                      color: garminConnected ? C.green : "#444",
+                      letterSpacing: 2,
+                      textDecoration: "none",
+                      textTransform: "uppercase",
+                    }}
+                  >
+                    {garminConnected ? "✓ GARMIN" : "CONNECT GARMIN"}
+                  </a>
+                </div>
               </div>
               <div style={{ fontFamily: C.ff, fontSize: 38, color: C.text, lineHeight: 1, letterSpacing: 1, marginTop: 8 }}>
                 {athleteName}

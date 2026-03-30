@@ -5,34 +5,99 @@ const supabase = createClient(
   process.env.SUPABASE_SERVICE_KEY
 );
 
+function parseCookies(header) {
+  const cookies = {};
+  if (!header) return cookies;
+  header.split(";").forEach((c) => {
+    const [k, ...v] = c.trim().split("=");
+    cookies[k.trim()] = v.join("=").trim();
+  });
+  return cookies;
+}
+
+async function refreshGarminToken(refreshToken) {
+  const clientId = process.env.GARMIN_CLIENT_ID;
+  const clientSecret = process.env.GARMIN_CLIENT_SECRET;
+  if (!refreshToken || !clientId || !clientSecret) return null;
+
+  const tokenRes = await fetch("https://connectapi.garmin.com/oauth-service/oauth/token", {
+    method: "POST",
+    headers: { "Content-Type": "application/x-www-form-urlencoded" },
+    body: new URLSearchParams({
+      grant_type: "refresh_token",
+      refresh_token: refreshToken,
+      client_id: clientId,
+      client_secret: clientSecret,
+    }).toString(),
+  });
+  if (!tokenRes.ok) return null;
+  const tokens = await tokenRes.json().catch(() => ({}));
+  if (!tokens?.access_token) return null;
+  return tokens;
+}
+
 export default async function handler(req, res) {
-  const garminToken = req.headers.authorization?.replace("Bearer ", "");
-  const userId = req.body?.user_id || req.query?.user_id || null;
+  const token = req.headers.authorization?.replace("Bearer ", "");
+  if (!token) return res.status(401).json({ error: "Unauthorized" });
 
-  if (!garminToken) {
-    return res.status(401).json({ error: "No Garmin token" });
-  }
+  const { data: { user }, error: authErr } = await supabase.auth.getUser(token);
+  if (authErr || !user) return res.status(401).json({ error: "Invalid token" });
+  const userId = user.id;
 
-  try {
-    // Fetch recent activities from Garmin Connect API
-    const activitiesRes = await fetch(
-      "https://connectapi.garmin.com/fitness-api/rest/v1/activities?limit=10",
+  const cookies = parseCookies(req.headers.cookie);
+  let garminAccess = cookies.garmin_access;
+  const garminRefresh = cookies.garmin_refresh;
+
+  const setTokenCookies = (tokens) => {
+    const opts = "Path=/; HttpOnly; Secure; SameSite=Lax";
+    res.setHeader("Set-Cookie", [
+      `garmin_access=${tokens.access_token}; ${opts}; Max-Age=86400`,
+      `garmin_refresh=${tokens.refresh_token || garminRefresh || ""}; ${opts}; Max-Age=2592000`,
+    ]);
+  };
+
+  async function fetchGarminActivities(accessToken) {
+    return fetch(
+      "https://connectapi.garmin.com/fitness-api/rest/v1/activities?limit=20",
       {
         headers: {
-          Authorization: `Bearer ${garminToken}`,
+          Authorization: `Bearer ${accessToken}`,
           "Content-Type": "application/json",
         },
       }
     );
+  }
 
-    if (!activitiesRes.ok) {
-      return res.status(401).json({ error: "Garmin token invalid or expired" });
+  try {
+    if (!garminAccess && garminRefresh) {
+      const refreshed = await refreshGarminToken(garminRefresh);
+      if (refreshed?.access_token) {
+        garminAccess = refreshed.access_token;
+        setTokenCookies(refreshed);
+      }
     }
 
-    const activitiesData = await activitiesRes.json();
+    if (!garminAccess) {
+      return res.status(401).json({ error: "garmin_reconnect_required" });
+    }
+
+    let activitiesRes = await fetchGarminActivities(garminAccess);
+    if (activitiesRes.status === 401 && garminRefresh) {
+      const refreshed = await refreshGarminToken(garminRefresh);
+      if (refreshed?.access_token) {
+        garminAccess = refreshed.access_token;
+        setTokenCookies(refreshed);
+        activitiesRes = await fetchGarminActivities(garminAccess);
+      }
+    }
+
+    if (!activitiesRes.ok) {
+      return res.status(401).json({ error: "garmin_reconnect_required" });
+    }
+
+    const activitiesData = await activitiesRes.json().catch(() => ({}));
     const activities = activitiesData.activityList || [];
 
-    // Transform and upsert into Supabase
     const transformed = activities.map((a) => ({
       activity_id: String(a.activityId),
       activity_type: a.activityType?.typeKey || "unknown",
@@ -46,7 +111,7 @@ export default async function handler(req, res) {
       aerobic_effect: a.aerobicTrainingEffect || 0,
       anaerobic_effect: a.anaerobicTrainingEffect || 0,
       raw_data: a,
-      ...(userId ? { user_id: userId } : {}),
+      user_id: userId,
     }));
 
     if (transformed.length > 0) {
@@ -55,15 +120,14 @@ export default async function handler(req, res) {
         .upsert(transformed, { onConflict: "activity_id" });
     }
 
-    // Return recent activities for the app
     const { data: recent } = await supabase
       .from("garmin_activities")
       .select("*")
+      .eq("user_id", userId)
       .order("start_time", { ascending: false })
-      .limit(10);
+      .limit(20);
 
     return res.status(200).json({ activities: recent || [] });
-
   } catch (err) {
     return res.status(500).json({ error: "Garmin sync failed", details: err.message });
   }
