@@ -176,9 +176,9 @@ const WL_MAP = {
   "Z2 Run + Mobility": "ZONE 2 — Easy Aerobic",
   "Upper Heavy + Z2 Erg": "STRENGTH A — Full Body Power",
   "Upper Moderate": "STRENGTH C — Upper Dominant",
-  Threshold: "THRESHOLD — 10x2 Min",
-  Track: "THRESHOLD — 10x2 Min",
-  Benchmark: "RACE SIMULATION — Full HYROX",
+  "Threshold": "THRESHOLD — 10x2 Min",
+  "Track": "THRESHOLD — 10x2 Min",
+  "Benchmark": "RACE SIMULATION — Full HYROX",
   "Long Z2 Run": "LONG RUN — Zone 2 Base",
   "20/20/20 Brick": "ZONE 2 — Easy Aerobic",
 };
