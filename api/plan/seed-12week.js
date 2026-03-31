@@ -163,13 +163,6 @@ const SUNDAY = {
   deload: "Optional easy walk or full rest. No structured session this week.",
 };
 
-const GATES = {
-  hyrox: "\n🟢 Full session, full load.\n🟡 Full send or skip entirely — no half measures.\n🔴 Full rest.",
-  z2: "\n🟢 Execute to strain target.\n🟡 Cut volume 30-40%. Same HR ceiling.\n🔴 Full rest.",
-  strength: "\n🟢 Full session.\n🟡 Reduce volume 20%. Drop accessories.\n🔴 Full rest.",
-  quality: "\n🟢 Full send.\n🟡 Full send or skip — no half measures.\n🔴 Full rest.",
-};
-
 const WL_MAP = {
   "HYROX + Plyos": "FOR TIME — Hyrox Full Runs Half Stations",
   "Z2 Erg + Mobility": "ZONE 2 — Easy Aerobic",
@@ -258,25 +251,25 @@ const buildPlanRows = () => {
 
       switch (dayIndex) {
         case 0:
-          sessionNote = `${HYROX[phaseKey]}\n${PLYOS[phaseKey]}${GATES.hyrox}`;
+          sessionNote = `${HYROX[phaseKey]}\n${PLYOS[phaseKey]}`;
           break;
         case 1:
           sessionNote = isOdd
-            ? `Z2 Erg + Mobility — Row, Ski or Echo Bike. Cap at WHOOP strain target. Dynamic mobility after.${GATES.z2}`
-            : `Z2 Run + Mobility — HR cap 133–148bpm. Static stretch after.${GATES.z2}`;
+            ? "Z2 Erg + Mobility — Row, Ski or Echo Bike. Cap at WHOOP strain target. Dynamic mobility after."
+            : "Z2 Run + Mobility — HR cap 133–148bpm. Static stretch after.";
           break;
         case 2:
-          sessionNote = `${UPPER_HEAVY[phaseKey]}${GATES.strength}`;
+          sessionNote = UPPER_HEAVY[phaseKey];
           break;
         case 3:
-          sessionNote = `Z2 Run + Mobility — HR cap 133–148bpm strict. Static stretch after.${GATES.z2}`;
+          sessionNote = "Z2 Run + Mobility — HR cap 133–148bpm strict. Static stretch after.";
           break;
         case 4:
-          sessionNote = `${UPPER_MODERATE[phaseKey]}${GATES.strength}`;
+          sessionNote = UPPER_MODERATE[phaseKey];
           break;
         case 5:
           sessionLabel = SAT_SESSIONS[weekNum].label;
-          sessionNote = `${SAT_SESSIONS[weekNum].note}${GATES.quality}`;
+          sessionNote = SAT_SESSIONS[weekNum].note;
           break;
         case 6:
           sessionNote = isDeload ? SUNDAY.deload : isOdd ? SUNDAY.standard : SUNDAY.brick;
