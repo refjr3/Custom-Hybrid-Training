@@ -1514,6 +1514,7 @@ export default function App() {
   const [blockId, setBlockId] = useState("taper");
   const [weekId, setWeekId]   = useState("tw1");
   const [selDay, setSelDay]   = useState(null);
+  const [selDayIdx, setSelDayIdx] = useState(null);
   const [sess, setSess]       = useState("am");
   const [sundayChoice, setSundayChoice] = useState({});
   const [whoopData, setWhoopData]       = useState(null);
@@ -2153,7 +2154,16 @@ export default function App() {
   const block   = planBlocks.find(b => b.id === blockId) || planBlocks[0] || null;
   const weeks   = block?.weeks || [];
   const week    = weeks.find(w => w.id === weekId) || weeks[0] || null;
-  const dayData = (selDay && week) ? week.days.find(d => d.day === selDay) : null;
+  const weekDays = week?.days || [];
+  const dayData = week
+    ? (
+      Number.isInteger(selDayIdx) &&
+      selDayIdx >= 0 &&
+      selDayIdx < weekDays.length
+        ? weekDays[selDayIdx]
+        : (selDay ? weekDays.find((d) => d.day === selDay) : null)
+    )
+    : null;
   const phaseColor = SPECIAL_BLOCK_ACCENTS[block?.id] || C.green;
 
   const getSundayWo = (wid) => {
@@ -2245,7 +2255,9 @@ export default function App() {
 
   const todayDayNames = ["SUN","MON","TUE","WED","THU","FRI","SAT"];
   const todayDayName  = todayDayNames[new Date().getDay()];
-  const todayDayData  = week ? (week.days.find(d => d.day === todayDayName) || week.days[0]) : null;
+  const todayDateLabel = new Date().toLocaleDateString("en-US", { month: "short", day: "numeric" });
+  const isCurrentRealWeek = weekDays.some((d) => (d?.date || "").trim() === todayDateLabel);
+  const todayDayData  = week ? (weekDays.find(d => (d?.date || "").trim() === todayDateLabel) || weekDays[0]) : null;
   const todayAm  = todayDayData ? getEffAm(todayDayData) : null;
   const todayPm  = todayDayData?.pm || null;
   const flaggedBio = biomarkers.filter(b => b.flag === "HIGH" || b.flag === "LOW");
@@ -2263,6 +2275,15 @@ export default function App() {
   const openPlanBuilder = () => {
     setPlanBuilderOpen(true);
   };
+
+  useEffect(() => {
+    if (!weekDays.length) return;
+    const todayIdx = weekDays.findIndex((d) => (d?.date || "").trim() === todayDateLabel);
+    const defaultIdx = todayIdx >= 0 ? todayIdx : 0;
+    setSelDayIdx(defaultIdx);
+    setSelDay(weekDays[defaultIdx]?.day || null);
+    setSess("am");
+  }, [weekId, blockId, planBlocks.length, todayDateLabel]);
 
   console.log("[PlanDetail] selected day:", selDay, "session:", sess);
 
@@ -2376,10 +2397,10 @@ export default function App() {
         const tomorrowDateObj = new Date();
         tomorrowDateObj.setDate(tomorrowDateObj.getDate() + 1);
         const tomorrowDateLabel = tomorrowDateObj.toLocaleDateString("en-US", { month: "short", day: "numeric" });
-        const selectedDayIndex = selDay ? weekDays.findIndex((d) => d.day === selDay) : -1;
+        const selectedDayIndex = dayData ? weekDays.findIndex((d) => d.day === dayData.day && d.date === dayData.date) : -1;
         const todayIndexInWeek = selectedDayIndex >= 0
           ? selectedDayIndex
-          : weekDays.findIndex((d) => (d?.date || "").trim() === todayDateLabel || d.day === todayDayName);
+          : weekDays.findIndex((d) => (d?.date || "").trim() === todayDateLabel);
         const todayCardData = todayIndexInWeek >= 0 ? weekDays[todayIndexInWeek] : (todayDayData || weekDays[0] || null);
         const todaySessionName = todayCardData ? getSessionNameForDay(todayCardData, "am") : null;
         const todaySessionKey = todayCardData?.am_session || todayCardData?.am;
@@ -2586,8 +2607,10 @@ export default function App() {
                     <button
                       onClick={() => {
                         if (!todayCardData) return;
+                        const dayIdx = weekDays.findIndex((d) => d.day === todayCardData.day && d.date === todayCardData.date);
                         setNav("plan");
                         setSelDay(todayCardData.day);
+                        setSelDayIdx(dayIdx >= 0 ? dayIdx : null);
                         setSess("am");
                       }}
                       style={{ background: "transparent", border: "none", color: C.cyan, fontFamily: C.ff, fontSize: 14, letterSpacing: 2, cursor: "pointer" }}
@@ -2678,6 +2701,7 @@ export default function App() {
                       setBlockId(b.id);
                       setWeekId(b.weeks[0].id);
                       setSelDay(null);
+                      setSelDayIdx(null);
                     }}
                     style={{
                       flexShrink:0,
@@ -2710,6 +2734,7 @@ export default function App() {
                   onClick={() => {
                     setWeekId(w.id);
                     setSelDay(null);
+                    setSelDayIdx(null);
                   }}
                   style={{
                     flexShrink:0,
@@ -2737,13 +2762,13 @@ export default function App() {
           </div>
 
           <div style={{ display:"grid", gridTemplateColumns:"repeat(7,minmax(0,1fr))", gap:6 }}>
-            {(week?.days || []).map((d) => {
+            {(week?.days || []).map((d, idx) => {
               const sessionName = getSessionNameForDay(d, "am");
               const meta = deriveSessionMeta(sessionName, d);
-              const isSelected = selDay === d.day;
+              const isSelected = selDayIdx === idx;
               const completed = isDayCompleted(d);
               const dateLabel = d?.date?.split(" ")[1] || d?.date || "";
-              const isToday = d.day === todayDayName;
+              const isToday = isCurrentRealWeek && (d?.date || "").trim() === todayDateLabel;
               const cardTag = getCardTag(d);
               const displayTag = String(cardTag || "SESSION").toUpperCase().slice(0, 8);
               const isRest = !cardTag || cardTag === "REST";
@@ -2754,9 +2779,11 @@ export default function App() {
                   onClick={() => {
                     if (isSelected) {
                       setSelDay(null);
+                      setSelDayIdx(null);
                       return;
                     }
                     setSelDay(d.day);
+                    setSelDayIdx(idx);
                     setSess("am");
                   }}
                   style={{
@@ -2918,7 +2945,7 @@ export default function App() {
           </div>
 
           <div style={{ marginTop:24 }}>
-            <button onClick={() => { setLabOpen(true); setLabMessages([]); setCqSelections({}); setLabAnsweredQuestions({}); setLabSessionId(createSessionId()); const wk = week?.label?.split("·")[1]?.trim() || week?.label || ""; const selD = selDay || todayDayName; setLabContext(`${wk} · ${selD}`); setLabTargetDay(selD); }}
+            <button onClick={() => { setLabOpen(true); setLabMessages([]); setCqSelections({}); setLabAnsweredQuestions({}); setLabSessionId(createSessionId()); const wk = week?.label?.split("·")[1]?.trim() || week?.label || ""; const selD = dayData?.day || todayDayName; setLabContext(`${wk} · ${selD}`); setLabTargetDay(selD); }}
               style={{ width:"100%", padding:"14px", background:`${C.cyan}08`, border:`1px solid ${C.cyan}22`, borderRadius:C.radius, cursor:"pointer", display:"flex", alignItems:"center", justifyContent:"center", gap:10, ...C.glass }}>
               <span style={{ fontSize:16 }}>🧪</span>
               <span style={{ fontFamily:C.ff, fontSize:14, color:C.cyan, letterSpacing:2 }}>RUN A SCENARIO</span>
