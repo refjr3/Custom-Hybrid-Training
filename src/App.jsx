@@ -83,6 +83,50 @@ const whoopColor = (s) => s >= 67 ? C.green : s >= 34 ? C.yellow : C.red;
 const whoopLabel = (s) => s >= 67 ? "GREEN" : s >= 34 ? "YELLOW" : "RED";
 const whoopMsg   = (s) => s >= 67 ? "Execute today's plan as written" : s >= 34 ? "Reduce intensity 20% · Skip VO2 Max" : "Recovery only · Contrast therapy · Rest";
 
+const SPECIAL_PREP_CARDS = [
+  {
+    id: "race_week",
+    badge: "RACE WEEK",
+    accent: "#FFD600",
+    range: "Apr 2–6",
+    entries: [
+      {
+        day: "Wed Apr 2 — Travel Prep",
+        text: "Morning creatine, 30min Z2 Echo Bike + SkiErg, Liquid IV. Depart 11am. Evening: light walk, simple carbs + protein, Liquid IV, Zinc + Mag 8:30pm, early bed.",
+      },
+      {
+        day: "Thu Apr 3 — Travel Day",
+        text: "Morning creatine, 30min Z2 Echo Bike + SkiErg, Liquid IV. Depart 11am. Evening: light walk, simple carbs + protein, Liquid IV, Zinc + Mag 8:30pm, early bed.",
+      },
+      {
+        day: "Fri Apr 4 — Shakeout Day",
+        text: "Morning creatine, 20–30min Z2 SkiErg or easy run. Day: walk venue, visualize stations, feet up. Evening: Beetroot shot #1, simple carb dinner, Zinc + Mag 8:30pm, early bed — tonight’s sleep matters most.",
+      },
+      {
+        day: "Sat Apr 5 — Race Day 8:10am",
+        text: "5:30am wake. Beetroot shot #2. Breakfast: oatmeal or white rice, banana, PB, 2 eggs, Liquid IV. 6:00am Creatine. 6:30am Sodium Bicarb + water. 6:30am Adderall. 7:00am arrive venue. 7:30am light activation warmup. 7:50am Wall Ball primer — wet hands, fatigued reps. 8:10am GUN. In-race: Neversecond C30+ CAF at Row or Farmers Carry (station 5–6), carry 2 gels take 1 mid-race. Skip Beta Alanine.",
+      },
+      { day: "Sun Apr 6 — Rest", text: "Travel home. Full off day." },
+    ],
+  },
+  {
+    id: "recovery_week",
+    badge: "RECOVERY",
+    accent: "#6b7280",
+    range: "Apr 6–12",
+    entries: [
+      { day: "Sun Apr 6 — Rest", text: "Travel home. Full off day." },
+      { day: "Mon Apr 7", text: "Rest or 20min easy walk only. Assess soreness." },
+      { day: "Tue Apr 8", text: "Light Z2 erg 20min if feeling good. No running." },
+      { day: "Wed Apr 9", text: "Light upper body only. No lower, no erg cardio." },
+      { day: "Thu Apr 10", text: "Z2 erg or easy walk 20–30min. WHOOP dependent." },
+      { day: "Fri Apr 11", text: "Rest or light mobility." },
+      { day: "Sat Apr 12", text: "Optional easy Z2 run 20–25min. Shakeout before Monday." },
+      { day: "Sun Apr 13 — Rest", text: "Full reset. Block starts tomorrow." },
+    ],
+  },
+];
+
 const Ring = ({ score, size=120, stroke=10, color, label, sublabel, glowEffect }) => {
   const r = (size - stroke) / 2;
   const circ = 2 * Math.PI * r;
@@ -2042,6 +2086,41 @@ export default function App() {
                 <button key={b.id} onClick={() => { setBlockId(b.id); setWeekId(b.weeks[0].id); setSelDay(null); }} style={{ flexShrink:0, padding:"8px 16px", background: blockId===b.id ? C.card : "transparent", color: blockId===b.id ? C.cyan : C.muted, border:"none", borderBottom: blockId===b.id ? `2px solid ${C.cyan}` : "2px solid transparent", borderRadius:0, cursor:"pointer", fontFamily:C.ff, fontSize:12, letterSpacing:2, transition:"all 0.2s" }}>{b.label}</button>
               ))}
             </div>
+          </div>
+          <div style={{ margin:"0 20px 12px", display:"flex", flexDirection:"column", gap:10 }}>
+            {SPECIAL_PREP_CARDS.map((card) => {
+              const raceCard = card.id === "race_week";
+              return (
+                <div
+                  key={card.id}
+                  style={{
+                    background: raceCard ? "rgba(255,214,0,0.06)" : "rgba(107,114,128,0.14)",
+                    border: `1px solid ${raceCard ? "rgba(255,214,0,0.35)" : "rgba(156,163,175,0.35)"}`,
+                    borderLeft: `3px solid ${card.accent}`,
+                    borderRadius: 12,
+                    padding: "10px 12px",
+                    ...C.glass,
+                  }}
+                >
+                  <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:8, gap:10 }}>
+                    <span style={{ fontFamily:C.fm, fontSize:8, color:card.accent, letterSpacing:2.5, textTransform:"uppercase" }}>{card.badge}</span>
+                    <span style={{ fontFamily:C.fm, fontSize:8, color:C.muted, letterSpacing:1.5 }}>{card.range}</span>
+                  </div>
+                  <div style={{ display:"flex", flexDirection:"column", gap:7 }}>
+                    {card.entries.map((entry) => (
+                      <div key={`${card.id}-${entry.day}`} style={{ borderTop:`1px solid ${C.border}`, paddingTop:7 }}>
+                        <div style={{ fontFamily:C.fm, fontSize:8, color:C.text, letterSpacing:1.2, textTransform:"uppercase", marginBottom:4 }}>
+                          {entry.day}
+                        </div>
+                        <div style={{ fontFamily:C.fs, fontSize:12, color:"#B9B9B9", lineHeight:1.45 }}>
+                          {entry.text}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              );
+            })}
           </div>
           <div style={{ display:"flex", overflowX:"auto", scrollbarWidth:"none", borderBottom:`1px solid ${C.border}`, paddingLeft:20 }}>
             {weeks.map(w => (
