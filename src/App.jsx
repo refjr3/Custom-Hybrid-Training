@@ -127,6 +127,108 @@ const SESSION_COLORS = {
   travel: "#4a90c4",
 };
 
+const SPECIAL_BLOCK_ACCENTS = {
+  race_week: C.yellow,
+  recovery: "#6b7280",
+};
+
+const makeSpecialDay = (day, date, title, note, { isRaceDay = false } = {}) => ({
+  day,
+  date,
+  am: null,
+  pm: null,
+  am_session_custom: title || null,
+  pm_session_custom: null,
+  am_session_blocks: [],
+  pm_session_blocks: [],
+  note2a: note || "",
+  isRaceDay,
+  isSunday: false,
+  ai_modified: false,
+  ai_modification_note: null,
+});
+
+const SPECIAL_PLAN_BLOCKS = [
+  {
+    id: "race_week",
+    label: "RACE WEEK",
+    weeks: [
+      {
+        id: "race_week_w1",
+        label: "RACE WEEK",
+        dates: "Apr 1 – Apr 5",
+        phase: "RACE WEEK",
+        subtitle: "Race execution protocol",
+        days: [
+          makeSpecialDay("WED", "Apr 1", "Travel Prep", "Morning creatine, 30min Z2 Echo Bike + SkiErg, Liquid IV. Depart 11am. Evening: light walk, simple carbs + protein, Liquid IV, Zinc + Mag 8:30pm, early bed."),
+          makeSpecialDay("THU", "Apr 2", "Travel Day", "Morning creatine, 30min Z2 Echo Bike + SkiErg, Liquid IV. Depart 11am. Evening: light walk, simple carbs + protein, Liquid IV, Zinc + Mag 8:30pm, early bed."),
+          makeSpecialDay("FRI", "Apr 3", "Shakeout Day", "Morning creatine, 20-30min Z2 SkiErg or easy run. Walk venue, visualize stations, feet up. Evening: Beetroot shot #1, simple carb dinner, Zinc + Mag 8:30pm, early bed. Tonight's sleep matters most."),
+          makeSpecialDay("SAT", "Apr 4", "Race Day 8:10am", "5:30am wake, Beetroot shot #2. Breakfast: oatmeal or white rice, banana, PB, 2 eggs, Liquid IV. 6:00am Creatine. 6:30am Sodium Bicarb + water. 6:30am Adderall. 7:00am arrive venue. 7:30am light activation warmup. 7:50am Wall Ball primer, wet hands, fatigued reps. 8:10am GUN. In-race: Neversecond C30+ CAF at Row or Farmers Carry station 5-6, carry 2 gels take 1 mid-race. Skip Beta Alanine.", { isRaceDay: true }),
+          makeSpecialDay("SUN", "Apr 5", "Rest", "Travel home. Full off day."),
+          makeSpecialDay("MON", "Apr 6", null, "Rest day."),
+          makeSpecialDay("TUE", "Apr 7", null, "Rest day."),
+        ],
+      },
+    ],
+  },
+  {
+    id: "recovery",
+    label: "RECOVERY",
+    weeks: [
+      {
+        id: "recovery_w1",
+        label: "RECOVERY WEEK",
+        dates: "Apr 6 – Apr 12",
+        phase: "RECOVERY",
+        subtitle: "Post-race recovery protocol",
+        days: [
+          makeSpecialDay("MON", "Apr 6", "Rest or Easy Walk", "Rest or 20min easy walk only. Assess soreness."),
+          makeSpecialDay("TUE", "Apr 7", "Light Z2 Erg", "Light Z2 erg 20min if feeling good. No running."),
+          makeSpecialDay("WED", "Apr 8", "Light Upper Body", "Light upper body only. No lower, no erg cardio."),
+          makeSpecialDay("THU", "Apr 9", "Z2 Erg / Walk", "Z2 erg or easy walk 20-30min. WHOOP dependent."),
+          makeSpecialDay("FRI", "Apr 10", "Rest or Mobility", "Rest or light mobility."),
+          makeSpecialDay("SAT", "Apr 11", "Optional Easy Z2 Run", "Optional easy Z2 run 20-25min. Shakeout before Monday."),
+          makeSpecialDay("SUN", "Apr 12", "Rest", "Rest. Full reset. Block starts tomorrow."),
+        ],
+      },
+    ],
+  },
+];
+
+const normalizePhaseLabel = (value) => {
+  const normalized = String(value || "").trim().toUpperCase();
+  if (normalized === "PEAK & TEST") return "PEAK";
+  return normalized;
+};
+
+const PLAN_BLOCK_ORDER = ["RACE WEEK", "RECOVERY", "ACCUMULATION", "BASE REBUILD", "INTENSIFICATION", "PEAK"];
+
+const cloneSpecialBlock = (block) => ({
+  ...block,
+  weeks: (block.weeks || []).map((week) => ({
+    ...week,
+    days: (week.days || []).map((day) => ({ ...day })),
+  })),
+});
+
+const normalizePlanBlocks = (blocks = []) => {
+  const regularBlocks = blocks.map((block) => ({
+    ...block,
+    label: normalizePhaseLabel(block.label || block.id),
+    weeks: (block.weeks || []).map((week) => ({
+      ...week,
+      phase: normalizePhaseLabel(week.phase),
+    })),
+  }));
+
+  const merged = [...SPECIAL_PLAN_BLOCKS.map(cloneSpecialBlock), ...regularBlocks];
+  return merged.sort((a, b) => {
+    const ai = PLAN_BLOCK_ORDER.indexOf(a.label);
+    const bi = PLAN_BLOCK_ORDER.indexOf(b.label);
+    return (ai === -1 ? 99 : ai) - (bi === -1 ? 99 : bi);
+  });
+};
+
 const resolveSessionKey = (sessionName, dayRow) => {
   const s = String(sessionName || "").toUpperCase();
   if (dayRow?.isRaceDay || s.includes("RACE")) return "race";
@@ -1674,15 +1776,16 @@ export default function App() {
         firstWeekDays: data.blocks?.[0]?.weeks?.[0]?.days?.length,
         error: data.error,
       }));
-      const hasDays = data.blocks?.some(b => b.weeks?.some(w => w.days?.length > 0));
+      const normalizedBlocks = normalizePlanBlocks(data.blocks || []);
+      const hasDays = normalizedBlocks?.some(b => b.weeks?.some(w => w.days?.length > 0));
       console.log("[fetchPlan] hasDays:", hasDays, "| res.ok:", res.ok, "| will update state:", res.ok && hasDays);
       if (res.ok && hasDays) {
-        setPlanBlocks(data.blocks);
-        const hasCurrentSelection = data.blocks.some(
+        setPlanBlocks(normalizedBlocks);
+        const hasCurrentSelection = normalizedBlocks.some(
           (b) => b.id === blockId && (b.weeks || []).some((w) => w.id === weekId)
         );
         if (!hasCurrentSelection) {
-          const target = selectDefaultPlanPosition(data.blocks);
+          const target = selectDefaultPlanPosition(normalizedBlocks);
           if (target) {
             setBlockId(target.blockId);
             setWeekId(target.weekId);
@@ -2051,6 +2154,7 @@ export default function App() {
   const weeks   = block?.weeks || [];
   const week    = weeks.find(w => w.id === weekId) || weeks[0] || null;
   const dayData = (selDay && week) ? week.days.find(d => d.day === selDay) : null;
+  const phaseColor = SPECIAL_BLOCK_ACCENTS[block?.id] || C.green;
 
   const getSundayWo = (wid) => {
     const c = sundayChoice[wid];
@@ -2627,7 +2731,7 @@ export default function App() {
           </div>
 
           <div style={{ marginTop:16, marginBottom:16 }}>
-            <div style={{ fontFamily:C.fm, fontSize:9, color:C.green, letterSpacing:3, textTransform:"uppercase", marginBottom:4 }}>{week.phase}</div>
+            <div style={{ fontFamily:C.fm, fontSize:9, color:phaseColor, letterSpacing:3, textTransform:"uppercase", marginBottom:4 }}>{week.phase}</div>
             <div style={{ fontFamily:C.ff, fontSize:28, color:C.text, letterSpacing:1 }}>{week.label}</div>
             <div style={{ fontFamily:C.fm, fontSize:9, color:C.muted, letterSpacing:1, marginTop:2 }}>{week.subtitle}</div>
           </div>
