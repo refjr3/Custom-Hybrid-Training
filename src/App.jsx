@@ -2153,7 +2153,16 @@ export default function App() {
   const block   = planBlocks.find(b => b.id === blockId) || planBlocks[0] || null;
   const weeks   = block?.weeks || [];
   const week    = weeks.find(w => w.id === weekId) || weeks[0] || null;
-  const dayData = (selDay && week) ? week.days.find(d => d.day === selDay) : null;
+  const weekDays = week?.days || [];
+  const todayDateLabel = new Date().toLocaleDateString("en-US", { month: "short", day: "numeric" });
+  const isCurrentRealWeek = weekDays.some((d) => (d?.date || "").trim() === todayDateLabel);
+  const defaultSelectedDay = weekDays.length
+    ? (isCurrentRealWeek
+      ? (weekDays.find((d) => (d?.date || "").trim() === todayDateLabel)?.day || weekDays[0]?.day)
+      : weekDays[0]?.day)
+    : null;
+  const selectedDayKey = selDay || defaultSelectedDay;
+  const dayData = selectedDayKey ? (weekDays.find((d) => d.day === selectedDayKey) || null) : null;
   const phaseColor = SPECIAL_BLOCK_ACCENTS[block?.id] || C.green;
 
   const getSundayWo = (wid) => {
@@ -2224,7 +2233,7 @@ export default function App() {
   const selectedKeyPoints = selectedWorkout?.steps?.filter((s) => !s.startsWith("—")).slice(0, 5) || [];
   const selectedWhoopRule = dayData?.note || "Execute as programmed.";
   const selectedWhoopGate = whoopLabel(whoopData?.recovery?.score ?? 0);
-  const selectedDayName = dayData?.day || selDay || "";
+  const selectedDayName = dayData?.day || selectedDayKey || "";
 
   const weeklyAiAdjustments = (week?.days || [])
     .filter((d) => d?.ai_modified === true)
@@ -2245,7 +2254,9 @@ export default function App() {
 
   const todayDayNames = ["SUN","MON","TUE","WED","THU","FRI","SAT"];
   const todayDayName  = todayDayNames[new Date().getDay()];
-  const todayDayData  = week ? (week.days.find(d => d.day === todayDayName) || week.days[0]) : null;
+  const todayDayData  = week
+    ? (weekDays.find((d) => (d?.date || "").trim() === todayDateLabel) || weekDays[0])
+    : null;
   const todayAm  = todayDayData ? getEffAm(todayDayData) : null;
   const todayPm  = todayDayData?.pm || null;
   const flaggedBio = biomarkers.filter(b => b.flag === "HIGH" || b.flag === "LOW");
@@ -2372,14 +2383,13 @@ export default function App() {
         }).toUpperCase();
         const athleteName = profile?.name?.toUpperCase() || "ATHLETE";
         const weekDays = week?.days || [];
-        const todayDateLabel = new Date().toLocaleDateString("en-US", { month: "short", day: "numeric" });
         const tomorrowDateObj = new Date();
         tomorrowDateObj.setDate(tomorrowDateObj.getDate() + 1);
         const tomorrowDateLabel = tomorrowDateObj.toLocaleDateString("en-US", { month: "short", day: "numeric" });
-        const selectedDayIndex = selDay ? weekDays.findIndex((d) => d.day === selDay) : -1;
+        const selectedDayIndex = dayData ? weekDays.findIndex((d) => d.day === dayData.day) : -1;
         const todayIndexInWeek = selectedDayIndex >= 0
           ? selectedDayIndex
-          : weekDays.findIndex((d) => (d?.date || "").trim() === todayDateLabel || d.day === todayDayName);
+          : weekDays.findIndex((d) => (d?.date || "").trim() === todayDateLabel);
         const todayCardData = todayIndexInWeek >= 0 ? weekDays[todayIndexInWeek] : (todayDayData || weekDays[0] || null);
         const todaySessionName = todayCardData ? getSessionNameForDay(todayCardData, "am") : null;
         const todaySessionKey = todayCardData?.am_session || todayCardData?.am;
@@ -2740,10 +2750,10 @@ export default function App() {
             {(week?.days || []).map((d) => {
               const sessionName = getSessionNameForDay(d, "am");
               const meta = deriveSessionMeta(sessionName, d);
-              const isSelected = selDay === d.day;
+              const isSelected = !!dayData && dayData.day === d.day && dayData.date === d.date;
               const completed = isDayCompleted(d);
               const dateLabel = d?.date?.split(" ")[1] || d?.date || "";
-              const isToday = d.day === todayDayName;
+              const isToday = isCurrentRealWeek && (d?.date || "").trim() === todayDateLabel;
               const cardTag = getCardTag(d);
               const displayTag = String(cardTag || "SESSION").toUpperCase().slice(0, 8);
               const isRest = !cardTag || cardTag === "REST";
