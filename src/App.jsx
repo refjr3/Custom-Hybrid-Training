@@ -1519,6 +1519,10 @@ export default function App() {
   const [whoopData, setWhoopData]       = useState(null);
   const [whoopLoading, setWhoopLoading] = useState(true);
   const [whoopConnected, setWhoopConnected] = useState(false);
+  const [stravaConnected, setStravaConnected] = useState(false);
+  const [stravaZ2Loading, setStravaZ2Loading] = useState(false);
+  const [stravaZ2Error, setStravaZ2Error] = useState("");
+  const [stravaZ2Data, setStravaZ2Data] = useState(null);
   const [recentActivities, setRecentActivities] = useState([]);
   const [biomarkers, setBiomarkers] = useState([]);
   const [planBlocks, setPlanBlocks] = useState([]);
@@ -1643,8 +1647,15 @@ export default function App() {
     if (profile.connected_wearables?.garmin) {
       setGarminConnected(true);
     }
+    if (profile.connected_wearables?.strava) {
+      setStravaConnected(true);
+    }
     if (params.get("garmin_connected") === "true") {
       setGarminConnected(true);
+      window.history.replaceState({}, "", "/");
+    }
+    if (params.get("strava_connected") === "true") {
+      setStravaConnected(true);
       window.history.replaceState({}, "", "/");
     }
 
@@ -1654,6 +1665,7 @@ export default function App() {
     fetchPlan(session?.access_token);
     fetchGarminActivities();
     fetchUnifiedMetrics();
+    fetchStravaWeeklyZ2();
   }, [profile]);
 
   const fetchWhoopData = async () => {
@@ -1715,6 +1727,33 @@ export default function App() {
         .limit(90);
       if (data) setUnifiedMetrics(data);
     } catch (_) {}
+  };
+
+  const fetchStravaWeeklyZ2 = async () => {
+    if (!session?.access_token) return;
+    setStravaZ2Loading(true);
+    setStravaZ2Error("");
+    try {
+      const res = await fetch("/api/strava/weekly-z2", {
+        headers: { Authorization: `Bearer ${session.access_token}` },
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        if (data.error === "strava_not_connected" || data.error === "strava_reconnect_required") {
+          setStravaConnected(false);
+          setStravaZ2Data(null);
+          setStravaZ2Error("");
+          return;
+        }
+        throw new Error(data.error || "Failed loading Strava Z2 progress");
+      }
+      setStravaConnected(true);
+      setStravaZ2Data(data);
+    } catch (e) {
+      setStravaZ2Error(e.message || "Failed loading Strava Z2 progress");
+    } finally {
+      setStravaZ2Loading(false);
+    }
   };
 
   const parseDateLabelToUtc = (label, year = new Date().getUTCFullYear()) => {
@@ -2376,6 +2415,16 @@ export default function App() {
           padding: 20,
           ...C.glass,
         };
+        const z2TotalMinutes = Math.max(0, Number(stravaZ2Data?.totalMinutes || 0));
+        const z2TargetMinutes = Math.max(1, Number(stravaZ2Data?.targetMinutes || 180));
+        const z2Progress = Math.max(0, Math.min(100, Math.round((z2TotalMinutes / z2TargetMinutes) * 100)));
+        const z2Activities = Array.isArray(stravaZ2Data?.activities) ? stravaZ2Data.activities : [];
+        const formatMinutesLabel = (mins) => {
+          const safe = Math.max(0, Number(mins || 0));
+          const hours = Math.floor(safe / 60);
+          const minutes = safe % 60;
+          return `${hours}h ${String(minutes).padStart(2, "0")}min`;
+        };
         const headerDate = new Date().toLocaleDateString("en-US", {
           weekday: "long",
           month: "long",
@@ -2571,6 +2620,101 @@ export default function App() {
                   {whoopLabel(rec)}
                 </div>
               </div>
+            </div>
+
+            <div style={cardGlass}>
+              <div style={{ fontFamily: C.fm, fontSize: 8, color: C.cyan, letterSpacing: 2.5, textTransform: "uppercase", marginBottom: 10 }}>
+                Z2 THIS WEEK
+              </div>
+              {stravaZ2Loading ? (
+                <div style={{ fontFamily: C.fm, fontSize: 10, color: C.muted, letterSpacing: 2 }}>
+                  LOADING Z2 DATA...
+                </div>
+              ) : !stravaConnected ? (
+                <a
+                  href="/api/strava/login"
+                  style={{
+                    display: "inline-block",
+                    background: C.cyan,
+                    color: "#000",
+                    border: "none",
+                    borderRadius: 8,
+                    padding: "10px 14px",
+                    fontFamily: C.fm,
+                    fontSize: 10,
+                    letterSpacing: 2,
+                    textDecoration: "none",
+                    textTransform: "uppercase",
+                  }}
+                >
+                  CONNECT STRAVA
+                </a>
+              ) : stravaZ2Error ? (
+                <div>
+                  <div style={{ fontFamily: C.fm, fontSize: 10, color: C.red, letterSpacing: 1.2 }}>{stravaZ2Error}</div>
+                  <button
+                    onClick={fetchStravaWeeklyZ2}
+                    style={{
+                      marginTop: 10,
+                      background: "transparent",
+                      border: `1px solid ${C.border}`,
+                      borderRadius: 8,
+                      padding: "8px 12px",
+                      color: C.text,
+                      fontFamily: C.fm,
+                      fontSize: 9,
+                      letterSpacing: 1.5,
+                      cursor: "pointer",
+                    }}
+                  >
+                    RETRY
+                  </button>
+                </div>
+              ) : (
+                <>
+                  <div style={{ width: "100%", height: 8, borderRadius: 999, background: "#1D1D1D", overflow: "hidden", marginBottom: 10 }}>
+                    <div style={{ width: `${z2Progress}%`, height: "100%", background: "#00F3FF", borderRadius: 999, transition: "width 0.4s ease" }} />
+                  </div>
+                  <div style={{ fontFamily: C.ff, fontSize: 18, color: C.text, marginBottom: 10 }}>
+                    {formatMinutesLabel(z2TotalMinutes)} / {formatMinutesLabel(z2TargetMinutes)}
+                  </div>
+                  <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+                    {z2Activities.length === 0 ? (
+                      <div style={{ fontFamily: C.fm, fontSize: 9, color: C.muted, letterSpacing: 1.2 }}>
+                        No Zone 2 minutes logged yet this week.
+                      </div>
+                    ) : (
+                      z2Activities.map((activity, idx) => (
+                        <div
+                          key={`${activity?.name || "activity"}-${activity?.date || idx}`}
+                          style={{
+                            display: "flex",
+                            justifyContent: "space-between",
+                            alignItems: "center",
+                            gap: 8,
+                            padding: "8px 10px",
+                            borderRadius: 10,
+                            background: "rgba(255,255,255,0.03)",
+                            border: "1px solid rgba(255,255,255,0.08)",
+                          }}
+                        >
+                          <div style={{ minWidth: 0 }}>
+                            <div style={{ fontFamily: C.fs, fontSize: 12, color: C.text, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
+                              {activity?.name || "Activity"}
+                            </div>
+                            <div style={{ fontFamily: C.fm, fontSize: 8, color: C.muted, letterSpacing: 1.5, marginTop: 2 }}>
+                              {activity?.type || "Workout"} · {activity?.date || "This week"}
+                            </div>
+                          </div>
+                          <div style={{ fontFamily: C.fm, fontSize: 9, color: C.cyan, letterSpacing: 1.5, whiteSpace: "nowrap" }}>
+                            {Math.max(0, Number(activity?.z2Minutes || 0))} MIN
+                          </div>
+                        </div>
+                      ))
+                    )}
+                  </div>
+                </>
+              )}
             </div>
 
             <div style={cardGlass}>
