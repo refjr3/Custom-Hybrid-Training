@@ -21,6 +21,14 @@ const parseCookies = (header = "") => {
   return out;
 };
 
+const MASK = "[REDACTED]";
+const maskValue = (value) => {
+  if (!value) return null;
+  const str = String(value);
+  if (str.length <= 8) return MASK;
+  return `${str.slice(0, 4)}...${str.slice(-4)}`;
+};
+
 const startOfWeekMondayUtc = (now = new Date()) => {
   const d = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate()));
   const day = d.getUTCDay();
@@ -132,11 +140,42 @@ export default async function handler(req, res) {
 
   const appUserId = authData.user.id;
 
-  const { data: profile, error: profileErr } = await supabase
+  let profile = null;
+  let profileErr = null;
+  const primaryProfileRes = await supabase
     .from("user_profiles")
     .select("connected_wearables,strava_access_token,strava_refresh_token,strava_token_expires_at")
     .eq("user_id", appUserId)
     .single();
+  profile = primaryProfileRes.data || null;
+  profileErr = primaryProfileRes.error || null;
+
+  if (profileErr && /strava_(access|refresh)_token|strava_token_expires_at/i.test(profileErr.message || "")) {
+    // Backward-compatible path for environments that haven't applied migration 012 yet.
+    const fallbackRes = await supabase
+      .from("user_profiles")
+      .select("connected_wearables")
+      .eq("user_id", appUserId)
+      .single();
+    profile = fallbackRes.data || null;
+    profileErr = fallbackRes.error || null;
+  }
+
+  console.log("[strava/weekly-z2] profile query result", {
+    appUserId,
+    hasProfile: Boolean(profile),
+    profileErr: profileErr ? { code: profileErr.code, message: profileErr.message } : null,
+    hasTopLevelAccessToken: Boolean(profile?.strava_access_token),
+    hasTopLevelRefreshToken: Boolean(profile?.strava_refresh_token),
+    topLevelExpiresAt: profile?.strava_token_expires_at || null,
+    hasConnectedWearables: Boolean(profile?.connected_wearables),
+    connectedWearablesKeys: Object.keys(profile?.connected_wearables || {}),
+    hasWearablesAccessToken: Boolean(profile?.connected_wearables?.strava_access_token),
+    hasWearablesRefreshToken: Boolean(profile?.connected_wearables?.strava_refresh_token),
+    wearablesExpiresAt: profile?.connected_wearables?.strava_token_expires_at || null,
+    accessTokenPreview: maskValue(profile?.strava_access_token || profile?.connected_wearables?.strava_access_token),
+    refreshTokenPreview: maskValue(profile?.strava_refresh_token || profile?.connected_wearables?.strava_refresh_token),
+  });
 
   if (profileErr) return res.status(500).json({ error: "profile_read_failed" });
 
@@ -147,6 +186,7 @@ export default async function handler(req, res) {
   const nowEpoch = Math.floor(Date.now() / 1000);
 
   if (!accessToken && !refreshToken) {
+    console.warn("[strava/weekly-z2] no stored Strava tokens found", { appUserId });
     return res.status(401).json({ error: "strava_not_connected" });
   }
 
@@ -162,6 +202,10 @@ export default async function handler(req, res) {
   if (!accessToken || !expiresAt || nowEpoch >= (expiresAt - 60)) {
     const refreshed = await refreshStravaTokens(refreshToken);
     if (!refreshed?.access_token) {
+      console.warn("[strava/weekly-z2] token refresh failed", {
+        appUserId,
+        hasRefreshToken: Boolean(refreshToken),
+      });
       return res.status(401).json({ error: "strava_reconnect_required" });
     }
     accessToken = refreshed.access_token;
@@ -186,6 +230,11 @@ export default async function handler(req, res) {
         strava_refresh_token: refreshToken,
         strava_token_expires_at: new Date(expiresAt * 1000).toISOString(),
       }, { onConflict: "user_id" });
+    console.log("[strava/weekly-z2] preflight refresh persisted", {
+      appUserId,
+      tokenExpiresAt: new Date(expiresAt * 1000).toISOString(),
+      accessTokenPreview: maskValue(accessToken),
+    });
     writeTokenCookies(refreshed);
   }
 
@@ -217,6 +266,11 @@ export default async function handler(req, res) {
           strava_refresh_token: refreshToken,
           strava_token_expires_at: new Date(expiresAt * 1000).toISOString(),
         }, { onConflict: "user_id" });
+      console.log("[strava/weekly-z2] retry refresh persisted", {
+        appUserId,
+        tokenExpiresAt: new Date(expiresAt * 1000).toISOString(),
+        accessTokenPreview: maskValue(accessToken),
+      });
       writeTokenCookies(refreshed);
       activitiesRes = await fetchActivities(accessToken, afterEpoch, beforeEpoch);
     }
@@ -226,8 +280,7 @@ export default async function handler(req, res) {
     return res.status(502).json({ error: "strava_activities_failed" });
   }
 
-  const activitiesPayload = await activitiesRes.json().catch(() => []);
-  const activities = Array.isArray(activitiesPayload) ? activitiesPayload : [];
+  const activities = Array.isArray(activitiesRes.activities) ? activitiesRes.activities : [];
 
   let totalSeconds = 0;
   const summary = [];

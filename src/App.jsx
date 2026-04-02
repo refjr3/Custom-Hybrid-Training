@@ -1647,7 +1647,11 @@ export default function App() {
     if (profile.connected_wearables?.garmin) {
       setGarminConnected(true);
     }
-    if (profile.connected_wearables?.strava) {
+    if (
+      profile.connected_wearables?.strava
+      || Boolean(profile.strava_access_token)
+      || Boolean(profile.connected_wearables?.strava_access_token)
+    ) {
       setStravaConnected(true);
     }
     if (params.get("garmin_connected") === "true") {
@@ -2632,7 +2636,7 @@ export default function App() {
                 </div>
               ) : !stravaConnected ? (
                 <a
-                  href="/api/strava/login"
+                  href={session?.user?.id ? `/api/strava/login?uid=${encodeURIComponent(session.user.id)}` : "/api/strava/login"}
                   style={{
                     display: "inline-block",
                     background: C.cyan,

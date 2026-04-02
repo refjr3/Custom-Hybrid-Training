@@ -37,6 +37,7 @@ export default async function handler(req, res) {
 
   const cookies = parseCookies(req.headers.cookie || "");
   const expectedState = cookies.strava_state;
+  const targetUserId = cookies.strava_uid || TARGET_USER_ID;
   if (!expectedState || !state || expectedState !== state) {
     return res.redirect(302, `${APP_BASE_URL}/?error=strava_bad_state`);
   }
@@ -55,49 +56,97 @@ export default async function handler(req, res) {
 
     const tokens = await tokenRes.json().catch(() => ({}));
     if (!tokenRes.ok || !tokens?.access_token) {
+      console.error("[strava/callback] token exchange failed", {
+        status: tokenRes.status,
+        body: tokens,
+      });
       return res.redirect(302, `${APP_BASE_URL}/?error=strava_token_exchange_failed`);
     }
 
     const expiresAt = Number(tokens.expires_at || 0);
-    const { data: existingProfile } = await supabase
+    const { data: existingProfile, error: existingProfileErr } = await supabase
       .from("user_profiles")
-      .select("connected_wearables")
-      .eq("user_id", TARGET_USER_ID)
+      .select("user_id,connected_wearables")
+      .eq("user_id", targetUserId)
       .single();
+    console.log("[strava/callback] profile lookup", {
+      userId: targetUserId,
+      found: !!existingProfile,
+      error: existingProfileErr?.message || null,
+    });
+
+    if (existingProfileErr && existingProfileErr.code !== "PGRST116") {
+      console.error("[strava/callback] profile lookup failed", existingProfileErr);
+      return res.redirect(302, `${APP_BASE_URL}/?error=strava_profile_read_failed`);
+    }
+    if (!existingProfile) {
+      console.error("[strava/callback] profile row missing", { userId: targetUserId });
+      return res.redirect(302, `${APP_BASE_URL}/?error=strava_profile_missing`);
+    }
+
     const existingWearables = existingProfile?.connected_wearables || {};
     const connected = {
       ...existingWearables,
       strava: true,
       strava_connected_at: new Date().toISOString(),
       strava_athlete_id: tokens?.athlete?.id || null,
+      strava_access_token: tokens.access_token,
+      strava_refresh_token: tokens.refresh_token || null,
+      strava_token_expires_at: expiresAt ? new Date(expiresAt * 1000).toISOString() : null,
     };
 
-    const { error: upsertErr } = await supabase
+    const { data: connectedUpdate, error: connectedErr } = await supabase
       .from("user_profiles")
-      .upsert(
-        {
-          user_id: TARGET_USER_ID,
-          connected_wearables: connected,
-          strava_access_token: tokens.access_token,
-          strava_refresh_token: tokens.refresh_token || null,
-          strava_token_expires_at: expiresAt ? new Date(expiresAt * 1000).toISOString() : null,
-        },
-        { onConflict: "user_id" }
-      );
+      .update({ connected_wearables: connected })
+      .eq("user_id", targetUserId)
+      .select("user_id");
 
-    if (upsertErr) {
+    console.log("[strava/callback] connected_wearables update response", {
+      updatedRows: connectedUpdate?.length || 0,
+      error: connectedErr?.message || null,
+    });
+
+    if (connectedErr || !connectedUpdate?.length) {
+      console.error("[strava/callback] connected_wearables update failed", connectedErr || { userId: targetUserId });
       return res.redirect(302, `${APP_BASE_URL}/?error=strava_profile_write_failed`);
     }
+
+    // Best-effort mirror to dedicated columns if they exist.
+    const { error: tokenColumnsErr } = await supabase
+      .from("user_profiles")
+      .update({
+        strava_access_token: tokens.access_token,
+        strava_refresh_token: tokens.refresh_token || null,
+        strava_token_expires_at: expiresAt ? new Date(expiresAt * 1000).toISOString() : null,
+      })
+      .eq("user_id", targetUserId);
+    if (tokenColumnsErr) {
+      console.warn("[strava/callback] token column mirror skipped", tokenColumnsErr.message);
+    }
+
+    const { data: verifyRow, error: verifyErr } = await supabase
+      .from("user_profiles")
+      .select("user_id,connected_wearables")
+      .eq("user_id", targetUserId)
+      .single();
+    console.log("[strava/callback] verification", {
+      userId: targetUserId,
+      hasStravaFlag: !!verifyRow?.connected_wearables?.strava,
+      hasAccessTokenInWearables: !!verifyRow?.connected_wearables?.strava_access_token,
+      error: verifyErr?.message || null,
+    });
 
     const cookieOpts = "Path=/; HttpOnly; Secure; SameSite=Lax";
     res.setHeader("Set-Cookie", [
       `strava_access=${tokens.access_token}; ${cookieOpts}; Max-Age=21600`,
       `strava_refresh=${tokens.refresh_token || ""}; ${cookieOpts}; Max-Age=2592000`,
       "strava_state=; Path=/; HttpOnly; Secure; SameSite=Lax; Max-Age=0",
+      "strava_uid=; Path=/; HttpOnly; Secure; SameSite=Lax; Max-Age=0",
     ]);
 
     return res.redirect(302, `${APP_BASE_URL}/?strava_connected=true`);
-  } catch {
+  } catch (err) {
+    console.error("[strava/callback] exception", err);
     return res.redirect(302, `${APP_BASE_URL}/?error=strava_exception`);
   }
 }
