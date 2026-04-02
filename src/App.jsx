@@ -2420,7 +2420,7 @@ export default function App() {
           ...C.glass,
         };
         const z2TotalMinutes = Math.max(0, Number(stravaZ2Data?.totalMinutes || 0));
-        const z2TargetMinutes = Math.max(1, Number(stravaZ2Data?.targetMinutes || 180));
+        const z2TargetMinutes = Math.max(1, Number(stravaZ2Data?.targetMinutes || 360));
         const z2Progress = Math.max(0, Math.min(100, Math.round((z2TotalMinutes / z2TargetMinutes) * 100)));
         const z2Activities = Array.isArray(stravaZ2Data?.activities) ? stravaZ2Data.activities : [];
         const formatMinutesLabel = (mins) => {

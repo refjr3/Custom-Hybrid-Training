@@ -305,7 +305,7 @@ export default async function handler(req, res) {
 
   return res.status(200).json({
     totalMinutes: Math.round(totalSeconds / 60),
-    targetMinutes: 180,
+    targetMinutes: 360,
     activities: summary,
   });
 }
