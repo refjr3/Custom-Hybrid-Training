@@ -15,7 +15,7 @@ const START_DATE = new Date("2026-04-13T12:00:00.000Z");
 const STANDARD_TEMPLATE = [
   { day: "MON", label: "HYROX + Plyos" },
   { day: "TUE", label: "Z2 Erg + Mobility" },
-  { day: "WED", label: "Upper Heavy + Z2 Erg" },
+  { day: "WED", label: "Full Body + Z2 Erg" },
   { day: "THU", label: "Z2 Run + Mobility" },
   { day: "FRI", label: "Upper Moderate" },
   { day: "SAT", label: "Threshold" },
@@ -26,7 +26,7 @@ const STANDARD_TEMPLATE = [
 const BRICK_TEMPLATE = [
   { day: "MON", label: "HYROX + Plyos" },
   { day: "TUE", label: "Z2 Run + Mobility" },
-  { day: "WED", label: "Upper Heavy + Z2 Erg" },
+  { day: "WED", label: "Full Body + Z2 Erg" },
   { day: "THU", label: "Z2 Run + Mobility" },
   { day: "FRI", label: "Upper Moderate" },
   { day: "SAT", label: "Track" },
@@ -56,8 +56,16 @@ const HYROX = {
   deload: "HYROX: Deload — cut volume 50%. Light loads only.",
 };
 
-const UPPER_HEAVY = {
-  base: `Upper Heavy (establish baseline loads):
+const WEDNESDAY = {
+  base: `FULL BODY + Z2 ERG — Phase 1 (establish baseline loads, <80min total)
+
+LOWER BLOCK (25min):
+RDL 3×8 @ 60-65% — controlled descent, full hip hinge
+Bulgarian Split Squat DB 3×8ea — moderate weight, full range
+Single Leg Glute Bridge 3×12ea — bodyweight
+Force Absorption Drop to Split Squat 3×5ea — bodyweight
+
+UPPER BLOCK (35min):
 Barbell Floor Press 4×5
 Weighted Pull-ups 4×5
 Barbell Row 4×6
@@ -65,81 +73,126 @@ Landmine Press 3×8
 Dips 3×10
 Dead Hang 3×max
 DB Lateral Raises 3×15
-Then Z2 erg cap to strain target. Superset to keep under 60min.`,
-  accum: `Upper Heavy (add load to all barbell movements):
-Barbell Floor Press 4×5
-Weighted Pull-ups 4×5
-Barbell Row 4×6
+
+Then Z2 erg cap to strain target. Superset upper block to stay under 80min total.`,
+
+  accum: `FULL BODY + Z2 ERG — Phase 2 (add load all movements, <80min total)
+
+LOWER BLOCK (25min):
+RDL 3×8 — add load vs Phase 1
+Bulgarian Split Squat DB 3×8ea — add load
+DB Step Ups 3×10ea
+Force Absorption Drop to Split Squat 3×6ea — add light load
+Single Leg Glute Bridge 3×12ea — add load or elevate foot
+
+UPPER BLOCK (35min):
+Barbell Floor Press 4×5 — add load
+Weighted Pull-ups 4×5 — add load
+Barbell Row 4×6 — add load
 Landmine Press 3×8
 Dips 3×10
 Dead Hang 3×max
 DB Lateral Raises 3×15
-Then Z2 erg cap to strain target. Superset to keep under 60min.`,
-  intens: `Upper Heavy (max strength — heaviest loads):
-Barbell Floor Press 4×5
-Weighted Pull-ups 4×5
-Barbell Row 4×6
+
+Then Z2 erg cap to strain target. Superset upper block to stay under 80min total.`,
+
+  intens: `FULL BODY + Z2 ERG — Phase 3 (max strength, heaviest loads, <80min total)
+
+LOWER BLOCK (25min):
+RDL 3×8 — heaviest loads
+Bulgarian Split Squat DB 3×8ea — heaviest loads
+DB Step Ups 3×10ea — add load
+Force Absorption Drop to Split Squat 3×6ea — moderate load
+Depth Jumps 3×5 — full rest between sets
+Single Leg Glute Bridge 3×12ea — weighted
+
+UPPER BLOCK (35min):
+Barbell Floor Press 4×5 — heaviest loads
+Weighted Pull-ups 4×5 — heaviest loads
+Barbell Row 4×6 — heaviest loads
 Landmine Press 3×8
 Weighted Dips 3×10
 Dead Hang 3×max
 DB Lateral Raises 3×15
-Then Z2 erg cap to strain target. Superset to keep under 60min.`,
-  peak: `Upper Heavy (maintain intensity):
-Barbell Floor Press 4×5
-Weighted Pull-ups 4×5
-Barbell Row 4×6
+
+Then Z2 erg cap to strain target. Superset upper block to stay under 80min total.`,
+
+  peak: `FULL BODY + Z2 ERG — Phase 4 (maintain intensity, <80min total)
+
+LOWER BLOCK (25min):
+RDL 3×8 — maintain Phase 3 loads
+Bulgarian Split Squat DB 3×8ea — maintain loads
+DB Step Ups 3×10ea — maintain loads
+Force Absorption Drop to Split Squat 3×5ea — maintain
+Depth Jumps 3×4 — max effort, full rest between
+Single Leg Glute Bridge 3×12ea — weighted
+
+UPPER BLOCK (35min):
+Barbell Floor Press 4×5 — maintain loads
+Weighted Pull-ups 4×5 — maintain loads
+Barbell Row 4×6 — maintain loads
 Landmine Press 3×8
 Weighted Dips 3×10
 Dead Hang 3×max
 DB Lateral Raises 3×15
-Then Z2 erg cap to strain target. Superset to keep under 60min.`,
-  deload: `Upper Heavy (deload — cut volume 50%):
+
+Then Z2 erg cap to strain target. Superset upper block to stay under 80min total.`,
+
+  deload: `FULL BODY + Z2 ERG — Phase 4 Deload (cut all volume 50%, <50min total)
+
+LOWER BLOCK:
+RDL 2×8 — 50% load
+Bulgarian Split Squat DB 2×8ea — 50% load
+Single Leg Glute Bridge 2×12ea
+No depth jumps, no step ups
+
+UPPER BLOCK:
 Barbell Floor Press 2×5
 Weighted Pull-ups 2×5
 Barbell Row 2×6
 Landmine Press 2×8
-Then light Z2 erg cap. Under 40min total.`,
+
+Light Z2 erg cap after. Under 50min total.`,
 };
 
-const UPPER_MODERATE = {
-  base: `Upper Moderate (establish baseline):
+const FRIDAY = {
+  base: `UPPER MODERATE — Phase 1 (baseline loads, 35min, no cardio)
 KB Strict Press 3×10
 Incline DB Bench 3×10
 Single Arm KB Row 3×12
 Farmers Carry 4×30m
 Band Pull-Aparts 3×20
-DB Lateral Raises 3×15
-No cardio. Done in 35min.`,
-  accum: `Upper Moderate (add load, carry to 40m):
+DB Lateral Raises 3×15`,
+
+  accum: `UPPER MODERATE — Phase 2 (add load, carry 40m, 35min, no cardio)
 KB Strict Press 3×10
 Incline DB Bench 3×10
 Single Arm KB Row 3×12
 Farmers Carry 4×40m
 Band Pull-Aparts 3×20
-DB Lateral Raises 3×15
-No cardio. Done in 35min.`,
-  intens: `Upper Moderate (heaviest loads, carry to 50m):
+DB Lateral Raises 3×15`,
+
+  intens: `UPPER MODERATE — Phase 3 (heaviest loads, carry 50m, 35min, no cardio)
 KB Strict Press 3×10
 Incline DB Bench 3×10
 Single Arm KB Row 3×12
 Farmers Carry 4×50m
 Band Pull-Aparts 3×20
-DB Lateral Raises 3×15
-No cardio. Done in 35min.`,
-  peak: `Upper Moderate (maintain intensity):
+DB Lateral Raises 3×15`,
+
+  peak: `UPPER MODERATE — Phase 4 (maintain loads, carry 50m, 35min, no cardio)
 KB Strict Press 3×10
 Incline DB Bench 3×10
 Single Arm KB Row 3×12
 Farmers Carry 4×50m
 Band Pull-Aparts 3×20
-DB Lateral Raises 3×15
-No cardio. Done in 35min.`,
-  deload: `Upper Moderate (deload — cut volume 50%):
+DB Lateral Raises 3×15`,
+
+  deload: `UPPER MODERATE — Deload (cut 50%, 20min, no cardio)
 KB Strict Press 2×10
 Incline DB Bench 2×10
 Single Arm KB Row 2×12
-Farmers Carry 2×30m
-No cardio. Done in 20min.`,
+Farmers Carry 2×30m`,
 };
 
 const SAT_SESSIONS = {
@@ -167,7 +220,7 @@ const WL_MAP = {
   "HYROX + Plyos": "FOR TIME — Hyrox Full Runs Half Stations",
   "Z2 Erg + Mobility": "ZONE 2 — Easy Aerobic",
   "Z2 Run + Mobility": "ZONE 2 — Easy Aerobic",
-  "Upper Heavy + Z2 Erg": "STRENGTH A — Full Body Power",
+  "Full Body + Z2 Erg": "STRENGTH A — Full Body Power",
   "Upper Moderate": "STRENGTH C — Upper Dominant",
   "Threshold": "THRESHOLD — 10x2 Min",
   "Track": "THRESHOLD — 10x2 Min",
@@ -259,13 +312,13 @@ const buildPlanRows = () => {
             : "Z2 Run + Mobility — HR cap 133–148bpm. Static stretch after.";
           break;
         case 2:
-          sessionNote = UPPER_HEAVY[phaseKey];
+          sessionNote = WEDNESDAY[phaseKey];
           break;
         case 3:
           sessionNote = "Z2 Run + Mobility — HR cap 133–148bpm strict. Static stretch after.";
           break;
         case 4:
-          sessionNote = UPPER_MODERATE[phaseKey];
+          sessionNote = FRIDAY[phaseKey];
           break;
         case 5:
           sessionLabel = SAT_SESSIONS[weekNum].label;
