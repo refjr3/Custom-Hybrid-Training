@@ -64,6 +64,9 @@ RDL 3×8 @ 60-65% — controlled descent, full hip hinge
 Bulgarian Split Squat DB 3×8ea — moderate weight, full range
 Single Leg Glute Bridge 3×12ea — bodyweight
 Force Absorption Drop to Split Squat 3×5ea — bodyweight
+Single Leg Bent Knee Calf Raise 3×15ea — bodyweight, slow controlled tempo
+Standing Weighted Calf Raise 3×20 — light load, full range
+Squat Hold Calf Raise 3×12 — pole overhead, squat position, rise to toes
 
 UPPER BLOCK (35min):
 Barbell Floor Press 4×5
@@ -84,6 +87,9 @@ Bulgarian Split Squat DB 3×8ea — add load
 DB Step Ups 3×10ea
 Force Absorption Drop to Split Squat 3×6ea — add light load
 Single Leg Glute Bridge 3×12ea — add load or elevate foot
+Single Leg Bent Knee Calf Raise 3×15ea — add load
+Standing Weighted Calf Raise 3×20 — add load
+Squat Hold Calf Raise 3×12 — add load or depth
 
 UPPER BLOCK (35min):
 Barbell Floor Press 4×5 — add load
@@ -105,6 +111,9 @@ DB Step Ups 3×10ea — add load
 Force Absorption Drop to Split Squat 3×6ea — moderate load
 Depth Jumps 3×5 — full rest between sets
 Single Leg Glute Bridge 3×12ea — weighted
+Single Leg Bent Knee Calf Raise 3×15ea — heaviest load, slow tempo
+Standing Weighted Calf Raise 3×20 — heaviest load
+Squat Hold Calf Raise 3×12 — heaviest load
 
 UPPER BLOCK (35min):
 Barbell Floor Press 4×5 — heaviest loads
@@ -126,6 +135,9 @@ DB Step Ups 3×10ea — maintain loads
 Force Absorption Drop to Split Squat 3×5ea — maintain
 Depth Jumps 3×4 — max effort, full rest between
 Single Leg Glute Bridge 3×12ea — weighted
+Single Leg Bent Knee Calf Raise 3×15ea — maintain Phase 3 loads
+Standing Weighted Calf Raise 3×20 — maintain loads
+Squat Hold Calf Raise 3×12 — maintain loads
 
 UPPER BLOCK (35min):
 Barbell Floor Press 4×5 — maintain loads
@@ -145,6 +157,8 @@ RDL 2×8 — 50% load
 Bulgarian Split Squat DB 2×8ea — 50% load
 Single Leg Glute Bridge 2×12ea
 No depth jumps, no step ups
+Single Leg Bent Knee Calf Raise 2×15ea — bodyweight only
+Standing Weighted Calf Raise 2×15 — bodyweight only
 
 UPPER BLOCK:
 Barbell Floor Press 2×5
@@ -229,6 +243,13 @@ const WL_MAP = {
   "20/20/20 Brick": "ZONE 2 — Easy Aerobic",
 };
 
+const RUN_COOLDOWN = `POST-RUN COOLDOWN (2-3 min):
+Single Leg Bent Knee Calf Raise 2×15ea — bodyweight, slow
+Standing Calf Raise 2×15 — bodyweight only`;
+
+const RUN_COOLDOWN_DELOAD = `POST-RUN COOLDOWN (optional):
+Single Leg Bent Knee Calf Raise 1×15ea — bodyweight only`;
+
 const getUtcDateForOffset = (weekNum, dayIndex = 0) => {
   const d = new Date(START_DATE);
   d.setUTCDate(d.getUTCDate() + ((weekNum - 1) * 7) + dayIndex);
@@ -308,14 +329,20 @@ const buildPlanRows = () => {
           break;
         case 1:
           sessionNote = isOdd
-            ? "Z2 Erg + Mobility — Row, Ski or Echo Bike. Cap at WHOOP strain target. Dynamic mobility after."
-            : "Z2 Run + Mobility — HR cap 133–148bpm. Static stretch after.";
+            ? `Z2 Erg + Mobility — Row, Ski or Echo Bike. Cap at WHOOP strain target. Dynamic mobility after.
+
+${isDeload ? RUN_COOLDOWN_DELOAD : RUN_COOLDOWN}`
+            : `Z2 Run + Mobility — HR cap 133–148bpm. Static stretch after.
+
+${isDeload ? RUN_COOLDOWN_DELOAD : RUN_COOLDOWN}`;
           break;
         case 2:
           sessionNote = WEDNESDAY[phaseKey];
           break;
         case 3:
-          sessionNote = "Z2 Run + Mobility — HR cap 133–148bpm strict. Static stretch after.";
+          sessionNote = `Z2 Run + Mobility — HR cap 133–148bpm strict. Static stretch after.
+
+${isDeload ? RUN_COOLDOWN_DELOAD : RUN_COOLDOWN}`;
           break;
         case 4:
           sessionNote = FRIDAY[phaseKey];
