@@ -2297,11 +2297,6 @@ export default function App() {
 
   const todayDayNames = ["SUN","MON","TUE","WED","THU","FRI","SAT"];
   const todayDayName  = todayDayNames[new Date().getDay()];
-  const todayDayData  = week
-    ? (weekDays.find((d) => (d?.date || "").trim() === todayDateLabel) || weekDays[0])
-    : null;
-  const todayAm  = todayDayData ? getEffAm(todayDayData) : null;
-  const todayPm  = todayDayData?.pm || null;
   const flaggedBio = biomarkers.filter(b => b.flag === "HIGH" || b.flag === "LOW");
   const noPlanLoaded = !planLoading && planBlocks.length === 0;
   const planBuilderDismissed = noPlanLoaded && planBuilderDismissUntil > 0 && (Date.now() - planBuilderDismissUntil) < (24 * 60 * 60 * 1000);
@@ -2435,15 +2430,24 @@ export default function App() {
           day: "numeric",
         }).toUpperCase();
         const athleteName = profile?.name?.toUpperCase() || "ATHLETE";
-        const weekDays = week?.days || [];
+        const PLAN_YEAR = 2026;
+        const allPlanEntries = planBlocks
+          .flatMap((b) => (b?.weeks || []).map((w) => ({ block: b, week: w })))
+          .flatMap(({ block, week }) => (week?.days || []).map((day) => ({ block, week, day })));
+        const dayLabelToIso = (label) => {
+          if (!label) return null;
+          const parsed = new Date(`${String(label).trim()} ${PLAN_YEAR}`);
+          if (Number.isNaN(parsed.getTime())) return null;
+          return parsed.toISOString().split("T")[0];
+        };
+        const todayDateIso = new Date().toISOString().split("T")[0];
         const tomorrowDateObj = new Date();
         tomorrowDateObj.setDate(tomorrowDateObj.getDate() + 1);
-        const tomorrowDateLabel = tomorrowDateObj.toLocaleDateString("en-US", { month: "short", day: "numeric" });
-        const selectedDayIndex = dayData ? weekDays.findIndex((d) => d.day === dayData.day) : -1;
-        const todayIndexInWeek = selectedDayIndex >= 0
-          ? selectedDayIndex
-          : weekDays.findIndex((d) => (d?.date || "").trim() === todayDateLabel);
-        const todayCardData = todayIndexInWeek >= 0 ? weekDays[todayIndexInWeek] : (todayDayData || weekDays[0] || null);
+        const tomorrowDateIso = tomorrowDateObj.toISOString().split("T")[0];
+        const todayEntry = allPlanEntries.find(({ day }) => dayLabelToIso(day?.date || day?.date_label) === todayDateIso) || null;
+        const tomorrowEntry = allPlanEntries.find(({ day }) => dayLabelToIso(day?.date || day?.date_label) === tomorrowDateIso) || null;
+        const currentWeekDays = todayEntry?.week?.days || [];
+        const todayCardData = todayEntry?.day || null;
         const todaySessionName = todayCardData ? getSessionNameForDay(todayCardData, "am") : null;
         const todaySessionKey = todayCardData?.am_session || todayCardData?.am;
         const todaySessionLabel = todayCardData?.am_session_custom?.split("\n")[0]
@@ -2467,11 +2471,7 @@ export default function App() {
         const todayZone = zoneByKey[todayMeta.key] || zoneByKey.rest;
         const todayDuration = todayWorkout?.duration || "—";
 
-        const tomorrowDayName = todayDayNames[(new Date().getDay() + 1) % 7];
-        const tomorrowDayData = weekDays.find((d) => (d?.date || "").trim() === tomorrowDateLabel)
-          || (todayIndexInWeek >= 0 && todayIndexInWeek + 1 < weekDays.length ? weekDays[todayIndexInWeek + 1] : null)
-          || weekDays.find((d) => d.day === tomorrowDayName)
-          || null;
+        const tomorrowDayData = tomorrowEntry?.day || null;
         const tomorrowSessionName = tomorrowDayData ? getSessionNameForDay(tomorrowDayData, "am") : null;
         const tomorrowSessionKey = tomorrowDayData?.am_session || tomorrowDayData?.am;
         const tomorrowSessionLabel = tomorrowDayData?.am_session_custom?.split("\n")[0]
@@ -2502,8 +2502,8 @@ export default function App() {
         const recoveryTrend = recoveryHistory.length > 0
           ? Math.round(recoveryHistory.reduce((s, n) => s + n, 0) / recoveryHistory.length)
           : rec;
-        const plannedForWeek = (week?.days || []).filter((d) => getSessionNameForDay(d, "am") || d?.pm).length;
-        const completedForWeek = (week?.days || []).filter((d) => {
+        const plannedForWeek = currentWeekDays.filter((d) => getSessionNameForDay(d, "am") || d?.pm).length;
+        const completedForWeek = currentWeekDays.filter((d) => {
           const dayDateKey = getDayDateKey(d);
           if (!dayDateKey) return false;
           return garminActivities.some((a) => a.start_time?.startsWith(dayDateKey));
@@ -2745,6 +2745,8 @@ export default function App() {
                       onClick={() => {
                         if (!todayCardData) return;
                         setNav("plan");
+                        if (todayEntry?.block?.id) setBlockId(todayEntry.block.id);
+                        if (todayEntry?.week?.id) setWeekId(todayEntry.week.id);
                         setSelDay(todayCardData.day);
                         setSess("am");
                       }}
