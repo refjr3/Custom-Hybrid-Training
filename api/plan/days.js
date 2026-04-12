@@ -22,6 +22,7 @@ export default async function handler(req, res) {
     .from("training_weeks")
     .select("*")
     .eq("user_id", userId)
+    .order("order", { ascending: true })
     .order("block_id")
     .order("week_order");
 
@@ -61,7 +62,7 @@ export default async function handler(req, res) {
   for (const week of weeks) {
     const blockId = week.block_id;
     if (!blockMap[blockId]) {
-      blockMap[blockId] = { label: week.phase || blockId, weeks: [] };
+      blockMap[blockId] = { label: week.phase || blockId, weeks: [], order: week.order ?? 999 };
       blockOrder.push(blockId);
     }
     const DAY_ORDER = { MON: 0, TUE: 1, WED: 2, THU: 3, FRI: 4, SAT: 5, SUN: 6 };
@@ -95,6 +96,7 @@ export default async function handler(req, res) {
   const blocks = blockOrder.map((id) => ({
     id,
     label: blockMap[id].label,
+    order: blockMap[id].order ?? 999,
     weeks: blockMap[id].weeks,
   }));
 
@@ -112,6 +114,8 @@ export default async function handler(req, res) {
     "PHASE 4",
   ];
   blocks.sort((a, b) => {
+    const orderDiff = (a.order ?? 999) - (b.order ?? 999);
+    if (orderDiff !== 0) return orderDiff;
     const ai = BLOCK_LABEL_ORDER.indexOf(a.label);
     const bi = BLOCK_LABEL_ORDER.indexOf(b.label);
     return (ai === -1 ? 99 : ai) - (bi === -1 ? 99 : bi);

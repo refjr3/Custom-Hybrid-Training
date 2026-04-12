@@ -2193,7 +2193,10 @@ export default function App() {
   if (!session) return <AuthScreen supabase={supabase} />;
   if (!profile) return <Onboarding supabase={supabase} session={session} onComplete={(p) => { setShowEntrance(true); setTimeout(() => setShowEntrance(false), 2800); setProfile(p); }} />;
 
-  const block   = planBlocks.find(b => b.id === blockId) || planBlocks[0] || null;
+  const sortedBlocks = [...planBlocks].sort(
+    (a, b) => Number(a?.order ?? Number.MAX_SAFE_INTEGER) - Number(b?.order ?? Number.MAX_SAFE_INTEGER)
+  );
+  const block   = sortedBlocks.find(b => b.id === blockId) || sortedBlocks[0] || null;
   const weeks   = block?.weeks || [];
   const week    = weeks.find(w => w.id === weekId) || weeks[0] || null;
   const weekDays = week?.days || [];
@@ -2829,7 +2832,7 @@ export default function App() {
           <div style={{ paddingTop:16 }}>
             <div style={{ fontFamily:C.fm, fontSize:9, color:C.muted, letterSpacing:3, textTransform:"uppercase", marginBottom:10 }}>Training Block</div>
             <div style={{ display:"flex", gap:8, overflowX:"auto", scrollbarWidth:"none", msOverflowStyle:"none" }}>
-              {planBlocks.map((b) => {
+              {sortedBlocks.map((b) => {
                 const active = blockId === b.id;
                 return (
                   <button

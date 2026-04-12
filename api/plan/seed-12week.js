@@ -31,11 +31,11 @@ const TEMPLATE_B = [
   "SUN — 20/20/20 Brick (optional)",
 ];
 
-const PHASES = [
-  { weeks: [1, 2, 3], label: "Base Rebuild", short: "BASE" },
-  { weeks: [4, 5, 6], label: "Accumulation", short: "ACCUM" },
-  { weeks: [7, 8, 9], label: "Intensification", short: "INTENS" },
-  { weeks: [10, 11, 12], label: "Peak & Test", short: "PEAK" },
+const BLOCKS = [
+  { label: "Base Rebuild", short: "BASE", phase: "base", order: 1, weeks: [1, 2, 3] },
+  { label: "Accumulation", short: "ACCUM", phase: "accum", order: 2, weeks: [4, 5, 6] },
+  { label: "Intensification", short: "INTENS", phase: "intens", order: 3, weeks: [7, 8, 9] },
+  { label: "Peak & Test", short: "PEAK", phase: "peak", order: 4, weeks: [10, 11, 12] },
 ];
 
 const BLOCK_ID_BY_PHASE = {
@@ -347,12 +347,13 @@ const buildPlanRows = () => {
   const weeks = [];
   const days = [];
 
-  for (const phaseDef of PHASES) {
+  for (const phaseDef of BLOCKS) {
     blocks.push({
       user_id: USER_ID,
       block_id: BLOCK_ID_BY_PHASE[phaseDef.label],
       phase: phaseDef.label,
       label: phaseDef.label,
+      order: phaseDef.order,
     });
   }
 
@@ -361,7 +362,7 @@ const buildPlanRows = () => {
     const isDeload = weekNum === 12;
     const phaseKey = phaseKeyForWeek(weekNum, isDeload);
     const phaseIndex = phaseIndexForWeek(weekNum);
-    const phaseDef = PHASES[phaseIndex];
+    const phaseDef = BLOCKS[phaseIndex];
     const weekType = isBrick ? "BRICK" : "STANDARD";
     const phaseWeekOrder = phaseDef.weeks.indexOf(weekNum) + 1;
     const blockId = BLOCK_ID_BY_PHASE[phaseDef.label];
@@ -439,7 +440,7 @@ export default async function handler(req, res) {
       first_monday_iso: fmtIsoDate(getUtcDateForOffset(1, 0)),
       week_1_range: fmtWeekRange(1),
       week_4_range: fmtWeekRange(4),
-      phase_week_counts: PHASES.reduce((acc, phase) => {
+      phase_week_counts: BLOCKS.reduce((acc, phase) => {
         acc[phase.label] = phase.weeks.length;
         return acc;
       }, {}),
