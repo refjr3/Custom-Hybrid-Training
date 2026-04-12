@@ -50,10 +50,18 @@ const normalizeDistanceMeters = (value) => {
   return n * 1000;
 };
 
-const authHeaders = (apiKey, mode = "apikey") => {
-  if (mode === "basic") {
+const authHeaders = (apiKey, mode = "basic_key_key") => {
+  if (mode === "basic_key_key") {
+    const auth = Buffer.from(`${apiKey}:${apiKey}`).toString("base64");
     return {
-      Authorization: `Basic ${Buffer.from(`API_KEY:${apiKey}`).toString("base64")}`,
+      Authorization: `Basic ${auth}`,
+      Accept: "application/json",
+    };
+  }
+  if (mode === "basic_api_key_prefix") {
+    const auth = Buffer.from(`API_KEY:${apiKey}`).toString("base64");
+    return {
+      Authorization: `Basic ${auth}`,
       Accept: "application/json",
     };
   }
@@ -64,22 +72,35 @@ const authHeaders = (apiKey, mode = "apikey") => {
 };
 
 async function requestIntervalsJson(url, apiKey) {
-  const attempts = [authHeaders(apiKey, "apikey"), authHeaders(apiKey, "basic")];
+  const attempts = [
+    { mode: "basic_key_key", headers: authHeaders(apiKey, "basic_key_key") },
+    { mode: "basic_api_key_prefix", headers: authHeaders(apiKey, "basic_api_key_prefix") },
+    { mode: "apikey_header", headers: authHeaders(apiKey, "apikey_header") },
+  ];
   let lastError = null;
 
-  for (const headers of attempts) {
-    const res = await fetch(url, { headers });
-    const body = await res.json().catch(() => null);
-    if (res.ok) return body;
-    lastError = {
-      status: res.status,
-      body,
-    };
-    if (![401, 403].includes(res.status)) break;
+  for (const attempt of attempts) {
+    const res = await fetch(url, { headers: attempt.headers });
+    const rawText = await res.text();
+    if (!res.ok) {
+      console.error("[intervals] API error:", res.status, rawText, "| auth mode:", attempt.mode, "| url:", url);
+      lastError = {
+        status: res.status,
+        text: rawText,
+      };
+      if (![401, 403].includes(res.status)) break;
+      continue;
+    }
+
+    try {
+      return rawText ? JSON.parse(rawText) : [];
+    } catch {
+      return [];
+    }
   }
 
   throw new Error(
-    `Intervals request failed: ${lastError?.status || "unknown"} ${lastError?.body?.message || ""}`.trim()
+    `Intervals API ${lastError?.status || "unknown"}: ${lastError?.text || "unknown error"}`.trim()
   );
 }
 
@@ -220,6 +241,8 @@ export default async function handler(req, res) {
 
   const athleteId = process.env.INTERVALS_ATHLETE_ID;
   const apiKey = process.env.INTERVALS_API_KEY;
+  console.log("[intervals] fetching wellness for athlete:", athleteId);
+  console.log("[intervals] API key present:", !!apiKey);
   if (!athleteId || !apiKey) {
     return res.status(500).json({ error: "intervals_missing_env" });
   }
