@@ -353,7 +353,7 @@ const buildPlanRows = () => {
       block_id: BLOCK_ID_BY_PHASE[phaseDef.label],
       phase: phaseDef.label,
       label: phaseDef.label,
-      order: phaseDef.order,
+      block_order: phaseDef.order,
     });
   }
 
