@@ -309,18 +309,9 @@ const mapWorkoutLibraryKey = (label) => {
   return null;
 };
 
-const buildWeekDays = (weekNum, phaseKey, isOdd, isDeload) => {
-  const days = isOdd
+const buildWeekDays = (weekNum, phaseKey, isBrick, isDeload) => {
+  const days = isBrick
     ? [
-        { day: "MON", label: "HYROX + Plyos", note: HYROX_SESSION[phaseKey] },
-        { day: "TUE", label: "Z2 Erg + Mobility", note: Z2_ERG },
-        { day: "WED", label: "Full Body + Z2 Erg", note: FULL_BODY[phaseKey] },
-        { day: "THU", label: "Z2 Run + Mobility + Core", note: Z2_RUN_CORE },
-        { day: "FRI", label: "Upper Moderate", note: UPPER_MODERATE[phaseKey] },
-        { day: "SAT", label: thresholdTrackLabelForWeek(weekNum), note: THRESHOLD_TRACK[weekNum] },
-        { day: "SUN", label: "Long Z2 Run", note: isDeload ? SUNDAY.deload : SUNDAY.standard },
-      ]
-    : [
         { day: "MON", label: "Z2 Erg + Mobility", note: Z2_ERG },
         { day: "TUE", label: "Threshold/Track", note: THRESHOLD_TRACK[weekNum] },
         { day: "WED", label: "Z2 Run + Mobility + Core", note: Z2_RUN_CORE },
@@ -328,6 +319,15 @@ const buildWeekDays = (weekNum, phaseKey, isOdd, isDeload) => {
         { day: "FRI", label: "Upper Moderate", note: UPPER_MODERATE[phaseKey] },
         { day: "SAT", label: "HYROX Motion", note: HYROX_MOTION },
         { day: "SUN", label: "20/20/20 Brick", note: isDeload ? SUNDAY.deload : SUNDAY.brick },
+      ]
+    : [
+        { day: "MON", label: "HYROX + Plyos", note: HYROX_SESSION[phaseKey] },
+        { day: "TUE", label: "Z2 Erg + Mobility", note: Z2_ERG },
+        { day: "WED", label: "Full Body + Z2 Erg", note: FULL_BODY[phaseKey] },
+        { day: "THU", label: "Z2 Run + Mobility + Core", note: Z2_RUN_CORE },
+        { day: "FRI", label: "Upper Moderate", note: UPPER_MODERATE[phaseKey] },
+        { day: "SAT", label: thresholdTrackLabelForWeek(weekNum), note: THRESHOLD_TRACK[weekNum] },
+        { day: "SUN", label: "Long Z2 Run", note: isDeload ? SUNDAY.deload : SUNDAY.standard },
       ];
 
   for (let dayIndex = 0; dayIndex < 7; dayIndex++) {
@@ -357,12 +357,12 @@ const buildPlanRows = () => {
   }
 
   for (let weekNum = 1; weekNum <= 12; weekNum++) {
-    const isOdd = weekNum % 2 !== 0;
+    const isBrick = weekNum % 2 !== 0;
     const isDeload = weekNum === 12;
     const phaseKey = phaseKeyForWeek(weekNum, isDeload);
     const phaseIndex = phaseIndexForWeek(weekNum);
     const phaseDef = PHASES[phaseIndex];
-    const weekType = isOdd ? "STANDARD" : "BRICK";
+    const weekType = isBrick ? "BRICK" : "STANDARD";
     const phaseWeekOrder = phaseDef.weeks.indexOf(weekNum) + 1;
     const blockId = BLOCK_ID_BY_PHASE[phaseDef.label];
     const weekId = `hyrox12_${blockId}_w${phaseWeekOrder}`;
@@ -378,7 +378,7 @@ const buildPlanRows = () => {
       week_order: weekNum,
     });
 
-    const weekDays = buildWeekDays(weekNum, phaseKey, isOdd, isDeload);
+    const weekDays = buildWeekDays(weekNum, phaseKey, isBrick, isDeload);
     for (const day of weekDays) {
       const mappedSession = mapWorkoutLibraryKey(day.label);
       days.push({
@@ -430,7 +430,7 @@ export default async function handler(req, res) {
     return res.status(200).json({
       success: true,
       user_id: USER_ID,
-      templates: { odd: TEMPLATE_A, even: TEMPLATE_B },
+      templates: { odd: TEMPLATE_B, even: TEMPLATE_A },
       blocks_seeded: blocks.length,
       weeks_seeded: weeks.length,
       days_seeded: days.length,
