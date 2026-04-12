@@ -1542,6 +1542,9 @@ export default function App() {
   const [weeklyReview, setWeeklyReview] = useState(null);
   const [showReadinessBreakdown, setShowReadinessBreakdown] = useState(false);
   const [unifiedMetrics, setUnifiedMetrics] = useState([]);
+  const [intervalsSyncing, setIntervalsSyncing] = useState(false);
+  const [intervalsSyncError, setIntervalsSyncError] = useState("");
+  const [intervalsLastSyncedAt, setIntervalsLastSyncedAt] = useState(null);
   const [labOpen, setLabOpen] = useState(false);
   const [labMessages, setLabMessages] = useState([]);
   const [labInput, setLabInput] = useState("");
@@ -1669,6 +1672,7 @@ export default function App() {
     fetchPlan(session?.access_token);
     fetchGarminActivities();
     fetchUnifiedMetrics();
+    fetchIntervalsSync();
     fetchStravaWeeklyZ2();
   }, [profile]);
 
@@ -1729,8 +1733,37 @@ export default function App() {
         .select("*")
         .order("date", { ascending: false })
         .limit(90);
-      if (data) setUnifiedMetrics(data);
+      if (data) {
+        setUnifiedMetrics(data);
+        const latestIntervals = [...data]
+          .filter((m) => m?.source === "intervals")
+          .sort((a, b) => new Date(b?.created_at || b?.date || 0).getTime() - new Date(a?.created_at || a?.date || 0).getTime())[0];
+        if (latestIntervals) {
+          setIntervalsLastSyncedAt(latestIntervals.intervals_synced_at || latestIntervals.created_at || latestIntervals.date || null);
+        }
+      }
     } catch (_) {}
+  };
+
+  const fetchIntervalsSync = async () => {
+    if (!session?.access_token) return;
+    setIntervalsSyncing(true);
+    setIntervalsSyncError("");
+    try {
+      const res = await fetch("/api/intervals/sync", {
+        headers: { Authorization: `Bearer ${session.access_token}` },
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        throw new Error(data.error || "Intervals sync failed");
+      }
+      if (data?.last_synced_at) setIntervalsLastSyncedAt(data.last_synced_at);
+      await fetchUnifiedMetrics();
+    } catch (e) {
+      setIntervalsSyncError(e.message || "Intervals sync failed");
+    } finally {
+      setIntervalsSyncing(false);
+    }
   };
 
   const fetchStravaWeeklyZ2 = async () => {
@@ -2289,12 +2322,21 @@ export default function App() {
       session: getSessionNameForDay(d, "am") || d.pm || "Session",
     }));
 
-  const rec        = whoopData?.recovery?.score ?? 0;
-  const sleep      = whoopData?.sleep?.score ?? 0;
-  const strain     = whoopData?.strain?.score ?? 0;
-  const hrv        = whoopData?.recovery?.hrv ?? 0;
-  const rhr        = whoopData?.recovery?.rhr ?? 0;
-  const sleepHours = whoopData?.sleep?.hours ?? 0;
+  const latestIntervalsMetric = [...unifiedMetrics]
+    .filter((m) => m?.source === "intervals")
+    .sort((a, b) => new Date(b?.created_at || b?.date || 0).getTime() - new Date(a?.created_at || a?.date || 0).getTime())[0] || null;
+  const hasIntervalsData = Boolean(latestIntervalsMetric);
+  const intervalsSleepHours = Number(latestIntervalsMetric?.sleep_hours);
+  const rec        = Number(latestIntervalsMetric?.recovery_score ?? whoopData?.recovery?.score ?? 0);
+  const strain     = Number(latestIntervalsMetric?.strain ?? whoopData?.strain?.score ?? 0);
+  const hrv        = Number(latestIntervalsMetric?.hrv ?? whoopData?.recovery?.hrv ?? 0);
+  const rhr        = Number(latestIntervalsMetric?.rhr ?? whoopData?.recovery?.rhr ?? 0);
+  const sleepHours = Number.isFinite(intervalsSleepHours) && intervalsSleepHours > 0
+    ? Math.round(intervalsSleepHours * 10) / 10
+    : Number(whoopData?.sleep?.hours ?? 0);
+  const sleep      = hasIntervalsData
+    ? Math.max(0, Math.min(100, Math.round((sleepHours / 8) * 100)))
+    : Number(whoopData?.sleep?.score ?? 0);
   const sleepEff   = whoopData?.sleep?.efficiency ?? 0;
   const rc         = whoopColor(rec);
 
@@ -2495,34 +2537,61 @@ export default function App() {
         const todayStart = new Date(todayDateObj.getFullYear(), todayDateObj.getMonth(), todayDateObj.getDate());
         const daysAway = raceDateObj ? Math.max(0, Math.ceil((raceDateObj.getTime() - todayStart.getTime()) / (1000 * 60 * 60 * 24))) : null;
 
-        const recoveryHistory = [
-          ...(Array.isArray(whoopData?.recovery_history) ? whoopData.recovery_history : []),
-          ...(Array.isArray(whoopData?.recovery?.history) ? whoopData.recovery.history : []),
-        ]
-          .map((v) => Number(v?.score ?? v))
+        const intervalsRecoveryHistory = [...unifiedMetrics]
+          .filter((m) => m?.source === "intervals")
+          .sort((a, b) => new Date(a?.date || 0).getTime() - new Date(b?.date || 0).getTime())
+          .map((m) => Number(m?.recovery_score))
           .filter((n) => Number.isFinite(n))
           .slice(-7);
+        const recoveryHistory = intervalsRecoveryHistory.length > 0
+          ? intervalsRecoveryHistory
+          : [
+              ...(Array.isArray(whoopData?.recovery_history) ? whoopData.recovery_history : []),
+              ...(Array.isArray(whoopData?.recovery?.history) ? whoopData.recovery.history : []),
+            ]
+              .map((v) => Number(v?.score ?? v))
+              .filter((n) => Number.isFinite(n))
+              .slice(-7);
         const recoveryTrend = recoveryHistory.length > 0
           ? Math.round(recoveryHistory.reduce((s, n) => s + n, 0) / recoveryHistory.length)
           : rec;
         const plannedForWeek = currentWeekDays.filter((d) => getSessionNameForDay(d, "am") || d?.pm).length;
         const completedForWeek = currentWeekDays.filter((d) => {
-          const dayDateKey = getDayDateKey(d);
-          if (!dayDateKey) return false;
-          return garminActivities.some((a) => a.start_time?.startsWith(dayDateKey));
+          const iso = dayLabelToIso(d?.date || d?.date_label);
+          if (!iso) return false;
+          return unifiedMetrics.some(
+            (m) => m?.source === "intervals"
+              && m?.date === iso
+              && Number(
+                m?.training_load
+                ?? m?.strain
+                ?? m?.active_calories
+                ?? m?.steps
+                ?? 0
+              ) > 0
+          );
         }).length;
-        const compliance = garminConnected
-          ? (plannedForWeek > 0 ? Math.round((completedForWeek / plannedForWeek) * 100) : 80)
-          : 80;
+        const compliance = plannedForWeek > 0 ? Math.round((completedForWeek / plannedForWeek) * 100) : 80;
         const readinessScore = Math.max(0, Math.min(100, Math.round(recoveryTrend * 0.6 + compliance * 0.4)));
         const readinessColor = readinessScore > 75 ? C.green : readinessScore >= 50 ? C.yellow : C.red;
 
-        const whoopDisconnected = !whoopData
+        const whoopDisconnected = !hasIntervalsData && (
+          !whoopData
           || (
             Number(rec || 0) <= 0
             && Number(strain || 0) <= 0
             && Number(sleep || 0) <= 0
-          );
+          )
+        );
+
+        const intervalsStatusLabel = intervalsSyncing
+          ? "INTERVALS · SYNCING..."
+          : intervalsLastSyncedAt
+            ? `INTERVALS · ${new Date(intervalsLastSyncedAt).toLocaleString("en-US", { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" })}`
+            : intervalsSyncError
+              ? "INTERVALS · SYNC ERROR"
+              : "INTERVALS · NOT SYNCED";
+        const intervalsStatusColor = intervalsSyncError ? C.red : (intervalsLastSyncedAt ? C.green : "#666");
 
         return (
           <div style={{ padding: "0 16px 16px", display: "flex", flexDirection: "column", gap: 16, overflowX: "hidden" }}>
@@ -2545,19 +2614,17 @@ export default function App() {
                   >
                     ↺ WHOOP
                   </a>
-                  <a
-                    href="/api/auth/garmin-login"
+                  <span
                     style={{
                       fontFamily: C.fm,
                       fontSize: 9,
-                      color: garminConnected ? C.green : "#444",
-                      letterSpacing: 2,
-                      textDecoration: "none",
+                      color: intervalsStatusColor,
+                      letterSpacing: 1.5,
                       textTransform: "uppercase",
                     }}
                   >
-                    {garminConnected ? "✓ GARMIN" : "CONNECT GARMIN"}
-                  </a>
+                    {intervalsStatusLabel}
+                  </span>
                 </div>
               </div>
               <div style={{ fontFamily: C.ff, fontSize: 38, color: C.text, lineHeight: 1, letterSpacing: 1, marginTop: 8 }}>
