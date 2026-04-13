@@ -18,13 +18,26 @@ export default async function handler(req, res) {
   const userId = user.id;
   console.log("[plan/days] userId:", userId);
 
+  const { data: blocks, error: blocksErr } = await supabase
+    .from("training_blocks")
+    .select("block_id, phase, label, block_order")
+    .eq("user_id", userId)
+    .order("block_order", { ascending: true });
+
+  console.log("[plan/days] blocks count:", blocks?.length, "| blocksErr:", blocksErr?.message);
+  if (blocksErr) return res.status(500).json({ error: blocksErr.message });
+  if (!blocks || blocks.length === 0) {
+    console.log("[plan/days] WARNING: 0 blocks found for userId:", userId);
+    return res.status(404).json({ error: "No training blocks found for this user. Check that the plan was seeded with the correct user_id." });
+  }
+
+  const blockIds = blocks.map((b) => b.block_id).filter(Boolean);
   const { data: weeks, error: weeksErr } = await supabase
     .from("training_weeks")
     .select("*")
     .eq("user_id", userId)
-    .order("order", { ascending: true })
-    .order("block_id")
-    .order("week_order");
+    .in("block_id", blockIds)
+    .order("week_order", { ascending: true });
 
   console.log("[plan/days] weeks count:", weeks?.length, "| weeksErr:", weeksErr?.message);
   if (weeksErr) return res.status(500).json({ error: weeksErr.message });
@@ -36,10 +49,12 @@ export default async function handler(req, res) {
     return res.status(404).json({ error: "No training weeks found for this user. Check that the plan was seeded with the correct user_id." });
   }
 
+  const weekIds = weeks.map((w) => w.week_id).filter(Boolean);
   const { data: days, error: daysErr } = await supabase
     .from("training_days")
     .select("*")
-    .eq("user_id", userId);
+    .eq("user_id", userId)
+    .in("week_id", weekIds);
 
   console.log("[plan/days] days count:", days?.length, "| daysErr:", daysErr?.message);
   if (daysErr) return res.status(500).json({ error: daysErr.message });
@@ -49,23 +64,38 @@ export default async function handler(req, res) {
     return res.status(404).json({ error: "No training days found for this user. Check that the plan was seeded with the correct user_id." });
   }
 
-  // Group days by week database id
+  // Group days by week slug (training_days.week_id references training_weeks.week_id)
   const daysByWeek = {};
   for (const day of days) {
     if (!daysByWeek[day.week_id]) daysByWeek[day.week_id] = [];
     daysByWeek[day.week_id].push(day);
   }
 
-  // Build block structure dynamically from whatever block_id values exist in DB
+  // Build block structure from training_blocks, then attach matching weeks and days
   const blockMap = {};
-  const blockOrder = [];
-  for (const week of weeks) {
+  const blockOrder = blocks.map((b) => b.block_id);
+  const blockIndexById = Object.fromEntries(blockOrder.map((id, idx) => [id, idx]));
+  for (const block of blocks) {
+    blockMap[block.block_id] = {
+      label: block.label || block.phase || block.block_id,
+      weeks: [],
+      order: block.block_order ?? 999,
+    };
+  }
+
+  const DAY_ORDER = { MON: 0, TUE: 1, WED: 2, THU: 3, FRI: 4, SAT: 5, SUN: 6 };
+  const sortedWeeks = [...weeks].sort((a, b) => {
+    const blockDiff = (blockIndexById[a.block_id] ?? 999) - (blockIndexById[b.block_id] ?? 999);
+    if (blockDiff !== 0) return blockDiff;
+    return (a.week_order ?? 999) - (b.week_order ?? 999);
+  });
+
+  for (const week of sortedWeeks) {
     const blockId = week.block_id;
     if (!blockMap[blockId]) {
-      blockMap[blockId] = { label: week.phase || blockId, weeks: [], order: week.order ?? 999 };
+      blockMap[blockId] = { label: week.phase || blockId, weeks: [], order: 999 };
       blockOrder.push(blockId);
     }
-    const DAY_ORDER = { MON: 0, TUE: 1, WED: 2, THU: 3, FRI: 4, SAT: 5, SUN: 6 };
     const weekDays = (daysByWeek[week.week_id] || [])
       .sort((a, b) => (DAY_ORDER[a.day_name] ?? 99) - (DAY_ORDER[b.day_name] ?? 99))
       .map((d) => ({
