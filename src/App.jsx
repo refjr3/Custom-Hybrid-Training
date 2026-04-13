@@ -78,6 +78,93 @@ function fillMetricSeries(arr, fallback = null) {
   });
 }
 
+const PERF_BLOCK_WEEKS_TOTAL = 12;
+
+/** Week containing today for Performance header (same date parsing idea as Plan tab). */
+function derivePerfPlanHeader(planBlocks) {
+  if (!Array.isArray(planBlocks) || planBlocks.length === 0) return null;
+  const y = new Date().getFullYear();
+  const labelToIso = (label) => {
+    if (!label || typeof label !== "string") return null;
+    const p = new Date(`${label.trim()} ${y}`);
+    if (Number.isNaN(p.getTime())) return null;
+    return p.toISOString().split("T")[0];
+  };
+  const allWeeks = planBlocks.flatMap((b) =>
+    (b.weeks || []).map((w) => ({
+      block: b,
+      week: w,
+      days: w.days || [],
+    }))
+  );
+  if (!allWeeks.length) return null;
+  const todayIso = new Date().toISOString().split("T")[0];
+  let hitIdx = -1;
+  let hit = null;
+  allWeeks.forEach((entry, i) => {
+    for (const day of entry.days) {
+      const iso = labelToIso(day?.date || day?.date_label);
+      if (iso === todayIso) {
+        hitIdx = i;
+        hit = entry;
+      }
+    }
+  });
+  if (hitIdx < 0) {
+    allWeeks.forEach((entry, i) => {
+      const isos = entry.days.map((d) => labelToIso(d?.date || d?.date_label)).filter(Boolean);
+      if (!isos.length) return;
+      const lo = isos.reduce((a, b) => (a < b ? a : b));
+      const hi = isos.reduce((a, b) => (a > b ? a : b));
+      if (todayIso >= lo && todayIso <= hi) {
+        hitIdx = i;
+        hit = entry;
+      }
+    });
+  }
+  if (!hit || hitIdx < 0) {
+    hit = allWeeks[0];
+    hitIdx = 0;
+  }
+  const block = hit.block || {};
+  const week = hit.week || {};
+  const phaseRaw = week.phase || block.label || block.phase || block.id || "TRAINING";
+  const currentPhase = String(phaseRaw).toUpperCase();
+  const weekType = String(week.phase || week.label || "BASE").toUpperCase();
+  const dates = hit.days.map((d) => labelToIso(d?.date || d?.date_label)).filter(Boolean).sort();
+  let weekDateRange = "";
+  if (dates.length) {
+    const a = new Date(`${dates[0]}T12:00:00Z`);
+    const b = new Date(`${dates[dates.length - 1]}T12:00:00Z`);
+    const opt = { month: "short", day: "numeric" };
+    weekDateRange = `${a.toLocaleDateString("en-US", opt).toUpperCase()} – ${b.toLocaleDateString("en-US", opt).toUpperCase()}`;
+  } else if (week.dates) {
+    weekDateRange = String(week.dates);
+  } else {
+    weekDateRange = String(week.label || "").toUpperCase();
+  }
+  return {
+    currentPhase,
+    currentWeekNum: hitIdx + 1,
+    weekDateRange,
+    weekType,
+  };
+}
+
+function complianceInsightLine(percent) {
+  if (percent == null || Number.isNaN(percent)) return "Add a plan and log activities to see compliance.";
+  if (percent === 100) return "Perfect week so far. Keep it up.";
+  if (percent >= 70) return "On track. Don't let the week slip.";
+  if (percent >= 40) return "Falling behind. Prioritize quality sessions.";
+  return "Rough week. Focus on what's left.";
+}
+
+function meanFinite(arr) {
+  const v = arr.filter((x) => x != null && Number.isFinite(Number(x))).map(Number);
+  if (!v.length) return null;
+  return v.reduce((a, b) => a + b, 0) / v.length;
+}
+
 function PerfIntervalsBlocks({ trends, C, glow }) {
   if (!trends) return null;
   const { summary, hrv30, readiness30, sleep14, rhr30, rhrPrDates, vo2max30, activities } = trends;
@@ -85,26 +172,97 @@ function PerfIntervalsBlocks({ trends, C, glow }) {
   const ctl = summary?.ctl ?? 0;
   const tsb = summary?.tsb ?? 0;
   const tsbColor = tsb > 0 ? C.green : tsb >= -10 ? C.yellow : C.red;
-  const tsbLabel = tsb > 0 ? "FRESH" : tsb >= -10 ? "NEUTRAL" : "FATIGUED";
+  const tsbLabel = tsb > 0 ? "FRESH" : tsb >= -10 ? "NEUTRAL" : "BUILDING";
+  const loadInsight =
+    tsb > 0
+      ? "You're fresh on balance — a good window for quality or race-specific work."
+      : "You are building fitness. Some fatigue is expected and correct.";
 
   const hrvFilled = fillMetricSeries(hrv30.map((d) => d.hrv));
   const hrv7Filled = fillMetricSeries(hrv30.map((d) => d.hrv7));
-  const hrvRange = perfChartRange(hrvFilled.filter((x) => x != null));
+  const hrvPts = hrvFilled.filter((x) => x != null && Number.isFinite(Number(x)));
+  const hrvCur =
+    trends.current?.hrv != null && Number.isFinite(trends.current.hrv)
+      ? Number(trends.current.hrv)
+      : (hrvPts.length ? hrvPts[hrvPts.length - 1] : null);
+  const hrvLast7 = (hrv30 || []).slice(-7).map((d) => d.hrv);
+  const hrvAvg7 = meanFinite(hrvLast7);
+  const hrvAvg30 = meanFinite((hrv30 || []).map((d) => d.hrv));
+  const hrvRangeVals = [...hrvFilled.filter((x) => x != null && Number.isFinite(Number(x))), hrvCur, hrvAvg7, hrvAvg30].filter(
+    (x) => x != null && Number.isFinite(Number(x))
+  );
+  const hrvRange = perfChartRange(hrvRangeVals.length ? hrvRangeVals : [50, 80]);
   const hrvPath = perfLinePathD(hrvFilled, PERF_CHART_W, PERF_CHART_H, PERF_PAD, hrvRange.min, hrvRange.max);
   const hrv7Path = perfLinePathD(hrv7Filled, PERF_CHART_W, PERF_CHART_H, PERF_PAD, hrvRange.min, hrvRange.max);
+  const hrvY = (v) => {
+    const ih = PERF_CHART_H - PERF_PAD * 2;
+    const vr = Math.max(hrvRange.max - hrvRange.min, 1e-9);
+    return PERF_PAD + ih - ((Number(v) - hrvRange.min) / vr) * ih;
+  };
+  const hrvIx = PERF_CHART_W - PERF_PAD;
+  let hrvTrendTag = "→ STABLE";
+  let hrvTrendWord = "stable relative to your 30-day baseline.";
+  if (hrvAvg7 != null && hrvAvg30 != null) {
+    if (hrvAvg7 > hrvAvg30 * 1.02) {
+      hrvTrendTag = "↑ IMPROVING";
+      hrvTrendWord = "trending up vs the 30-day baseline.";
+    } else if (hrvAvg7 < hrvAvg30 * 0.98) {
+      hrvTrendTag = "↓ DECLINING";
+      hrvTrendWord = "trending down vs the 30-day baseline.";
+    }
+  }
+  const hrvSentence =
+    hrvCur != null && hrvAvg30 != null
+      ? `Your HRV is ${(Math.round(hrvCur * 10) / 10).toFixed(1)}ms. Your baseline is ${(Math.round(hrvAvg30 * 10) / 10).toFixed(1)}ms. ${hrvTrendWord}`
+      : "Log more wellness days to establish HRV context.";
 
   const readFilled = fillMetricSeries(readiness30.map((d) => d.readiness), 50);
   const readPath = perfLinePathD(readFilled, PERF_CHART_W, PERF_CHART_H, PERF_PAD, 0, 100);
+  const readLast7 = (readiness30 || []).slice(-7).map((d) => d.readiness);
+  const readAvg7 = meanFinite(readLast7);
+  const readCur = [...readFilled].reverse().find((x) => x != null && Number.isFinite(Number(x))) ?? null;
 
   const sleepH = sleep14.map((d) => d.sleep_hours ?? 0);
   const maxSleepH = Math.max(9, ...sleepH.map(Number), 1);
   const barW = sleep14.length ? (PERF_CHART_W - PERF_PAD * 2) / sleep14.length - 2 : 8;
+  const sleepWeekSlice = (sleep14 || []).slice(-7);
+  const sleepWeekH = meanFinite(sleepWeekSlice.map((d) => d.sleep_hours));
+  const sleepWeekScore = meanFinite(sleepWeekSlice.map((d) => d.sleep_score));
+  const sleepInsight =
+    sleepWeekH != null
+      ? `You averaged ${(Math.round(sleepWeekH * 10) / 10).toFixed(1)} hrs over the last week. Target is 8hrs.`
+      : "Sync sleep data to see weekly sleep volume vs the 8h target.";
 
   const rhrFilled = fillMetricSeries(rhr30.map((d) => d.rhr), 55);
   const rhrVals = rhrFilled.filter((x) => x != null && Number.isFinite(x));
   const rhrRange = perfChartRange(rhrVals.length ? rhrVals : [50, 60]);
   const rhrPath = perfLinePathD(rhrFilled, PERF_CHART_W, PERF_CHART_H, PERF_PAD, rhrRange.min, rhrRange.max);
   const prSet = new Set((rhrPrDates || []).map((p) => p.date));
+  const rhrLast7 = (rhr30 || []).slice(-7).map((d) => d.rhr);
+  const rhrAvg7 = meanFinite(rhrLast7);
+  const rhrCur = [...rhr30].reverse().find((d) => d.rhr != null && Number.isFinite(Number(d.rhr)))?.rhr ?? null;
+  const rhrWindowMin = rhrVals.length ? Math.min(...rhrVals) : null;
+  const prRhrRow = (trends.personalRecordRows || []).find((r) => r.key === "lowest_rhr");
+  const rhrPrBpm =
+    prRhrRow?.value != null && String(prRhrRow.value).match(/\d/)
+      ? Number(String(prRhrRow.value).replace(/[^\d.]/g, ""))
+      : null;
+  const rhrAllTimeLow = rhrPrBpm != null && Number.isFinite(rhrPrBpm) ? rhrPrBpm : rhrWindowMin;
+  const rhrY = (v) => {
+    const ih = PERF_CHART_H - PERF_PAD * 2;
+    const vr = Math.max(rhrRange.max - rhrRange.min, 1e-9);
+    return PERF_PAD + ih - ((Number(v) - rhrRange.min) / vr) * ih;
+  };
+  const rhrIx = PERF_CHART_W - PERF_PAD;
+  const rhrSeries = (rhr30 || []).map((d) => d.rhr).filter((x) => x != null && Number.isFinite(Number(x)));
+  const rhrLast3 = meanFinite(rhrSeries.slice(-3));
+  const rhrPrev3 = meanFinite(rhrSeries.slice(-6, -3));
+  const rhrImproving =
+    rhrLast3 != null &&
+    rhrPrev3 != null &&
+    rhrSeries.length >= 6 &&
+    rhrLast3 < rhrPrev3 - 0.2;
+  const rhrTrendLabel = rhrImproving ? "↓ IMPROVING" : "→ STEADY";
 
   const vo2Filled = fillMetricSeries(vo2max30.map((d) => d.vo2_max), null);
   const vo2vals = vo2Filled.filter((x) => x != null && Number.isFinite(x));
@@ -123,65 +281,156 @@ function PerfIntervalsBlocks({ trends, C, glow }) {
   return (
     <>
       <div style={{ marginBottom: 24 }}>
-        <div style={{ fontFamily: C.ff, fontSize: 18, color: C.cyan, letterSpacing: 2, marginBottom: 12 }}>TRAINING LOAD</div>
-        <div style={{ fontFamily: C.fm, fontSize: 7, color: C.muted, letterSpacing: 1, marginBottom: 10, lineHeight: 1.5 }}>
-          ATL / CTL / TSB from unified Intervals data (7d / 42d EWMA on daily load).
-        </div>
+        <div style={{ fontFamily: C.ff, fontSize: 18, color: C.cyan, letterSpacing: 2, marginBottom: 10 }}>TRAINING LOAD</div>
         <div style={{ display: "flex", gap: 8 }}>
-          <div style={{ flex: 1, ...card, textAlign: "center", marginBottom: 0 }}>
-            <div style={{ fontFamily: C.fm, fontSize: 7, color: C.muted, letterSpacing: 3, marginBottom: 6 }}>ATL</div>
+          <div style={{ flex: 1, ...card, textAlign: "left", marginBottom: 0 }}>
+            <div style={{ fontFamily: C.fm, fontSize: 7, color: C.muted, letterSpacing: 2, marginBottom: 4 }}>ATL · ACUTE</div>
             <div style={{ fontFamily: C.ff, fontSize: 28, color: C.text, fontWeight: 700 }}>{atl}</div>
-            <div style={{ fontFamily: C.fm, fontSize: 7, color: C.muted, letterSpacing: 2 }}>ACUTE</div>
+            <div style={{ fontFamily: C.fm, fontSize: 8, color: C.muted, marginTop: 6, lineHeight: 1.4 }}>
+              Short-term stress your body felt over the last week (EWMA).
+            </div>
           </div>
-          <div style={{ flex: 1, ...card, textAlign: "center", marginBottom: 0 }}>
-            <div style={{ fontFamily: C.fm, fontSize: 7, color: C.muted, letterSpacing: 3, marginBottom: 6 }}>CTL</div>
+          <div style={{ flex: 1, ...card, textAlign: "left", marginBottom: 0 }}>
+            <div style={{ fontFamily: C.fm, fontSize: 7, color: C.muted, letterSpacing: 2, marginBottom: 4 }}>CTL · CHRONIC</div>
             <div style={{ fontFamily: C.ff, fontSize: 28, color: C.text, fontWeight: 700 }}>{ctl}</div>
-            <div style={{ fontFamily: C.fm, fontSize: 7, color: C.muted, letterSpacing: 2 }}>CHRONIC</div>
+            <div style={{ fontFamily: C.fm, fontSize: 8, color: C.muted, marginTop: 6, lineHeight: 1.4 }}>
+              Longer-term fitness base built over several weeks (EWMA).
+            </div>
           </div>
-          <div style={{ flex: 1, ...card, textAlign: "center", marginBottom: 0, border: `1px solid ${tsbColor}33`, boxShadow: glow(tsbColor, 0.12) }}>
-            <div style={{ fontFamily: C.fm, fontSize: 7, color: C.muted, letterSpacing: 3, marginBottom: 6 }}>TSB</div>
+          <div style={{ flex: 1, ...card, textAlign: "left", marginBottom: 0, border: `1px solid ${tsbColor}33`, boxShadow: glow(tsbColor, 0.12) }}>
+            <div style={{ fontFamily: C.fm, fontSize: 7, color: C.muted, letterSpacing: 2, marginBottom: 4 }}>TSB · FORM</div>
             <div style={{ fontFamily: C.ff, fontSize: 28, color: tsbColor, fontWeight: 700 }}>{tsb > 0 ? "+" : ""}{tsb}</div>
-            <div style={{ fontFamily: C.fm, fontSize: 7, color: tsbColor, letterSpacing: 2 }}>{tsbLabel}</div>
+            <div style={{ fontFamily: C.fm, fontSize: 8, color: tsbColor, letterSpacing: 2, marginTop: 4 }}>{tsbLabel}</div>
+            <div style={{ fontFamily: C.fm, fontSize: 8, color: C.muted, marginTop: 6, lineHeight: 1.4 }}>
+              CTL minus ATL: positive = fresher; negative = accumulated fatigue.
+            </div>
           </div>
+        </div>
+        <div style={{ fontFamily: C.fm, fontSize: 10, color: C.muted, letterSpacing: 0.5, marginTop: 12, lineHeight: 1.5 }}>
+          {loadInsight}
         </div>
       </div>
 
       <div style={card}>
-        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", marginBottom: 8 }}>
-          <div style={{ fontFamily: C.ff, fontSize: 16, color: C.cyan, letterSpacing: 2 }}>HRV TREND</div>
-          <div style={{ fontFamily: C.ff, fontSize: 22, color: C.cyan, fontWeight: 700 }}>
-            {trends.current?.hrv != null && Number.isFinite(trends.current.hrv) ? (Math.round(trends.current.hrv * 10) / 10).toFixed(1) : "—"}
-          </div>
+        <div style={{ fontFamily: C.ff, fontSize: 16, color: C.cyan, letterSpacing: 2, marginBottom: 8 }}>HRV TREND</div>
+        <div style={{ display: "flex", flexWrap: "wrap", gap: 12, marginBottom: 8, fontFamily: "monospace", fontSize: 10, color: C.text }}>
+          <span>
+            NOW <span style={{ color: C.cyan }}>{hrvCur != null ? `${(Math.round(hrvCur * 10) / 10).toFixed(1)}ms` : "—"}</span>
+          </span>
+          <span>
+            7D AVG <span style={{ color: "#fff" }}>{hrvAvg7 != null ? `${(Math.round(hrvAvg7 * 10) / 10).toFixed(1)}ms` : "—"}</span>
+          </span>
+          <span>
+            30D AVG <span style={{ color: "#888" }}>{hrvAvg30 != null ? `${(Math.round(hrvAvg30 * 10) / 10).toFixed(1)}ms` : "—"}</span>
+          </span>
+          <span style={{ color: hrvTrendTag.includes("↑") ? C.green : hrvTrendTag.includes("↓") ? C.red : C.muted }}>{hrvTrendTag}</span>
         </div>
-        <div style={{ fontFamily: C.fm, fontSize: 6, color: C.muted, letterSpacing: 1, marginBottom: 6 }}>30 days · cyan = daily · white = 7d avg</div>
         <svg width={PERF_CHART_W} height={PERF_CHART_H} style={{ display: "block", maxWidth: "100%" }}>
           <rect x={0} y={0} width={PERF_CHART_W} height={PERF_CHART_H} fill="transparent" />
+          {hrvAvg30 != null && Number.isFinite(hrvAvg30) && (
+            <line
+              x1={PERF_PAD}
+              y1={hrvY(hrvAvg30)}
+              x2={hrvIx}
+              y2={hrvY(hrvAvg30)}
+              stroke="rgba(136,136,136,0.6)"
+              strokeDasharray="5 4"
+              strokeWidth={1}
+            />
+          )}
+          {hrvAvg7 != null && Number.isFinite(hrvAvg7) && (
+            <line
+              x1={PERF_PAD}
+              y1={hrvY(hrvAvg7)}
+              x2={hrvIx}
+              y2={hrvY(hrvAvg7)}
+              stroke="rgba(255,255,255,0.45)"
+              strokeDasharray="3 3"
+              strokeWidth={1}
+            />
+          )}
+          {hrvCur != null && Number.isFinite(hrvCur) && (
+            <line
+              x1={PERF_PAD}
+              y1={hrvY(hrvCur)}
+              x2={hrvIx}
+              y2={hrvY(hrvCur)}
+              stroke={`${C.cyan}99`}
+              strokeWidth={1}
+            />
+          )}
           {hrv7Path && <path d={hrv7Path} fill="none" stroke="rgba(255,255,255,0.35)" strokeWidth={1.5} />}
           {hrvPath && <path d={hrvPath} fill="none" stroke={C.cyan} strokeWidth={2} />}
         </svg>
+        <div style={{ fontFamily: C.fm, fontSize: 10, color: C.muted, marginTop: 10, lineHeight: 1.5, letterSpacing: 0.3 }}>
+          {hrvSentence}
+        </div>
       </div>
 
       <div style={card}>
         <div style={{ fontFamily: C.ff, fontSize: 16, color: C.cyan, letterSpacing: 2, marginBottom: 8 }}>READINESS</div>
+        <div style={{ display: "flex", flexWrap: "wrap", gap: 14, marginBottom: 6, fontFamily: "monospace", fontSize: 10, color: C.text }}>
+          <span>
+            NOW <span style={{ color: C.cyan }}>{readCur != null ? `${Math.round(readCur)}` : "—"}</span>
+          </span>
+          <span>
+            7D AVG <span style={{ color: "#fff" }}>{readAvg7 != null ? `${Math.round(readAvg7)}` : "—"}</span>
+          </span>
+        </div>
         <svg width={PERF_CHART_W} height={PERF_CHART_H} style={{ display: "block", maxWidth: "100%" }}>
           {(() => {
             const ih = PERF_CHART_H - PERF_PAD * 2;
             const iw = PERF_CHART_W - PERF_PAD * 2;
             return (
               <>
-                <rect x={PERF_PAD} y={PERF_PAD} width={iw} height={ih * 0.3} fill="rgba(0,212,160,0.08)" />
-                <rect x={PERF_PAD} y={PERF_PAD + ih * 0.3} width={iw} height={ih * 0.3} fill="rgba(255,214,0,0.08)" />
-                <rect x={PERF_PAD} y={PERF_PAD + ih * 0.6} width={iw} height={ih * 0.4} fill="rgba(255,59,48,0.07)" />
+                <rect x={PERF_PAD} y={PERF_PAD} width={iw} height={ih * 0.3} fill="rgba(0,212,160,0.1)" />
+                <text x={PERF_PAD + 6} y={PERF_PAD + 14} fill={C.green} fontFamily="monospace" fontSize={8} letterSpacing={1}>
+                  READY
+                </text>
+                <rect x={PERF_PAD} y={PERF_PAD + ih * 0.3} width={iw} height={ih * 0.3} fill="rgba(255,214,0,0.1)" />
+                <text x={PERF_PAD + 6} y={PERF_PAD + ih * 0.3 + 14} fill={C.yellow} fontFamily="monospace" fontSize={8} letterSpacing={1}>
+                  CAUTION
+                </text>
+                <rect x={PERF_PAD} y={PERF_PAD + ih * 0.6} width={iw} height={ih * 0.4} fill="rgba(255,59,48,0.09)" />
+                <text x={PERF_PAD + 6} y={PERF_PAD + ih * 0.6 + 14} fill={C.red} fontFamily="monospace" fontSize={8} letterSpacing={1}>
+                  REST
+                </text>
               </>
+            );
+          })()}
+          {readAvg7 != null && Number.isFinite(readAvg7) && (() => {
+            const ih = PERF_CHART_H - PERF_PAD * 2;
+            const y = PERF_PAD + ih - (readAvg7 / 100) * ih;
+            return (
+              <line
+                key="read7"
+                x1={PERF_PAD}
+                y1={y}
+                x2={PERF_CHART_W - PERF_PAD}
+                y2={y}
+                stroke="rgba(255,255,255,0.35)"
+                strokeDasharray="4 3"
+                strokeWidth={1}
+              />
             );
           })()}
           {readPath && <path d={readPath} fill="none" stroke={C.cyan} strokeWidth={2} />}
         </svg>
-        <div style={{ fontFamily: C.fm, fontSize: 6, color: C.muted, marginTop: 6, letterSpacing: 1 }}>Green &gt;70 · Yellow 40–70 · Red &lt;40</div>
+        <div style={{ fontFamily: C.fm, fontSize: 9, color: C.muted, marginTop: 6, lineHeight: 1.45 }}>
+          Bands: READY (&gt;70), CAUTION (40–70), REST (&lt;40). Dashed line = 7-day average readiness.
+        </div>
       </div>
 
       <div style={card}>
         <div style={{ fontFamily: C.ff, fontSize: 16, color: C.cyan, letterSpacing: 2, marginBottom: 8 }}>SLEEP</div>
+        <div style={{ display: "flex", flexWrap: "wrap", gap: 14, marginBottom: 8, fontFamily: "monospace", fontSize: 10, color: C.text }}>
+          <span>
+            WK AVG HRS <span style={{ color: C.cyan }}>{sleepWeekH != null ? (Math.round(sleepWeekH * 10) / 10).toFixed(1) : "—"}</span>
+          </span>
+          <span>
+            WK AVG SCORE <span style={{ color: "#fff" }}>{sleepWeekScore != null ? Math.round(sleepWeekScore) : "—"}</span>
+          </span>
+        </div>
         <svg width={PERF_CHART_W} height={PERF_CHART_H + 14} style={{ display: "block", maxWidth: "100%" }}>
           {(() => {
             const ih = PERF_CHART_H - PERF_PAD * 2;
@@ -207,12 +456,37 @@ function PerfIntervalsBlocks({ trends, C, glow }) {
             );
           })}
         </svg>
-        <div style={{ fontFamily: C.fm, fontSize: 6, color: C.muted, marginTop: 4, letterSpacing: 1 }}>Bars = sleep hours · color = sleep score · dashed = 8h</div>
+        <div style={{ fontFamily: C.fm, fontSize: 10, color: C.muted, marginTop: 8, lineHeight: 1.5 }}>
+          {sleepInsight}
+        </div>
       </div>
 
       <div style={card}>
         <div style={{ fontFamily: C.ff, fontSize: 16, color: C.cyan, letterSpacing: 2, marginBottom: 8 }}>RESTING HR</div>
+        <div style={{ display: "flex", flexWrap: "wrap", gap: 12, marginBottom: 6, fontFamily: "monospace", fontSize: 10, color: C.text }}>
+          <span>
+            NOW <span style={{ color: "#e07b3a" }}>{rhrCur != null ? `${Math.round(Number(rhrCur))}bpm` : "—"}</span>
+          </span>
+          <span>
+            7D AVG <span style={{ color: "#fff" }}>{rhrAvg7 != null ? `${Math.round(rhrAvg7)}bpm` : "—"}</span>
+          </span>
+          <span>
+            PR (LOWEST) <span style={{ color: C.green }}>{rhrAllTimeLow != null ? `${Math.round(rhrAllTimeLow)}bpm` : "—"}</span>
+          </span>
+          <span style={{ color: rhrImproving ? C.green : C.muted }}>{rhrTrendLabel}</span>
+        </div>
         <svg width={PERF_CHART_W} height={PERF_CHART_H} style={{ display: "block", maxWidth: "100%" }}>
+          {rhrAvg7 != null && Number.isFinite(rhrAvg7) && (
+            <line
+              x1={PERF_PAD}
+              y1={rhrY(rhrAvg7)}
+              x2={rhrIx}
+              y2={rhrY(rhrAvg7)}
+              stroke="rgba(255,255,255,0.35)"
+              strokeDasharray="4 3"
+              strokeWidth={1}
+            />
+          )}
           {rhrPath && <path d={rhrPath} fill="none" stroke="#e07b3a" strokeWidth={2} />}
           {rhr30.map((d, i) => {
             if (d.rhr == null || !Number.isFinite(Number(d.rhr))) return null;
@@ -226,11 +500,9 @@ function PerfIntervalsBlocks({ trends, C, glow }) {
             return <circle key={d.date} cx={x} cy={y} r={4} fill={C.green} stroke="#000" strokeWidth={1} />;
           })}
         </svg>
-        {rhrPrDates?.length > 0 && (
-          <div style={{ fontFamily: C.fm, fontSize: 7, color: C.green, letterSpacing: 1, marginTop: 6 }}>
-            Best RHR {rhrPrDates[0]?.value} · {rhrPrDates.map((p) => p.date.slice(5)).join(", ")}
-          </div>
-        )}
+        <div style={{ fontFamily: C.fm, fontSize: 9, color: C.muted, marginTop: 6, lineHeight: 1.45 }}>
+          Lower resting HR in this window is generally better recovery. Green dots mark best RHR days in the trend range.
+        </div>
       </div>
 
       <div style={card}>
@@ -3566,6 +3838,9 @@ export default function App() {
         const compliancePct = complianceWeek?.percent;
         const complianceDays = Array.isArray(complianceWeek?.days) ? complianceWeek.days : [];
         const prRows = Array.isArray(perfTrends?.personalRecordRows) ? perfTrends.personalRecordRows : [];
+        const perfPlanHeader = derivePerfPlanHeader(planBlocks);
+        const perfWeekNum = perfPlanHeader?.currentWeekNum ?? 0;
+        const perfBlockPct = perfWeekNum > 0 ? Math.round((perfWeekNum / PERF_BLOCK_WEEKS_TOTAL) * 100) : 0;
 
         const zoneColors = ["#555", C.blue, C.yellow, "#FF7700", C.red];
         const zoneData = [0,0,0,0,0];
@@ -3583,21 +3858,30 @@ export default function App() {
         return (
           <div style={{ padding:"20px" }}>
             <div style={{ fontFamily:C.ff, fontSize:28, letterSpacing:2, marginBottom:4 }}>PERFORMANCE<span style={{ color:C.cyan }}>.</span></div>
-            <div style={{ fontFamily:C.fm, fontSize:7, color:C.muted, letterSpacing:3, marginBottom:20, textTransform:"uppercase" }}>TRAINING ANALYTICS</div>
+            <div style={{ fontFamily:C.fm, fontSize:7, color:C.muted, letterSpacing:3, marginBottom:16, textTransform:"uppercase" }}>TRAINING ANALYTICS</div>
 
-            {perfTrendsLoading && (
-              <div style={{ fontFamily:C.fm, fontSize:10, color:C.muted, letterSpacing:2, marginBottom:20 }}>LOADING METRICS…</div>
-            )}
-            {!perfTrendsLoading && perfTrends && (
-              <PerfIntervalsBlocks trends={perfTrends} C={C} glow={glow} />
-            )}
-            {!perfTrendsLoading && !perfTrends && session?.access_token && (
-              <div style={{ fontFamily:C.fm, fontSize:9, color:C.muted, letterSpacing:1, marginBottom:20, lineHeight:1.5 }}>
-                No trend data yet. Sync from the Today tab, then return here.
+            {perfPlanHeader ? (
+              <div style={{ background:"rgba(0,243,255,0.06)", border:"1px solid rgba(0,243,255,0.2)", borderRadius:12, padding:"14px 16px", marginBottom:16 }}>
+                <div style={{ fontFamily:"monospace", fontSize:9, color:"#00F3FF", letterSpacing:3 }}>
+                  {perfPlanHeader.currentPhase} — WEEK {perfPlanHeader.currentWeekNum} OF {PERF_BLOCK_WEEKS_TOTAL}
+                </div>
+                <div style={{ fontFamily:"monospace", fontSize:11, color:"#888", marginTop:4 }}>
+                  {perfPlanHeader.weekDateRange} · {perfPlanHeader.weekType} WEEK
+                </div>
+                <div style={{ marginTop:10, height:4, background:"rgba(255,255,255,0.08)", borderRadius:2 }}>
+                  <div style={{ width:`${(perfPlanHeader.currentWeekNum / PERF_BLOCK_WEEKS_TOTAL) * 100}%`, height:"100%", background:"#00F3FF", borderRadius:2 }} />
+                </div>
+                <div style={{ fontFamily:"monospace", fontSize:9, color:"#444", marginTop:4 }}>
+                  {perfBlockPct}% OF BLOCK COMPLETE
+                </div>
+              </div>
+            ) : (
+              <div style={{ fontFamily:C.fm, fontSize:9, color:C.muted, letterSpacing:1, marginBottom:16, lineHeight:1.5, padding:"12px 14px", borderRadius:12, border:`1px solid ${C.border}`, background:C.card }}>
+                No plan loaded — phase and week context appear once your training block is on the Plan tab.
               </div>
             )}
 
-            {/* WEEKLY COMPLIANCE (from /api/metrics/trends: plan vs garmin_activities) */}
+            {/* WEEKLY COMPLIANCE — insight-driven, above deep metrics */}
             <div style={{ marginBottom:24 }}>
               <div style={{ display:"flex", alignItems:"center", gap:10, marginBottom:12, flexWrap:"wrap" }}>
                 <div style={{ fontFamily:C.ff, fontSize:18, color:C.cyan, letterSpacing:2 }}>WEEKLY COMPLIANCE</div>
@@ -3612,12 +3896,15 @@ export default function App() {
                   {compliancePct != null ? `${compliancePct}%` : "—"}
                 </div>
               </div>
+              <div style={{ fontFamily:C.fm, fontSize:11, color:C.muted, letterSpacing:0.3, marginBottom:12, lineHeight:1.5 }}>
+                {complianceInsightLine(compliancePct)}
+              </div>
               {!perfTrendsLoading && perfTrends && complianceDays.length === 0 && (
                 <div style={{ fontFamily:C.fm, fontSize:9, color:C.muted, letterSpacing:1, marginBottom:10 }}>
                   No training week matched today in your plan, or no plan days loaded.
                 </div>
               )}
-              <div style={{ display:"flex", gap:4, marginBottom:12 }}>
+              <div style={{ display:"flex", gap:4, marginBottom:4 }}>
                 {complianceDays.map((d, i) => {
                   const icon = d.status === "completed" ? "✅" : d.status === "missed" ? "❌" : "—";
                   const bg = d.status === "completed" ? `${C.green}33` : d.status === "missed" ? `${C.red}44` : C.card;
@@ -3629,14 +3916,19 @@ export default function App() {
                   );
                 })}
               </div>
-              {compliancePct != null && compliancePct < 80 && compliancePct > 0 && (
-                <div style={{ background:C.card, borderRadius:12, padding:"12px 14px", border:`1px solid ${C.border}`, borderLeft:`3px solid ${C.yellow}`, ...C.glass }}>
-                  <div style={{ fontFamily:C.fs, fontSize:12, color:C.muted, lineHeight:1.6 }}>
-                    {compliancePct < 50 ? "Compliance under 50% — let's discuss what's blocking your sessions." : "Slightly under target. Prioritize the high-intensity sessions."}
-                  </div>
-                </div>
-              )}
             </div>
+
+            {perfTrendsLoading && (
+              <div style={{ fontFamily:C.fm, fontSize:10, color:C.muted, letterSpacing:2, marginBottom:20 }}>LOADING METRICS…</div>
+            )}
+            {!perfTrendsLoading && perfTrends && (
+              <PerfIntervalsBlocks trends={perfTrends} C={C} glow={glow} />
+            )}
+            {!perfTrendsLoading && !perfTrends && session?.access_token && (
+              <div style={{ fontFamily:C.fm, fontSize:9, color:C.muted, letterSpacing:1, marginBottom:20, lineHeight:1.5 }}>
+                No trend data yet. Sync from the Today tab, then return here.
+              </div>
+            )}
 
             {/* ZONE DISTRIBUTION */}
             <div style={{ marginBottom:24 }}>
