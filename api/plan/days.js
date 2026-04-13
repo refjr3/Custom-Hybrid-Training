@@ -18,20 +18,20 @@ export default async function handler(req, res) {
   const userId = user.id;
   console.log("[plan/days] userId:", userId);
 
-  const { data: blocks, error: blocksErr } = await supabase
+  const { data: blockRows, error: blocksErr } = await supabase
     .from("training_blocks")
     .select("block_id, phase, label, block_order")
     .eq("user_id", userId)
     .order("block_order", { ascending: true });
 
-  console.log("[plan/days] blocks count:", blocks?.length, "| blocksErr:", blocksErr?.message);
+  console.log("[plan/days] blocks count:", blockRows?.length, "| blocksErr:", blocksErr?.message);
   if (blocksErr) return res.status(500).json({ error: blocksErr.message });
-  if (!blocks || blocks.length === 0) {
+  if (!blockRows || blockRows.length === 0) {
     console.log("[plan/days] WARNING: 0 blocks found for userId:", userId);
     return res.status(404).json({ error: "No training blocks found for this user. Check that the plan was seeded with the correct user_id." });
   }
 
-  const blockIds = blocks.map((b) => b.block_id).filter(Boolean);
+  const blockIds = blockRows.map((b) => b.block_id).filter(Boolean);
   const { data: weeks, error: weeksErr } = await supabase
     .from("training_weeks")
     .select("*")
@@ -73,9 +73,9 @@ export default async function handler(req, res) {
 
   // Build block structure from training_blocks, then attach matching weeks and days
   const blockMap = {};
-  const blockOrder = blocks.map((b) => b.block_id);
+  const blockOrder = blockRows.map((b) => b.block_id);
   const blockIndexById = Object.fromEntries(blockOrder.map((id, idx) => [id, idx]));
-  for (const block of blocks) {
+  for (const block of blockRows) {
     blockMap[block.block_id] = {
       label: block.label || block.phase || block.block_id,
       weeks: [],
