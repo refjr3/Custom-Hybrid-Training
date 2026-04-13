@@ -3556,28 +3556,16 @@ export default function App() {
       )}
 
       {nav === "perf" && (() => {
-        const currentWeekDays = (planBlocks[0]?.weeks?.[0]?.days) || [];
-
-        const complianceData = currentWeekDays.map(d => {
-          const planned = d.am || d.pm;
-          if (!planned) return { day:d.day, status:"none" };
-          const dayDateStr = d.date?.split(" ")[0];
-          const hasActivity = garminActivities.some(a => a.start_time?.startsWith(dayDateStr || "___"));
-          return { day:d.day, status: hasActivity ? "done" : "missed", planned:d.am };
-        });
-        const plannedCount = complianceData.filter(d => d.status !== "none").length;
-        const doneCount = complianceData.filter(d => d.status === "done").length;
-        const compliancePct = plannedCount > 0 ? Math.round((doneCount / plannedCount) * 100) : 0;
-
         const last7 = garminActivities.filter(a => {
           if (!a.start_time) return false;
           const d = new Date(a.start_time);
           return (Date.now() - d.getTime()) < 7 * 86400000;
         });
 
-        const vo2Metrics = unifiedMetrics.filter(m => m.vo2_max).slice(0, 30).reverse();
-        const trendVo2 = (perfTrends?.vo2max30 || []).filter((x) => x.vo2_max != null).slice(-1)[0]?.vo2_max;
-        const currentVo2 = trendVo2 ?? (vo2Metrics.length > 0 ? vo2Metrics[vo2Metrics.length - 1].vo2_max : null);
+        const complianceWeek = perfTrends?.complianceWeek;
+        const compliancePct = complianceWeek?.percent;
+        const complianceDays = Array.isArray(complianceWeek?.days) ? complianceWeek.days : [];
+        const prRows = Array.isArray(perfTrends?.personalRecordRows) ? perfTrends.personalRecordRows : [];
 
         const zoneColors = ["#555", C.blue, C.yellow, "#FF7700", C.red];
         const zoneData = [0,0,0,0,0];
@@ -3591,27 +3579,6 @@ export default function App() {
             totalZoneTime += dur;
           }
         });
-
-        const prs = {};
-        garminActivities.forEach(a => {
-          if (!a.distance_meters || !a.duration_seconds) return;
-          const dist = a.distance_meters;
-          const pace = a.duration_seconds / (dist / 1000);
-          const checks = [
-            { key:"5K", min:4800, max:5500 },
-            { key:"10K", min:9500, max:10500 },
-            { key:"HALF", min:20500, max:22000 },
-            { key:"MARATHON", min:41500, max:43000 },
-          ];
-          checks.forEach(({ key, min, max }) => {
-            if (dist >= min && dist <= max) {
-              if (!prs[key] || a.duration_seconds < prs[key].time) {
-                prs[key] = { time: a.duration_seconds, date: a.start_time };
-              }
-            }
-          });
-        });
-        const fmtTime = (s) => { const m = Math.floor(s/60); const sec = Math.floor(s%60); return `${m}:${String(sec).padStart(2,"0")}`; };
 
         return (
           <div style={{ padding:"20px" }}>
@@ -3630,25 +3597,39 @@ export default function App() {
               </div>
             )}
 
-            {/* WEEKLY COMPLIANCE */}
+            {/* WEEKLY COMPLIANCE (from /api/metrics/trends: plan vs garmin_activities) */}
             <div style={{ marginBottom:24 }}>
-              <div style={{ display:"flex", alignItems:"center", gap:10, marginBottom:12 }}>
+              <div style={{ display:"flex", alignItems:"center", gap:10, marginBottom:12, flexWrap:"wrap" }}>
                 <div style={{ fontFamily:C.ff, fontSize:18, color:C.cyan, letterSpacing:2 }}>WEEKLY COMPLIANCE</div>
-                <div style={{ fontFamily:C.ff, fontSize:24, color: compliancePct >= 80 ? C.green : compliancePct >= 50 ? C.yellow : C.red, fontWeight:700 }}>{compliancePct}%</div>
+                <div
+                  style={{
+                    fontFamily:C.ff,
+                    fontSize:24,
+                    color: compliancePct == null ? C.muted : compliancePct >= 80 ? C.green : compliancePct >= 50 ? C.yellow : C.red,
+                    fontWeight:700,
+                  }}
+                >
+                  {compliancePct != null ? `${compliancePct}%` : "—"}
+                </div>
               </div>
+              {!perfTrendsLoading && perfTrends && complianceDays.length === 0 && (
+                <div style={{ fontFamily:C.fm, fontSize:9, color:C.muted, letterSpacing:1, marginBottom:10 }}>
+                  No training week matched today in your plan, or no plan days loaded.
+                </div>
+              )}
               <div style={{ display:"flex", gap:4, marginBottom:12 }}>
-                {complianceData.map((d,i) => {
-                  const bg = d.status === "done" ? C.green : d.status === "missed" ? `${C.red}44` : C.card;
-                  const icon = d.status === "done" ? "✅" : d.status === "missed" ? "❌" : "—";
+                {complianceDays.map((d, i) => {
+                  const icon = d.status === "completed" ? "✅" : d.status === "missed" ? "❌" : "—";
+                  const bg = d.status === "completed" ? `${C.green}33` : d.status === "missed" ? `${C.red}44` : C.card;
                   return (
-                    <div key={i} style={{ flex:1, background:bg, borderRadius:8, padding:"8px 2px", textAlign:"center", border:`1px solid ${C.border}` }}>
+                    <div key={`${d.day}_${i}`} style={{ flex:1, background:bg, borderRadius:8, padding:"8px 2px", textAlign:"center", border:`1px solid ${C.border}` }}>
                       <div style={{ fontFamily:C.fm, fontSize:7, color:C.muted, letterSpacing:1, marginBottom:4 }}>{d.day}</div>
                       <div style={{ fontSize:12 }}>{icon}</div>
                     </div>
                   );
                 })}
               </div>
-              {compliancePct < 80 && compliancePct > 0 && (
+              {compliancePct != null && compliancePct < 80 && compliancePct > 0 && (
                 <div style={{ background:C.card, borderRadius:12, padding:"12px 14px", border:`1px solid ${C.border}`, borderLeft:`3px solid ${C.yellow}`, ...C.glass }}>
                   <div style={{ fontFamily:C.fs, fontSize:12, color:C.muted, lineHeight:1.6 }}>
                     {compliancePct < 50 ? "Compliance under 50% — let's discuss what's blocking your sessions." : "Slightly under target. Prioritize the high-intensity sessions."}
@@ -3678,48 +3659,45 @@ export default function App() {
               )}
             </div>
 
-            {/* PERSONAL RECORDS */}
+            {/* PERSONAL RECORDS (from trends: garmin_activities + unified_metrics) */}
             <div style={{ marginBottom:24 }}>
               <div style={{ fontFamily:C.ff, fontSize:18, color:C.cyan, letterSpacing:2, marginBottom:12 }}>PERSONAL RECORDS</div>
-              {Object.keys(prs).length > 0 ? (
-                <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:8 }}>
-                  {Object.entries(prs).map(([key, pr]) => (
-                    <div key={key} style={{ background:C.card, borderRadius:C.radius, padding:"14px", border:`1px solid ${C.border}`, borderLeft:`3px solid ${C.cyan}`, ...C.glass }}>
-                      <div style={{ fontFamily:C.fm, fontSize:7, color:C.muted, letterSpacing:3, marginBottom:6 }}>{key}</div>
-                      <div style={{ fontFamily:C.ff, fontSize:22, color:C.cyan, fontWeight:700 }}>{fmtTime(pr.time)}</div>
-                      <div style={{ fontFamily:C.fm, fontSize:7, color:C.muted, marginTop:4, letterSpacing:1 }}>
-                        {pr.date ? new Date(pr.date).toLocaleDateString("en-US",{month:"short",day:"numeric",year:"numeric"}).toUpperCase() : ""}
-                      </div>
+              {!perfTrendsLoading && perfTrends && prRows.length > 0 ? (
+                <div style={{ background:C.card, borderRadius:C.radius, border:`1px solid ${C.border}`, padding:"12px 14px", ...C.glass }}>
+                  {prRows.map((row, ri) => (
+                    <div
+                      key={row.key}
+                      style={{
+                        display:"grid",
+                        gridTemplateColumns:"minmax(100px,1fr) auto auto",
+                        gap:10,
+                        alignItems:"baseline",
+                        padding:"8px 0",
+                        borderBottom: ri === prRows.length - 1 ? "none" : `1px solid ${C.border}`,
+                        fontFamily:C.fm,
+                        fontSize:10,
+                        letterSpacing:1,
+                      }}
+                    >
+                      <span style={{ color:C.muted }}>{row.label}</span>
+                      <span style={{ color:C.cyan, textAlign:"right", minWidth:72 }}>{row.displayValue}</span>
+                      <span style={{ color:C.muted, textAlign:"right", fontSize:9, minWidth:64 }}>{row.displaySub}</span>
                     </div>
                   ))}
                 </div>
-              ) : (
-                <div style={{ fontFamily:C.fm, fontSize:9, color:C.muted, letterSpacing:2, textAlign:"center", padding:20 }}>No PRs detected yet — sync more activities</div>
-              )}
+              ) : !perfTrendsLoading && perfTrends ? (
+                <div style={{ fontFamily:C.fm, fontSize:9, color:C.muted, letterSpacing:2, textAlign:"center", padding:16 }}>
+                  No PR data yet — sync more activities.
+                </div>
+              ) : null}
             </div>
 
-            {/* RACE PREDICTIONS */}
+            {/* RACE PREDICTIONS — deferred until VO2 from Garmin is wired */}
             <div style={{ marginBottom:24 }}>
-              <div style={{ fontFamily:C.ff, fontSize:18, color:C.cyan, letterSpacing:2, marginBottom:12 }}>RACE PREDICTIONS</div>
-              {currentVo2 ? (() => {
-                const vo2 = Number(currentVo2);
-                const predict5k  = Math.round(21.2 * 60 * Math.pow(42.195 / 5,    0.06) * Math.pow(vo2 / 50, -1.1));
-                const predict10k = Math.round(21.2 * 60 * Math.pow(42.195 / 10,   0.06) * Math.pow(vo2 / 50, -1.1) * 2.1);
-                const predictHM  = Math.round(21.2 * 60 * Math.pow(42.195 / 21.1, 0.06) * Math.pow(vo2 / 50, -1.1) * 4.6);
-                const predictM   = Math.round(21.2 * 60 * Math.pow(1,              0.06) * Math.pow(vo2 / 50, -1.1) * 10);
-                return (
-                  <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:8 }}>
-                    {[["5K",predict5k],["10K",predict10k],["HALF",predictHM],["MARATHON",predictM]].map(([label,time]) => (
-                      <div key={label} style={{ background:C.card, borderRadius:C.radius, padding:"14px", textAlign:"center", border:`1px solid ${C.border}`, ...C.glass }}>
-                        <div style={{ fontFamily:C.fm, fontSize:7, color:C.muted, letterSpacing:3, marginBottom:6 }}>{label}</div>
-                        <div style={{ fontFamily:C.ff, fontSize:20, color:C.text, fontWeight:700 }}>{fmtTime(time)}</div>
-                      </div>
-                    ))}
-                  </div>
-                );
-              })() : (
-                <div style={{ fontFamily:C.fm, fontSize:9, color:C.muted, letterSpacing:2, textAlign:"center", padding:20 }}>Need VO2 Max data for predictions — sync Garmin</div>
-              )}
+              <div style={{ fontFamily:C.ff, fontSize:18, color:C.cyan, letterSpacing:2, marginBottom:8 }}>RACE PREDICTIONS</div>
+              <div style={{ fontFamily:C.fm, fontSize:9, color:C.muted, letterSpacing:1, lineHeight:1.6, padding:"10px 12px", background:C.card, borderRadius:C.radius, border:`1px solid ${C.border}`, ...C.glass }}>
+                Race predictions will use VO2 max from Garmin when that feed is available. Until then, use the VO2 trend above from your synced metrics.
+              </div>
             </div>
           </div>
         );

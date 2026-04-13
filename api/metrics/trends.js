@@ -7,6 +7,8 @@ const supabase = createClient(
 
 const DAY_MS = 86400000;
 
+const DAY_ORDER = { MON: 0, TUE: 1, WED: 2, THU: 3, FRI: 4, SAT: 5, SUN: 6 };
+
 function isoDaysAgo(n) {
   const d = new Date(Date.now() - n * DAY_MS);
   return d.toISOString().split("T")[0];
@@ -15,6 +17,54 @@ function isoDaysAgo(n) {
 function num(v) {
   const n = Number(v);
   return Number.isFinite(n) ? n : null;
+}
+
+function dateLabelToIso(dateLabel) {
+  if (!dateLabel || typeof dateLabel !== "string") return null;
+  const y = new Date().getFullYear();
+  const parsed = new Date(`${dateLabel.trim()} ${y}`);
+  if (!Number.isFinite(parsed.getTime())) return null;
+  return parsed.toISOString().split("T")[0];
+}
+
+function activityDateIso(a) {
+  if (!a?.start_time) return null;
+  return String(a.start_time).slice(0, 10);
+}
+
+function fmtMmSs(sec) {
+  const s = Math.max(0, Math.floor(Number(sec) || 0));
+  const m = Math.floor(s / 60);
+  const r = s % 60;
+  return `${m}:${String(r).padStart(2, "0")}`;
+}
+
+function fmtShortDate(iso) {
+  if (!iso) return "";
+  const d = new Date(`${iso}T12:00:00Z`);
+  if (!Number.isFinite(d.getTime())) return "";
+  return d.toLocaleDateString("en-US", { month: "short", day: "numeric" });
+}
+
+function isPlannedTrainingDay(day) {
+  return !!(
+    day.am_session
+    || day.pm_session
+    || day.am_session_custom
+    || day.pm_session_custom
+  );
+}
+
+function plannedLabel(day) {
+  if (day.am_session_custom) return String(day.am_session_custom).split("\n")[0].slice(0, 48);
+  if (day.pm_session_custom) return String(day.pm_session_custom).split("\n")[0].slice(0, 48);
+  return day.am_session || day.pm_session || "";
+}
+
+function isRunActivity(a) {
+  const t = String(a?.activity_type || "").toLowerCase().replace(/\s/g, "");
+  return ["run", "trailrun", "virtualrun", "running", "trailrunning", "treadmillrunning"].includes(t)
+    || t.includes("run");
 }
 
 /** Banister-style EWMA: k = 1 - exp(-1/tau) */
@@ -30,6 +80,129 @@ function ewmaSeries(dailyLoadsAsc, tau) {
   return out;
 }
 
+function findCurrentWeekDayRows(dayRows, todayIso) {
+  if (!Array.isArray(dayRows) || !dayRows.length) return [];
+  const byWeek = new Map();
+  for (const d of dayRows) {
+    const wid = d.week_id || "_";
+    if (!byWeek.has(wid)) byWeek.set(wid, []);
+    byWeek.get(wid).push(d);
+  }
+  let chosen = null;
+  for (const [, days] of byWeek) {
+    const isos = days.map((x) => dateLabelToIso(x.date_label)).filter(Boolean);
+    if (isos.includes(todayIso)) {
+      chosen = days;
+      break;
+    }
+  }
+  if (!chosen) {
+    for (const [, days] of byWeek) {
+      const isos = days.map((x) => dateLabelToIso(x.date_label)).filter(Boolean);
+      if (!isos.length) continue;
+      const lo = isos.reduce((a, b) => (a < b ? a : b));
+      const hi = isos.reduce((a, b) => (a > b ? a : b));
+      if (todayIso >= lo && todayIso <= hi) {
+        chosen = days;
+        break;
+      }
+    }
+  }
+  if (!chosen) return [];
+  return [...chosen].sort(
+    (a, b) => (DAY_ORDER[a.day_name] ?? 99) - (DAY_ORDER[b.day_name] ?? 99)
+  );
+}
+
+function buildComplianceWeek(currentWeekDays, activities) {
+  const days = (currentWeekDays || []).map((day) => {
+    const date_iso = dateLabelToIso(day.date_label);
+    const planned = isPlannedTrainingDay(day);
+    const activity = activities.find((a) => activityDateIso(a) === date_iso);
+    const completed = Boolean(activity);
+    const duration_min =
+      activity?.duration_seconds != null
+        ? Math.round(Number(activity.duration_seconds) / 60)
+        : null;
+    let status = "rest";
+    if (planned) status = completed ? "completed" : "missed";
+    return {
+      day: day.day_name,
+      date_iso,
+      planned: plannedLabel(day) || null,
+      actual: activity?.activity_type || null,
+      completed,
+      duration: duration_min,
+      status,
+    };
+  });
+  const plannedOnly = days.filter((d) => d.status !== "rest");
+  const done = days.filter((d) => d.status === "completed").length;
+  const percent =
+    plannedOnly.length > 0 ? Math.round((done / plannedOnly.length) * 100) : null;
+  return { percent, days };
+}
+
+function buildPersonalRecords(activities, unifiedAll) {
+  const runs = (activities || []).filter(isRunActivity);
+  const byDuration = (a, b) => Number(a.duration_seconds) - Number(b.duration_seconds);
+
+  const fastest5k = [...runs]
+    .filter((a) => a.distance_meters >= 4800 && a.distance_meters <= 5200)
+    .sort(byDuration)[0];
+  const fastest10k = [...runs]
+    .filter((a) => a.distance_meters >= 9800 && a.distance_meters <= 10200)
+    .sort(byDuration)[0];
+  const longestRun = [...runs].sort((a, b) => Number(b.distance_meters) - Number(a.distance_meters))[0];
+
+  const um = Array.isArray(unifiedAll) ? unifiedAll : [];
+  const hrvRows = um.filter((m) => num(m.hrv) != null);
+  const bestHrv = [...hrvRows].sort((a, b) => num(b.hrv) - num(a.hrv))[0];
+  const rhrRows = um.filter((m) => num(m.rhr) != null && num(m.rhr) > 30);
+  const lowestRhr = [...rhrRows].sort((a, b) => num(a.rhr) - num(b.rhr))[0];
+
+  const rows = [
+    {
+      key: "fastest_5k",
+      label: "FASTEST 5K",
+      value: fastest5k ? fmtMmSs(fastest5k.duration_seconds) : null,
+      sub: fastest5k ? fmtShortDate(activityDateIso(fastest5k)) : null,
+    },
+    {
+      key: "fastest_10k",
+      label: "FASTEST 10K",
+      value: fastest10k ? fmtMmSs(fastest10k.duration_seconds) : null,
+      sub: fastest10k ? fmtShortDate(activityDateIso(fastest10k)) : null,
+    },
+    {
+      key: "longest_run",
+      label: "LONGEST RUN",
+      value: longestRun
+        ? `${(Number(longestRun.distance_meters) / 1000).toFixed(1)}km`
+        : null,
+      sub: longestRun ? fmtShortDate(activityDateIso(longestRun)) : null,
+    },
+    {
+      key: "best_hrv",
+      label: "BEST HRV",
+      value: bestHrv ? `${Math.round(num(bestHrv.hrv) * 10) / 10}ms` : null,
+      sub: bestHrv ? fmtShortDate(String(bestHrv.date).slice(0, 10)) : null,
+    },
+    {
+      key: "lowest_rhr",
+      label: "LOWEST RHR",
+      value: lowestRhr ? `${Math.round(num(lowestRhr.rhr))}bpm` : null,
+      sub: lowestRhr ? fmtShortDate(String(lowestRhr.date).slice(0, 10)) : null,
+    },
+  ];
+
+  return rows.map((r) => ({
+    ...r,
+    displayValue: r.value != null ? r.value : "—",
+    displaySub: r.value != null ? r.sub : "sync more activities",
+  }));
+}
+
 export default async function handler(req, res) {
   if (req.method !== "GET") {
     return res.status(405).json({ error: "Method not allowed" });
@@ -43,6 +216,7 @@ export default async function handler(req, res) {
   const userId = authData.user.id;
 
   const cutoff = isoDaysAgo(60);
+  const todayIso = new Date().toISOString().split("T")[0];
 
   const { data: rows, error: mErr } = await supabase
     .from("unified_metrics")
@@ -130,13 +304,42 @@ export default async function handler(req, res) {
     .select("activity_id, activity_type, name, start_time, duration_seconds, distance_meters, avg_hr, max_hr, calories, source")
     .eq("user_id", userId)
     .order("start_time", { ascending: false })
-    .limit(40);
+    .limit(180);
 
   if (aErr) {
     return res.status(500).json({ error: "activities_query_failed", details: aErr.message });
   }
 
-  const todayIso = new Date().toISOString().split("T")[0];
+  const activities = (acts || []).map((a) => ({
+    ...a,
+    date: activityDateIso(a),
+  }));
+
+  const { data: dayRows, error: dErr } = await supabase
+    .from("training_days")
+    .select("week_id, day_name, date_label, am_session, pm_session, am_session_custom, pm_session_custom")
+    .eq("user_id", userId);
+
+  if (dErr) {
+    return res.status(500).json({ error: "training_days_query_failed", details: dErr.message });
+  }
+
+  const currentWeekDayRows = findCurrentWeekDayRows(dayRows || [], todayIso);
+  const complianceWeek = buildComplianceWeek(currentWeekDayRows, activities);
+
+  const { data: allMetrics, error: uAllErr } = await supabase
+    .from("unified_metrics")
+    .select("date, hrv, rhr, source")
+    .eq("user_id", userId)
+    .order("date", { ascending: false })
+    .limit(400);
+
+  if (uAllErr) {
+    return res.status(500).json({ error: "unified_metrics_all_query_failed", details: uAllErr.message });
+  }
+
+  const personalRecordRows = buildPersonalRecords(activities, allMetrics || []);
+
   const todayRow = byDate.get(todayIso);
   const currentHrv = num(todayRow?.hrv);
 
@@ -156,6 +359,8 @@ export default async function handler(req, res) {
     rhr30,
     rhrPrDates,
     vo2max30,
-    activities: acts || [],
+    activities,
+    complianceWeek,
+    personalRecordRows,
   });
 }
