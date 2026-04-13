@@ -50,17 +50,22 @@ export default async function handler(req, res) {
   if (authErr || !authData?.user) return res.status(401).json({ error: "Invalid token" });
   const userId = authData.user.id;
 
-  const athleteId = process.env.INTERVALS_ATHLETE_ID;
-  const apiKey = process.env.INTERVALS_API_KEY;
+  const athleteId = process.env.INTERVALS_ATHLETE_ID?.trim();
+  const apiKey = process.env.INTERVALS_API_KEY?.trim();
   if (!athleteId || !apiKey) {
     return res.status(503).json({ error: "intervals_missing_env", success: false });
   }
 
+  // Basic auth: username literal "API_KEY", password = the key value
   const auth = Buffer.from(`API_KEY:${apiKey}`).toString("base64");
   const headers = {
     Authorization: `Basic ${auth}`,
     Accept: "application/json",
+    "Content-Type": "application/json",
   };
+
+  console.log("[intervals/sync] athleteId:", athleteId);
+  console.log("[intervals/sync] apiKey present:", true, "length:", apiKey.length);
 
   const today = new Date().toISOString().split("T")[0];
   const sevenDaysAgo = new Date(Date.now() - LOOKBACK_DAYS * 24 * 60 * 60 * 1000)
