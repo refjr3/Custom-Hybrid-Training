@@ -22,7 +22,12 @@ const num = (v) => {
 
 const normalizeList = (body) => {
   if (Array.isArray(body)) return body;
-  if (body && typeof body === "object" && !Array.isArray(body)) {
+  if (body && typeof body === "object") {
+    if (Array.isArray(body.activities)) return body.activities;
+    if (Array.isArray(body.wellness)) return body.wellness;
+    if (Array.isArray(body.fitness)) return body.fitness;
+    if (Array.isArray(body.items)) return body.items;
+    if (Array.isArray(body.results)) return body.results;
     return Object.entries(body).map(([key, val]) => {
       if (val && typeof val === "object" && !Array.isArray(val)) {
         return { ...val, id: val.id ?? key };
