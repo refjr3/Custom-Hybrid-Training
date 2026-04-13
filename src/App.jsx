@@ -31,6 +31,260 @@ const C = {
 };
 const glow = (color, i=0.3) => `0 0 20px ${color}${Math.round(i*255).toString(16).padStart(2,"0")}, 0 0 60px ${color}${Math.round(i*0.4*255).toString(16).padStart(2,"0")}`;
 
+const PERF_CHART_W = 340;
+const PERF_CHART_H = 112;
+const PERF_PAD = 10;
+
+function perfChartRange(values, padFrac = 0.08) {
+  const finite = values.map(Number).filter((x) => Number.isFinite(x));
+  if (!finite.length) return { min: 0, max: 1 };
+  let lo = Math.min(...finite);
+  let hi = Math.max(...finite);
+  if (hi - lo < 1e-6) {
+    lo -= 1;
+    hi += 1;
+  }
+  const pad = (hi - lo) * padFrac;
+  return { min: lo - pad, max: hi + pad };
+}
+
+function perfLinePathD(values, w, h, pad, vmin, vmax) {
+  const iw = w - pad * 2;
+  const ih = h - pad * 2;
+  const vr = Math.max(vmax - vmin, 1e-9);
+  const n = values.length;
+  if (n === 0) return "";
+  let d = "";
+  let started = false;
+  values.forEach((v, i) => {
+    if (v == null || !Number.isFinite(Number(v))) return;
+    const x = pad + (n <= 1 ? iw / 2 : (i / Math.max(n - 1, 1)) * iw);
+    const y = pad + ih - ((Number(v) - vmin) / vr) * ih;
+    d += `${started ? "L" : "M"}${x},${y}`;
+    started = true;
+  });
+  return d;
+}
+
+function fillMetricSeries(arr, fallback = null) {
+  let last = fallback;
+  return arr.map((v) => {
+    const n = Number(v);
+    if (Number.isFinite(n)) {
+      last = n;
+      return n;
+    }
+    return last != null && Number.isFinite(last) ? last : null;
+  });
+}
+
+function PerfIntervalsBlocks({ trends, C, glow }) {
+  if (!trends) return null;
+  const { summary, hrv30, readiness30, sleep14, rhr30, rhrPrDates, vo2max30, activities } = trends;
+  const atl = summary?.atl ?? 0;
+  const ctl = summary?.ctl ?? 0;
+  const tsb = summary?.tsb ?? 0;
+  const tsbColor = tsb > 0 ? C.green : tsb >= -10 ? C.yellow : C.red;
+  const tsbLabel = tsb > 0 ? "FRESH" : tsb >= -10 ? "NEUTRAL" : "FATIGUED";
+
+  const hrvFilled = fillMetricSeries(hrv30.map((d) => d.hrv));
+  const hrv7Filled = fillMetricSeries(hrv30.map((d) => d.hrv7));
+  const hrvRange = perfChartRange(hrvFilled.filter((x) => x != null));
+  const hrvPath = perfLinePathD(hrvFilled, PERF_CHART_W, PERF_CHART_H, PERF_PAD, hrvRange.min, hrvRange.max);
+  const hrv7Path = perfLinePathD(hrv7Filled, PERF_CHART_W, PERF_CHART_H, PERF_PAD, hrvRange.min, hrvRange.max);
+
+  const readFilled = fillMetricSeries(readiness30.map((d) => d.readiness), 50);
+  const readPath = perfLinePathD(readFilled, PERF_CHART_W, PERF_CHART_H, PERF_PAD, 0, 100);
+
+  const sleepH = sleep14.map((d) => d.sleep_hours ?? 0);
+  const maxSleepH = Math.max(9, ...sleepH.map(Number), 1);
+  const barW = sleep14.length ? (PERF_CHART_W - PERF_PAD * 2) / sleep14.length - 2 : 8;
+
+  const rhrFilled = fillMetricSeries(rhr30.map((d) => d.rhr), 55);
+  const rhrVals = rhrFilled.filter((x) => x != null && Number.isFinite(x));
+  const rhrRange = perfChartRange(rhrVals.length ? rhrVals : [50, 60]);
+  const rhrPath = perfLinePathD(rhrFilled, PERF_CHART_W, PERF_CHART_H, PERF_PAD, rhrRange.min, rhrRange.max);
+  const prSet = new Set((rhrPrDates || []).map((p) => p.date));
+
+  const vo2Filled = fillMetricSeries(vo2max30.map((d) => d.vo2_max), null);
+  const vo2vals = vo2Filled.filter((x) => x != null && Number.isFinite(x));
+  const vo2Range = perfChartRange(vo2vals.length ? vo2vals : [40, 55]);
+  const vo2Path = perfLinePathD(vo2Filled, PERF_CHART_W, PERF_CHART_H, PERF_PAD, vo2Range.min, vo2Range.max);
+
+  const card = {
+    background: C.card,
+    borderRadius: C.radius,
+    padding: "14px 12px",
+    border: `1px solid ${C.border}`,
+    marginBottom: 20,
+    ...C.glass,
+  };
+
+  return (
+    <>
+      <div style={{ marginBottom: 24 }}>
+        <div style={{ fontFamily: C.ff, fontSize: 18, color: C.cyan, letterSpacing: 2, marginBottom: 12 }}>TRAINING LOAD</div>
+        <div style={{ fontFamily: C.fm, fontSize: 7, color: C.muted, letterSpacing: 1, marginBottom: 10, lineHeight: 1.5 }}>
+          ATL / CTL / TSB from unified Intervals data (7d / 42d EWMA on daily load).
+        </div>
+        <div style={{ display: "flex", gap: 8 }}>
+          <div style={{ flex: 1, ...card, textAlign: "center", marginBottom: 0 }}>
+            <div style={{ fontFamily: C.fm, fontSize: 7, color: C.muted, letterSpacing: 3, marginBottom: 6 }}>ATL</div>
+            <div style={{ fontFamily: C.ff, fontSize: 28, color: C.text, fontWeight: 700 }}>{atl}</div>
+            <div style={{ fontFamily: C.fm, fontSize: 7, color: C.muted, letterSpacing: 2 }}>ACUTE</div>
+          </div>
+          <div style={{ flex: 1, ...card, textAlign: "center", marginBottom: 0 }}>
+            <div style={{ fontFamily: C.fm, fontSize: 7, color: C.muted, letterSpacing: 3, marginBottom: 6 }}>CTL</div>
+            <div style={{ fontFamily: C.ff, fontSize: 28, color: C.text, fontWeight: 700 }}>{ctl}</div>
+            <div style={{ fontFamily: C.fm, fontSize: 7, color: C.muted, letterSpacing: 2 }}>CHRONIC</div>
+          </div>
+          <div style={{ flex: 1, ...card, textAlign: "center", marginBottom: 0, border: `1px solid ${tsbColor}33`, boxShadow: glow(tsbColor, 0.12) }}>
+            <div style={{ fontFamily: C.fm, fontSize: 7, color: C.muted, letterSpacing: 3, marginBottom: 6 }}>TSB</div>
+            <div style={{ fontFamily: C.ff, fontSize: 28, color: tsbColor, fontWeight: 700 }}>{tsb > 0 ? "+" : ""}{tsb}</div>
+            <div style={{ fontFamily: C.fm, fontSize: 7, color: tsbColor, letterSpacing: 2 }}>{tsbLabel}</div>
+          </div>
+        </div>
+      </div>
+
+      <div style={card}>
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", marginBottom: 8 }}>
+          <div style={{ fontFamily: C.ff, fontSize: 16, color: C.cyan, letterSpacing: 2 }}>HRV TREND</div>
+          <div style={{ fontFamily: C.ff, fontSize: 22, color: C.cyan, fontWeight: 700 }}>
+            {trends.current?.hrv != null && Number.isFinite(trends.current.hrv) ? (Math.round(trends.current.hrv * 10) / 10).toFixed(1) : "—"}
+          </div>
+        </div>
+        <div style={{ fontFamily: C.fm, fontSize: 6, color: C.muted, letterSpacing: 1, marginBottom: 6 }}>30 days · cyan = daily · white = 7d avg</div>
+        <svg width={PERF_CHART_W} height={PERF_CHART_H} style={{ display: "block", maxWidth: "100%" }}>
+          <rect x={0} y={0} width={PERF_CHART_W} height={PERF_CHART_H} fill="transparent" />
+          {hrv7Path && <path d={hrv7Path} fill="none" stroke="rgba(255,255,255,0.35)" strokeWidth={1.5} />}
+          {hrvPath && <path d={hrvPath} fill="none" stroke={C.cyan} strokeWidth={2} />}
+        </svg>
+      </div>
+
+      <div style={card}>
+        <div style={{ fontFamily: C.ff, fontSize: 16, color: C.cyan, letterSpacing: 2, marginBottom: 8 }}>READINESS</div>
+        <svg width={PERF_CHART_W} height={PERF_CHART_H} style={{ display: "block", maxWidth: "100%" }}>
+          {(() => {
+            const ih = PERF_CHART_H - PERF_PAD * 2;
+            const iw = PERF_CHART_W - PERF_PAD * 2;
+            return (
+              <>
+                <rect x={PERF_PAD} y={PERF_PAD} width={iw} height={ih * 0.3} fill="rgba(0,212,160,0.08)" />
+                <rect x={PERF_PAD} y={PERF_PAD + ih * 0.3} width={iw} height={ih * 0.3} fill="rgba(255,214,0,0.08)" />
+                <rect x={PERF_PAD} y={PERF_PAD + ih * 0.6} width={iw} height={ih * 0.4} fill="rgba(255,59,48,0.07)" />
+              </>
+            );
+          })()}
+          {readPath && <path d={readPath} fill="none" stroke={C.cyan} strokeWidth={2} />}
+        </svg>
+        <div style={{ fontFamily: C.fm, fontSize: 6, color: C.muted, marginTop: 6, letterSpacing: 1 }}>Green &gt;70 · Yellow 40–70 · Red &lt;40</div>
+      </div>
+
+      <div style={card}>
+        <div style={{ fontFamily: C.ff, fontSize: 16, color: C.cyan, letterSpacing: 2, marginBottom: 8 }}>SLEEP</div>
+        <svg width={PERF_CHART_W} height={PERF_CHART_H + 14} style={{ display: "block", maxWidth: "100%" }}>
+          {(() => {
+            const ih = PERF_CHART_H - PERF_PAD * 2;
+            const iw = PERF_CHART_W - PERF_PAD * 2;
+            const y8 = PERF_PAD + ih - (8 / maxSleepH) * ih;
+            return (
+              <line x1={PERF_PAD} y1={y8} x2={PERF_PAD + iw} y2={y8} stroke="rgba(0,243,255,0.35)" strokeDasharray="4 3" />
+            );
+          })()}
+          {sleep14.map((d, i) => {
+            const ih = PERF_CHART_H - PERF_PAD * 2;
+            const iw = PERF_CHART_W - PERF_PAD * 2;
+            const x = PERF_PAD + (sleep14.length <= 1 ? iw / 2 : (i / Math.max(sleep14.length - 1, 1)) * iw) - barW / 2;
+            const hRaw = Number(d.sleep_hours) || 0;
+            const bh = (hRaw / maxSleepH) * ih;
+            const y = PERF_PAD + ih - bh;
+            const sc = Number(d.sleep_score);
+            const barColor = Number.isFinite(sc) ? (sc >= 75 ? C.green : sc >= 50 ? C.yellow : C.red) : `${C.cyan}66`;
+            return (
+              <g key={d.date}>
+                <rect x={x} y={y} width={barW} height={Math.max(bh, 1)} rx={2} fill={barColor} opacity={0.85} />
+              </g>
+            );
+          })}
+        </svg>
+        <div style={{ fontFamily: C.fm, fontSize: 6, color: C.muted, marginTop: 4, letterSpacing: 1 }}>Bars = sleep hours · color = sleep score · dashed = 8h</div>
+      </div>
+
+      <div style={card}>
+        <div style={{ fontFamily: C.ff, fontSize: 16, color: C.cyan, letterSpacing: 2, marginBottom: 8 }}>RESTING HR</div>
+        <svg width={PERF_CHART_W} height={PERF_CHART_H} style={{ display: "block", maxWidth: "100%" }}>
+          {rhrPath && <path d={rhrPath} fill="none" stroke="#e07b3a" strokeWidth={2} />}
+          {rhr30.map((d, i) => {
+            if (d.rhr == null || !Number.isFinite(Number(d.rhr))) return null;
+            const iw = PERF_CHART_W - PERF_PAD * 2;
+            const ih = PERF_CHART_H - PERF_PAD * 2;
+            const n = rhr30.length;
+            const x = PERF_PAD + (n <= 1 ? iw / 2 : (i / Math.max(n - 1, 1)) * iw);
+            const vr = Math.max(rhrRange.max - rhrRange.min, 1e-9);
+            const y = PERF_PAD + ih - ((Number(d.rhr) - rhrRange.min) / vr) * ih;
+            if (!prSet.has(d.date)) return null;
+            return <circle key={d.date} cx={x} cy={y} r={4} fill={C.green} stroke="#000" strokeWidth={1} />;
+          })}
+        </svg>
+        {rhrPrDates?.length > 0 && (
+          <div style={{ fontFamily: C.fm, fontSize: 7, color: C.green, letterSpacing: 1, marginTop: 6 }}>
+            Best RHR {rhrPrDates[0]?.value} · {rhrPrDates.map((p) => p.date.slice(5)).join(", ")}
+          </div>
+        )}
+      </div>
+
+      <div style={card}>
+        <div style={{ fontFamily: C.ff, fontSize: 16, color: C.cyan, letterSpacing: 2, marginBottom: 8 }}>VO2 MAX</div>
+        {vo2vals.length > 0 && vo2Path ? (
+          <svg width={PERF_CHART_W} height={PERF_CHART_H} style={{ display: "block", maxWidth: "100%" }}>
+            <path d={vo2Path} fill="none" stroke={C.green} strokeWidth={2} />
+          </svg>
+        ) : (
+          <div style={{ fontFamily: C.fm, fontSize: 9, color: C.muted, letterSpacing: 2 }}>No VO2 points in this window.</div>
+        )}
+      </div>
+
+      <div style={{ ...card, padding: "12px 10px" }}>
+        <div style={{ fontFamily: C.ff, fontSize: 16, color: C.cyan, letterSpacing: 2, marginBottom: 10 }}>ACTIVITIES</div>
+        {(activities || []).length === 0 ? (
+          <div style={{ fontFamily: C.fm, fontSize: 9, color: C.muted, letterSpacing: 2 }}>No activities synced yet.</div>
+        ) : (
+          <div style={{ display: "flex", flexDirection: "column", gap: 8, maxHeight: 280, overflowY: "auto" }}>
+            {(activities || []).map((a) => (
+              <div
+                key={`${a.activity_id}-${a.start_time || ""}`}
+                style={{
+                  display: "flex",
+                  justifyContent: "space-between",
+                  alignItems: "center",
+                  gap: 8,
+                  padding: "8px 10px",
+                  background: C.card2,
+                  borderRadius: 10,
+                  border: `1px solid ${C.border}`,
+                }}
+              >
+                <div style={{ minWidth: 0 }}>
+                  <div style={{ fontFamily: C.ff, fontSize: 13, color: C.text, letterSpacing: 0.5, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
+                    {a.name || a.activity_type}
+                  </div>
+                  <div style={{ fontFamily: C.fm, fontSize: 7, color: C.muted, letterSpacing: 1, marginTop: 2 }}>
+                    {a.activity_type}
+                    {a.start_time ? ` · ${String(a.start_time).slice(0, 10)}` : ""}
+                  </div>
+                </div>
+                <div style={{ fontFamily: C.fm, fontSize: 8, color: C.cyan, flexShrink: 0, textAlign: "right" }}>
+                  {a.duration_seconds ? `${Math.round(a.duration_seconds / 60)}m` : "—"}
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+    </>
+  );
+}
+
 const HR_ZONES = [
   { zone:"Z1", name:"WARM UP",   pct:"69–80%",  bpm:"114–136", color:"#555" },
   { zone:"Z2", name:"EASY",      pct:"80–89%",  bpm:"132–151", color:C.green },
@@ -1546,6 +1800,8 @@ export default function App() {
   const [intervalsSyncError, setIntervalsSyncError] = useState("");
   const [intervalsLastSyncedAt, setIntervalsLastSyncedAt] = useState(null);
   const [intervalsSyncSummary, setIntervalsSyncSummary] = useState(null);
+  const [perfTrends, setPerfTrends] = useState(null);
+  const [perfTrendsLoading, setPerfTrendsLoading] = useState(false);
   const [labOpen, setLabOpen] = useState(false);
   const [labMessages, setLabMessages] = useState([]);
   const [labInput, setLabInput] = useState("");
@@ -1676,6 +1932,32 @@ export default function App() {
     fetchIntervalsSync();
     fetchStravaWeeklyZ2();
   }, [profile]);
+
+  useEffect(() => {
+    if (nav !== "perf" || !session?.access_token) return;
+    let cancelled = false;
+    setPerfTrendsLoading(true);
+    fetch("/api/metrics/trends", {
+      headers: { Authorization: `Bearer ${session.access_token}` },
+    })
+      .then(async (res) => {
+        const data = await res.json().catch(() => ({}));
+        if (!res.ok || data.error) return null;
+        return data;
+      })
+      .then((data) => {
+        if (!cancelled) setPerfTrends(data);
+      })
+      .catch(() => {
+        if (!cancelled) setPerfTrends(null);
+      })
+      .finally(() => {
+        if (!cancelled) setPerfTrendsLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [nav, session?.access_token]);
 
   const fetchWhoopData = async () => {
     try {
@@ -2343,12 +2625,8 @@ export default function App() {
     return Number.isFinite(n) ? n : null;
   };
 
-  const intervalsReadiness = intervalsNum(intervalsTodayMetric, "recovery_score");
-  const rec = intervalsReadiness ?? Number(whoopData?.recovery?.score ?? 0);
-  const intervalsStrainOrLoad = intervalsNum(intervalsTodayMetric, "strain")
-    ?? intervalsNum(intervalsTodayMetric, "training_load");
-  const strain = intervalsStrainOrLoad ?? Number(whoopData?.strain?.score ?? 0);
-  const strainRingLabel = intervalsStrainOrLoad != null ? "LOAD" : "STRAIN";
+  const rec = intervalsNum(intervalsTodayMetric, "recovery_score")
+    ?? Number(whoopData?.recovery?.score ?? 0);
   const hrv = intervalsNum(intervalsTodayMetric, "hrv")
     ?? Number(whoopData?.recovery?.hrv ?? 0);
   const rhr = intervalsNum(intervalsTodayMetric, "rhr")
@@ -2357,15 +2635,6 @@ export default function App() {
   const sleepHours = sleepHoursRaw != null && sleepHoursRaw > 0
     ? Math.round(sleepHoursRaw * 10) / 10
     : Number(whoopData?.sleep?.hours ?? 0);
-  const intervalsSleepScore = intervalsNum(intervalsTodayMetric, "sleep_score");
-  const sleepFromHours = sleepHoursRaw != null && sleepHoursRaw > 0
-    ? Math.max(0, Math.min(100, Math.round((sleepHoursRaw / 8) * 100)))
-    : null;
-  const sleep = intervalsSleepScore != null
-    ? Math.max(0, Math.min(100, Math.round(intervalsSleepScore)))
-    : (sleepFromHours != null
-      ? sleepFromHours
-      : Number(whoopData?.sleep?.score ?? 0));
   const sleepEff   = whoopData?.sleep?.efficiency ?? 0;
   const rc         = whoopColor(rec);
 
@@ -2608,19 +2877,10 @@ export default function App() {
           !whoopData
           || (
             Number(rec || 0) <= 0
-            && Number(strain || 0) <= 0
-            && Number(sleep || 0) <= 0
+            && Number(hrv || 0) <= 0
+            && Number(sleepHours || 0) <= 0
           )
         );
-
-        const intervalsStatusLabel = intervalsSyncing
-          ? "INTERVALS · SYNCING..."
-          : intervalsLastSyncedAt
-            ? `INTERVALS · ${new Date(intervalsLastSyncedAt).toLocaleString("en-US", { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" })}`
-            : intervalsSyncError
-              ? "INTERVALS · SYNC ERROR"
-              : "INTERVALS · NOT SYNCED";
-        const intervalsStatusColor = intervalsSyncError ? C.red : (intervalsLastSyncedAt ? C.green : "#666");
 
         return (
           <div style={{ padding: "0 16px 16px", display: "flex", flexDirection: "column", gap: 16, overflowX: "hidden" }}>
@@ -2665,17 +2925,6 @@ export default function App() {
                   >
                     ↺ SYNC
                   </button>
-                  <span
-                    style={{
-                      fontFamily: C.fm,
-                      fontSize: 9,
-                      color: intervalsStatusColor,
-                      letterSpacing: 1.5,
-                      textTransform: "uppercase",
-                    }}
-                  >
-                    {intervalsStatusLabel}
-                  </span>
                 </div>
               </div>
               <div style={{ fontFamily: C.ff, fontSize: 38, color: C.text, lineHeight: 1, letterSpacing: 1, marginTop: 8 }}>
@@ -2721,67 +2970,35 @@ export default function App() {
             )}
 
             <div style={{ ...cardGlass, boxShadow: `0 0 18px ${rc}33` }}>
-              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 12, marginBottom: 14 }}>
-                <div style={{ display: "flex", justifyContent: "center" }}>
-                  <Ring
-                    score={rec}
-                    size={110}
-                    stroke={10}
-                    color={rc}
-                    label={intervalsReadiness != null ? "READINESS" : "RECOVERY"}
-                    sublabel={whoopLabel(rec)}
-                    glowEffect
-                  />
-                </div>
-                <div style={{ display: "flex", justifyContent: "center" }}>
-                  <Ring
-                    score={strain}
-                    progress={
-                      strainRingLabel === "LOAD"
-                        ? Math.min(100, (Math.max(0, Number(strain)) / 40) * 100)
-                        : undefined
-                    }
-                    size={110}
-                    stroke={10}
-                    color="#4a90c4"
-                    label={strainRingLabel}
-                    formatValue={(v) => {
-                      const n = Number(v);
-                      if (!Number.isFinite(n)) return "—";
-                      return strainRingLabel === "LOAD"
-                        ? String(Math.round(n * 10) / 10)
-                        : String(Math.round(n));
-                    }}
-                  />
-                </div>
-                <div style={{ display: "flex", justifyContent: "center" }}>
-                  <Ring score={sleep} size={110} stroke={10} color="#9b59b6" label="SLEEP" />
-                </div>
+              <div style={{ display: "flex", justifyContent: "center", marginBottom: 16 }}>
+                <Ring
+                  score={rec}
+                  size={120}
+                  stroke={10}
+                  color={rc}
+                  label="RECOVERY"
+                  sublabel={whoopLabel(rec)}
+                  glowEffect
+                />
               </div>
               <div
                 style={{
                   display: "grid",
-                  gridTemplateColumns: "repeat(2, 1fr)",
+                  gridTemplateColumns: "repeat(3, 1fr)",
                   gap: 10,
-                  marginBottom: 14,
+                  marginBottom: 8,
                 }}
               >
                 {[
                   ["HRV", Number.isFinite(hrv) ? (Math.round(hrv * 10) / 10).toFixed(1) : "—"],
                   ["RHR", `${Math.round(rhr)}`],
                   ["SLEEP HRS", `${sleepHours}`],
-                  ["SLEEP SC", `${Math.round(sleep)}`],
                 ].map(([label, value]) => (
                   <div key={label} style={{ textAlign: "center" }}>
                     <div style={{ fontFamily: C.ff, fontSize: 28, color: C.cyan, lineHeight: 1 }}>{value}</div>
                     <div style={{ fontFamily: C.fm, fontSize: 8, color: C.muted, letterSpacing: 2, marginTop: 4 }}>{label}</div>
                   </div>
                 ))}
-              </div>
-              <div style={{ display: "flex", justifyContent: "center" }}>
-                <div style={{ padding: "6px 12px", borderRadius: 999, border: `1px solid ${rc}66`, color: rc, fontFamily: C.fm, fontSize: 10, letterSpacing: 2, boxShadow: glow(rc, 0.18) }}>
-                  {whoopLabel(rec)}
-                </div>
               </div>
             </div>
 
@@ -3334,7 +3551,6 @@ export default function App() {
       )}
 
       {nav === "perf" && (() => {
-        const dayNames = ["SUN","MON","TUE","WED","THU","FRI","SAT"];
         const currentWeekDays = (planBlocks[0]?.weeks?.[0]?.days) || [];
 
         const complianceData = currentWeekDays.map(d => {
@@ -3353,20 +3569,10 @@ export default function App() {
           const d = new Date(a.start_time);
           return (Date.now() - d.getTime()) < 7 * 86400000;
         });
-        const last42 = garminActivities.filter(a => {
-          if (!a.start_time) return false;
-          const d = new Date(a.start_time);
-          return (Date.now() - d.getTime()) < 42 * 86400000;
-        });
-        const atl = last7.length > 0 ? Math.round(last7.reduce((s,a) => s + (a.duration_seconds||0)/60, 0) / 7) : 0;
-        const ctl = last42.length > 0 ? Math.round(last42.reduce((s,a) => s + (a.duration_seconds||0)/60, 0) / 42) : 0;
-        const tsb = ctl - atl;
-        const tsbColor = tsb > 10 ? C.green : tsb > -10 ? C.yellow : C.red;
-        const tsbLabel = tsb > 10 ? "FRESH" : tsb > -10 ? "NEUTRAL" : "FATIGUED";
 
         const vo2Metrics = unifiedMetrics.filter(m => m.vo2_max).slice(0, 30).reverse();
-        const currentVo2 = vo2Metrics.length > 0 ? vo2Metrics[vo2Metrics.length - 1].vo2_max : null;
-        const vo2Max = vo2Metrics.length > 0 ? Math.max(...vo2Metrics.map(m => Number(m.vo2_max))) : 0;
+        const trendVo2 = (perfTrends?.vo2max30 || []).filter((x) => x.vo2_max != null).slice(-1)[0]?.vo2_max;
+        const currentVo2 = trendVo2 ?? (vo2Metrics.length > 0 ? vo2Metrics[vo2Metrics.length - 1].vo2_max : null);
 
         const zoneColors = ["#555", C.blue, C.yellow, "#FF7700", C.red];
         const zoneData = [0,0,0,0,0];
@@ -3407,6 +3613,18 @@ export default function App() {
             <div style={{ fontFamily:C.ff, fontSize:28, letterSpacing:2, marginBottom:4 }}>PERFORMANCE<span style={{ color:C.cyan }}>.</span></div>
             <div style={{ fontFamily:C.fm, fontSize:7, color:C.muted, letterSpacing:3, marginBottom:20, textTransform:"uppercase" }}>TRAINING ANALYTICS</div>
 
+            {perfTrendsLoading && (
+              <div style={{ fontFamily:C.fm, fontSize:10, color:C.muted, letterSpacing:2, marginBottom:20 }}>LOADING METRICS…</div>
+            )}
+            {!perfTrendsLoading && perfTrends && (
+              <PerfIntervalsBlocks trends={perfTrends} C={C} glow={glow} />
+            )}
+            {!perfTrendsLoading && !perfTrends && session?.access_token && (
+              <div style={{ fontFamily:C.fm, fontSize:9, color:C.muted, letterSpacing:1, marginBottom:20, lineHeight:1.5 }}>
+                No trend data yet. Sync from the Today tab, then return here.
+              </div>
+            )}
+
             {/* WEEKLY COMPLIANCE */}
             <div style={{ marginBottom:24 }}>
               <div style={{ display:"flex", alignItems:"center", gap:10, marginBottom:12 }}>
@@ -3430,55 +3648,6 @@ export default function App() {
                   <div style={{ fontFamily:C.fs, fontSize:12, color:C.muted, lineHeight:1.6 }}>
                     {compliancePct < 50 ? "Compliance under 50% — let's discuss what's blocking your sessions." : "Slightly under target. Prioritize the high-intensity sessions."}
                   </div>
-                </div>
-              )}
-            </div>
-
-            {/* TRAINING LOAD */}
-            <div style={{ marginBottom:24 }}>
-              <div style={{ fontFamily:C.ff, fontSize:18, color:C.cyan, letterSpacing:2, marginBottom:12 }}>TRAINING LOAD</div>
-              <div style={{ display:"flex", gap:8 }}>
-                <div style={{ flex:1, background:C.card, borderRadius:C.radius, padding:"14px", textAlign:"center", border:`1px solid ${C.border}`, ...C.glass }}>
-                  <div style={{ fontFamily:C.fm, fontSize:7, color:C.muted, letterSpacing:3, marginBottom:6 }}>ATL (7D)</div>
-                  <div style={{ fontFamily:C.ff, fontSize:28, color:C.text, fontWeight:700 }}>{atl}</div>
-                  <div style={{ fontFamily:C.fm, fontSize:7, color:C.muted, letterSpacing:2 }}>MIN/DAY</div>
-                </div>
-                <div style={{ flex:1, background:C.card, borderRadius:C.radius, padding:"14px", textAlign:"center", border:`1px solid ${C.border}`, ...C.glass }}>
-                  <div style={{ fontFamily:C.fm, fontSize:7, color:C.muted, letterSpacing:3, marginBottom:6 }}>CTL (42D)</div>
-                  <div style={{ fontFamily:C.ff, fontSize:28, color:C.text, fontWeight:700 }}>{ctl}</div>
-                  <div style={{ fontFamily:C.fm, fontSize:7, color:C.muted, letterSpacing:2 }}>MIN/DAY</div>
-                </div>
-                <div style={{ flex:1, background:C.card, borderRadius:C.radius, padding:"14px", textAlign:"center", border:`1px solid ${tsbColor}22`, boxShadow:glow(tsbColor,0.1), ...C.glass }}>
-                  <div style={{ fontFamily:C.fm, fontSize:7, color:C.muted, letterSpacing:3, marginBottom:6 }}>TSB</div>
-                  <div style={{ fontFamily:C.ff, fontSize:28, color:tsbColor, fontWeight:700 }}>{tsb > 0 ? "+" : ""}{tsb}</div>
-                  <div style={{ fontFamily:C.fm, fontSize:7, color:tsbColor, letterSpacing:2 }}>{tsbLabel}</div>
-                </div>
-              </div>
-            </div>
-
-            {/* VO2 MAX TREND */}
-            <div style={{ marginBottom:24 }}>
-              <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:12 }}>
-                <div style={{ fontFamily:C.ff, fontSize:18, color:C.cyan, letterSpacing:2 }}>VO2 MAX</div>
-                {currentVo2 && <div style={{ fontFamily:C.ff, fontSize:32, color:C.cyan, fontWeight:700 }}>{Number(currentVo2).toFixed(1)}</div>}
-              </div>
-              {vo2Metrics.length > 1 ? (
-                <div style={{ background:C.card, borderRadius:C.radius, padding:"16px", border:`1px solid ${C.border}`, ...C.glass }}>
-                  <div style={{ display:"flex", alignItems:"flex-end", gap:2, height:80 }}>
-                    {vo2Metrics.map((m,i) => {
-                      const val = Number(m.vo2_max);
-                      const h = vo2Max > 0 ? (val / vo2Max) * 70 + 10 : 40;
-                      return <div key={i} style={{ flex:1, height:h, background: i === vo2Metrics.length-1 ? C.cyan : `${C.cyan}44`, borderRadius:2, minWidth:2 }} />;
-                    })}
-                  </div>
-                  <div style={{ display:"flex", justifyContent:"space-between", marginTop:8 }}>
-                    <div style={{ fontFamily:C.fm, fontSize:6, color:C.muted, letterSpacing:1 }}>{vo2Metrics[0]?.date}</div>
-                    <div style={{ fontFamily:C.fm, fontSize:6, color:C.muted, letterSpacing:1 }}>{vo2Metrics[vo2Metrics.length-1]?.date}</div>
-                  </div>
-                </div>
-              ) : (
-                <div style={{ fontFamily:C.fm, fontSize:9, color:C.muted, letterSpacing:2, textAlign:"center", padding:20 }}>
-                  {currentVo2 ? "More data points needed for trend" : "No VO2 Max data yet — sync Garmin"}
                 </div>
               )}
             </div>
