@@ -10,8 +10,8 @@ export default async function handler(req, res) {
     return res.status(405).json({ error: "Method not allowed" });
   }
 
-  const apiKey = process.env.INTERVALS_API_KEY?.trim();
-  const athleteId = process.env.INTERVALS_ATHLETE_ID?.trim();
+  const apiKey = process.env.INTERVALS_API_KEY;
+  const athleteId = process.env.INTERVALS_ATHLETE_ID;
 
   console.log("[intervals/test] athleteId:", athleteId);
   console.log("[intervals/test] apiKey present:", !!apiKey);
