@@ -114,16 +114,21 @@ export default async function handler(req, res) {
         if (!date) return null;
         const fit = fitnessByDate.get(date) || {};
         const sleepSecs = num(wellness.sleepSecs);
+        const sleep_hours =
+          sleepSecs != null && sleepSecs > 0 ? sleepSecs / 3600 : null;
+        const atl = num(wellness.atl);
         return {
           user_id: userId,
           date,
           source: "intervals",
           is_primary: true,
-          hrv: num(wellness.hrvSDNN ?? wellness.hrv),
+          hrv: num(wellness.hrv ?? wellness.hrvSDNN),
           rhr: num(wellness.restingHR),
-          sleep_hours: sleepSecs != null && sleepSecs > 0 ? sleepSecs / 3600 : null,
-          recovery_score: num(wellness.score),
-          training_load: num(wellness.atl),
+          recovery_score: num(wellness.readiness ?? wellness.score),
+          sleep_hours,
+          sleep_score: num(wellness.sleepScore),
+          training_load: atl,
+          strain: atl,
           vo2_max: num(wellness.vo2max),
           atl: num(wellness.atl ?? fit.atl),
           ctl: num(fit.ctl ?? wellness.ctl),

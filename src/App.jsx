@@ -2335,28 +2335,37 @@ export default function App() {
   const intervalsTodayMetric = unifiedMetrics.find(
     (m) => m?.source === "intervals" && String(m?.date || "").slice(0, 10) === todayMetricIso
   );
-  const latestIntervalsMetric =
-    intervalsTodayMetric
-    || [...unifiedMetrics]
-      .filter((m) => m?.source === "intervals")
-      .sort(
-        (a, b) =>
-          new Date(String(b?.date || "").slice(0, 10)).getTime()
-          - new Date(String(a?.date || "").slice(0, 10)).getTime()
-      )[0]
-    || null;
-  const hasIntervalsData = Boolean(latestIntervalsMetric);
-  const intervalsSleepHours = Number(latestIntervalsMetric?.sleep_hours);
-  const rec        = Number(latestIntervalsMetric?.recovery_score ?? whoopData?.recovery?.score ?? 0);
-  const strain     = Number(latestIntervalsMetric?.strain ?? whoopData?.strain?.score ?? 0);
-  const hrv        = Number(latestIntervalsMetric?.hrv ?? whoopData?.recovery?.hrv ?? 0);
-  const rhr        = Number(latestIntervalsMetric?.rhr ?? whoopData?.recovery?.rhr ?? 0);
-  const sleepHours = Number.isFinite(intervalsSleepHours) && intervalsSleepHours > 0
-    ? Math.round(intervalsSleepHours * 10) / 10
+  const hasIntervalsToday = Boolean(intervalsTodayMetric);
+
+  const intervalsNum = (row, key) => {
+    if (!row || row[key] == null || row[key] === "") return null;
+    const n = Number(row[key]);
+    return Number.isFinite(n) ? n : null;
+  };
+
+  const intervalsReadiness = intervalsNum(intervalsTodayMetric, "recovery_score");
+  const rec = intervalsReadiness ?? Number(whoopData?.recovery?.score ?? 0);
+  const intervalsStrainOrLoad = intervalsNum(intervalsTodayMetric, "strain")
+    ?? intervalsNum(intervalsTodayMetric, "training_load");
+  const strain = intervalsStrainOrLoad ?? Number(whoopData?.strain?.score ?? 0);
+  const strainRingLabel = intervalsStrainOrLoad != null ? "LOAD" : "STRAIN";
+  const hrv = intervalsNum(intervalsTodayMetric, "hrv")
+    ?? Number(whoopData?.recovery?.hrv ?? 0);
+  const rhr = intervalsNum(intervalsTodayMetric, "rhr")
+    ?? Number(whoopData?.recovery?.rhr ?? 0);
+  const sleepHoursRaw = intervalsNum(intervalsTodayMetric, "sleep_hours");
+  const sleepHours = sleepHoursRaw != null && sleepHoursRaw > 0
+    ? Math.round(sleepHoursRaw * 10) / 10
     : Number(whoopData?.sleep?.hours ?? 0);
-  const sleep      = hasIntervalsData
-    ? Math.max(0, Math.min(100, Math.round((sleepHours / 8) * 100)))
-    : Number(whoopData?.sleep?.score ?? 0);
+  const intervalsSleepScore = intervalsNum(intervalsTodayMetric, "sleep_score");
+  const sleepFromHours = sleepHoursRaw != null && sleepHoursRaw > 0
+    ? Math.max(0, Math.min(100, Math.round((sleepHoursRaw / 8) * 100)))
+    : null;
+  const sleep = intervalsSleepScore != null
+    ? Math.max(0, Math.min(100, Math.round(intervalsSleepScore)))
+    : (sleepFromHours != null
+      ? sleepFromHours
+      : Number(whoopData?.sleep?.score ?? 0));
   const sleepEff   = whoopData?.sleep?.efficiency ?? 0;
   const rc         = whoopColor(rec);
 
@@ -2595,7 +2604,7 @@ export default function App() {
         const readinessScore = Math.max(0, Math.min(100, Math.round(recoveryTrend * 0.6 + compliance * 0.4)));
         const readinessColor = readinessScore > 75 ? C.green : readinessScore >= 50 ? C.yellow : C.red;
 
-        const whoopDisconnected = !hasIntervalsData && (
+        const whoopDisconnected = !hasIntervalsToday && (
           !whoopData
           || (
             Number(rec || 0) <= 0
@@ -2714,18 +2723,56 @@ export default function App() {
             <div style={{ ...cardGlass, boxShadow: `0 0 18px ${rc}33` }}>
               <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 12, marginBottom: 14 }}>
                 <div style={{ display: "flex", justifyContent: "center" }}>
-                  <Ring score={rec} size={110} stroke={10} color={rc} label="RECOVERY" sublabel={whoopLabel(rec)} glowEffect />
+                  <Ring
+                    score={rec}
+                    size={110}
+                    stroke={10}
+                    color={rc}
+                    label={intervalsReadiness != null ? "READINESS" : "RECOVERY"}
+                    sublabel={whoopLabel(rec)}
+                    glowEffect
+                  />
                 </div>
                 <div style={{ display: "flex", justifyContent: "center" }}>
-                  <Ring score={strain} size={110} stroke={10} color="#4a90c4" label="STRAIN" />
+                  <Ring
+                    score={strain}
+                    progress={
+                      strainRingLabel === "LOAD"
+                        ? Math.min(100, (Math.max(0, Number(strain)) / 40) * 100)
+                        : undefined
+                    }
+                    size={110}
+                    stroke={10}
+                    color="#4a90c4"
+                    label={strainRingLabel}
+                    formatValue={(v) => {
+                      const n = Number(v);
+                      if (!Number.isFinite(n)) return "—";
+                      return strainRingLabel === "LOAD"
+                        ? String(Math.round(n * 10) / 10)
+                        : String(Math.round(n));
+                    }}
+                  />
                 </div>
                 <div style={{ display: "flex", justifyContent: "center" }}>
                   <Ring score={sleep} size={110} stroke={10} color="#9b59b6" label="SLEEP" />
                 </div>
               </div>
-              <div style={{ display: "flex", justifyContent: "space-between", gap: 10, marginBottom: 14 }}>
-                {[["HRV", `${hrv}`], ["RHR", `${rhr}`], ["SLEEP HRS", `${sleepHours}`]].map(([label, value]) => (
-                  <div key={label} style={{ flex: 1, textAlign: "center" }}>
+              <div
+                style={{
+                  display: "grid",
+                  gridTemplateColumns: "repeat(2, 1fr)",
+                  gap: 10,
+                  marginBottom: 14,
+                }}
+              >
+                {[
+                  ["HRV", Number.isFinite(hrv) ? (Math.round(hrv * 10) / 10).toFixed(1) : "—"],
+                  ["RHR", `${Math.round(rhr)}`],
+                  ["SLEEP HRS", `${sleepHours}`],
+                  ["SLEEP SC", `${Math.round(sleep)}`],
+                ].map(([label, value]) => (
+                  <div key={label} style={{ textAlign: "center" }}>
                     <div style={{ fontFamily: C.ff, fontSize: 28, color: C.cyan, lineHeight: 1 }}>{value}</div>
                     <div style={{ fontFamily: C.fm, fontSize: 8, color: C.muted, letterSpacing: 2, marginTop: 4 }}>{label}</div>
                   </div>
