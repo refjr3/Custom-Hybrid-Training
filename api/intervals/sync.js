@@ -107,31 +107,26 @@ export default async function handler(req, res) {
       .map((wellness) => {
         const date = toIsoDate(wellness?.id ?? wellness?.date);
         if (!date) return null;
-        const sleepSecs = num(wellness.sleepSecs);
-        const sleep_hours =
-          sleepSecs != null && sleepSecs > 0 ? sleepSecs / 3600 : null;
-        const atl = num(wellness.atl);
-        const ctl = num(wellness.ctl);
+        const sleep_hours = wellness.sleepSecs ? wellness.sleepSecs / 3600 : null;
         const tsb =
-          ctl != null && atl != null && Number.isFinite(ctl) && Number.isFinite(atl)
-            ? ctl - atl
+          wellness.ctl != null && wellness.atl != null
+            ? Number(wellness.ctl) - Number(wellness.atl)
             : null;
         return {
           user_id: userId,
           date,
           source: "intervals",
           is_primary: true,
-          hrv: num(wellness.hrv ?? wellness.hrvSDNN),
+          hrv: num(wellness.hrv),
           rhr: num(wellness.restingHR),
-          recovery_score: num(wellness.readiness ?? wellness.score),
-          sleep_hours,
+          recovery_score: num(wellness.readiness),
+          sleep_hours: sleep_hours != null && Number.isFinite(sleep_hours) ? sleep_hours : null,
           sleep_score: num(wellness.sleepScore),
-          training_load: atl,
-          strain: atl,
+          training_load: num(wellness.atl),
+          strain: num(wellness.atl),
+          ctl: num(wellness.ctl),
+          tsb: Number.isFinite(tsb) ? tsb : null,
           vo2_max: num(wellness.vo2max),
-          atl,
-          ctl,
-          tsb,
           intervals_synced_at: syncedAt,
         };
       })
