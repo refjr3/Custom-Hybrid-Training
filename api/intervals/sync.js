@@ -5,232 +5,38 @@ const supabase = createClient(
   process.env.SUPABASE_SERVICE_KEY
 );
 
-const DEFAULT_LOOKBACK_DAYS = 35;
+const LOOKBACK_DAYS = 7;
 
 const toIsoDate = (value) => {
   if (!value) return null;
-  if (typeof value === "string" && /^\d{4}-\d{2}-\d{2}$/.test(value)) return value;
+  if (typeof value === "string" && /^\d{4}-\d{2}-\d{2}/.test(value)) return value.slice(0, 10);
   const parsed = new Date(value);
   if (!Number.isFinite(parsed.getTime())) return null;
   return parsed.toISOString().split("T")[0];
 };
 
-const numberOrNull = (value) => {
-  const n = Number(value);
+const num = (v) => {
+  const n = Number(v);
   return Number.isFinite(n) ? n : null;
 };
 
-const pickFirstNumber = (obj, keys) => {
-  for (const key of keys) {
-    const v = numberOrNull(obj?.[key]);
-    if (v !== null) return v;
-  }
-  return null;
-};
-
-const normalizeSleepHours = (value) => {
-  const n = numberOrNull(value);
-  if (n === null) return null;
-  if (n > 10000) return n / 3600;
-  if (n > 100) return n / 60;
-  return n;
-};
-
-const normalizeDurationSeconds = (value) => {
-  const n = numberOrNull(value);
-  if (n === null) return 0;
-  if (n > 100000) return Math.round(n / 1000);
-  return Math.round(n);
-};
-
-const normalizeDistanceMeters = (value) => {
-  const n = numberOrNull(value);
-  if (n === null) return 0;
-  if (n > 1000) return n;
-  return n * 1000;
-};
-
-const authHeaders = (apiKey, mode = "basic_key_key") => {
-  if (mode === "basic_key_key") {
-    const auth = Buffer.from(`${apiKey}:${apiKey}`).toString("base64");
-    return {
-      Authorization: `Basic ${auth}`,
-      Accept: "application/json",
-    };
-  }
-  if (mode === "basic_api_key_prefix") {
-    const auth = Buffer.from(`API_KEY:${apiKey}`).toString("base64");
-    return {
-      Authorization: `Basic ${auth}`,
-      Accept: "application/json",
-    };
-  }
-  return {
-    Authorization: `ApiKey API_KEY:${apiKey}`,
-    Accept: "application/json",
-  };
-};
-
-async function requestIntervalsJson(url, apiKey) {
-  const attempts = [
-    { mode: "basic_key_key", headers: authHeaders(apiKey, "basic_key_key") },
-    { mode: "basic_api_key_prefix", headers: authHeaders(apiKey, "basic_api_key_prefix") },
-    { mode: "apikey_header", headers: authHeaders(apiKey, "apikey_header") },
-  ];
-  let lastError = null;
-
-  for (const attempt of attempts) {
-    const res = await fetch(url, { headers: attempt.headers });
-    const rawText = await res.text();
-    if (!res.ok) {
-      console.error("[intervals] API error:", res.status, rawText, "| auth mode:", attempt.mode, "| url:", url);
-      lastError = {
-        status: res.status,
-        text: rawText,
-      };
-      if (![401, 403].includes(res.status)) break;
-      continue;
-    }
-
-    try {
-      return rawText ? JSON.parse(rawText) : [];
-    } catch {
-      return [];
-    }
-  }
-
-  throw new Error(
-    `Intervals API ${lastError?.status || "unknown"}: ${lastError?.text || "unknown error"}`.trim()
-  );
-}
-
-async function fetchIntervalsResource(baseUrl, apiKey, paths, oldest) {
-  let lastErr = null;
-  for (const path of paths) {
-    const url = new URL(`${baseUrl}${path}`);
-    if (oldest) url.searchParams.set("oldest", oldest);
-    try {
-      const data = await requestIntervalsJson(url.toString(), apiKey);
-      if (Array.isArray(data)) return data;
-      if (Array.isArray(data?.items)) return data.items;
-      if (Array.isArray(data?.results)) return data.results;
-      return [];
-    } catch (e) {
-      lastErr = e;
-    }
-  }
-  if (lastErr) {
-    console.warn("[intervals/sync] resource fetch failed", lastErr.message);
+const normalizeList = (body) => {
+  if (Array.isArray(body)) return body;
+  if (body && typeof body === "object" && !Array.isArray(body)) {
+    return Object.entries(body).map(([key, val]) => {
+      if (val && typeof val === "object" && !Array.isArray(val)) {
+        return { ...val, id: val.id ?? key };
+      }
+      return { id: key, value: val };
+    });
   }
   return [];
-}
-
-const buildDateMap = (wellnessRows, activityRows, fitnessRows) => {
-  const byDate = new Map();
-  const ensure = (date) => {
-    if (!date) return null;
-    if (!byDate.has(date)) {
-      byDate.set(date, {
-        date,
-        hrv: null,
-        rhr: null,
-        sleep_hours: null,
-        recovery_score: null,
-        strain: 0,
-        active_calories: 0,
-        steps: 0,
-        duration_seconds: 0,
-        distance_meters: 0,
-        avg_hr_sum: 0,
-        avg_hr_weight: 0,
-        atl: null,
-        ctl: null,
-        tsb: null,
-      });
-    }
-    return byDate.get(date);
-  };
-
-  for (const row of wellnessRows || []) {
-    const date = toIsoDate(row?.id || row?.date || row?.updated || row?.created);
-    const bucket = ensure(date);
-    if (!bucket) continue;
-    bucket.hrv = pickFirstNumber(row, ["hrv", "lnHrv", "hrvScore", "hrv_ms"]) ?? bucket.hrv;
-    bucket.rhr = pickFirstNumber(row, ["restingHr", "resting_hr", "rhr", "restingHeartrate"]) ?? bucket.rhr;
-    const sleepHours = normalizeSleepHours(
-      pickFirstNumber(row, ["sleep", "sleep_hours", "sleepSecs", "sleepSeconds", "sleepDuration", "sleepMinutes"])
-    );
-    bucket.sleep_hours = sleepHours ?? bucket.sleep_hours;
-    bucket.recovery_score = pickFirstNumber(row, ["recovery", "recovery_score", "readiness", "wellness"]) ?? bucket.recovery_score;
-  }
-
-  for (const row of activityRows || []) {
-    const date = toIsoDate(row?.start_date_local || row?.start_date || row?.start || row?.date);
-    const bucket = ensure(date);
-    if (!bucket) continue;
-
-    const duration = normalizeDurationSeconds(
-      pickFirstNumber(row, ["duration", "duration_seconds", "moving_time", "elapsed_time", "movingSeconds"])
-    );
-    const distance = normalizeDistanceMeters(
-      pickFirstNumber(row, ["distance", "distance_meters", "meters", "distanceKm"])
-    );
-    const avgHr = pickFirstNumber(row, ["avg_hr", "average_heartrate", "averageHr", "hr"]);
-    const trainingLoad = pickFirstNumber(row, ["training_load", "icu_training_load", "relative_effort", "trimp", "strain"]);
-    const calories = pickFirstNumber(row, ["calories", "active_calories", "kcal"]);
-    const steps = pickFirstNumber(row, ["steps"]);
-
-    bucket.duration_seconds += duration;
-    bucket.distance_meters += distance;
-    bucket.strain += trainingLoad || 0;
-    bucket.active_calories += calories || 0;
-    bucket.steps += steps || 0;
-    if (avgHr !== null && duration > 0) {
-      bucket.avg_hr_sum += avgHr * duration;
-      bucket.avg_hr_weight += duration;
-    }
-  }
-
-  for (const row of fitnessRows || []) {
-    const date = toIsoDate(row?.id || row?.date || row?.day);
-    const bucket = ensure(date);
-    if (!bucket) continue;
-    bucket.atl = pickFirstNumber(row, ["atl", "fatigue", "load", "shortTermLoad"]) ?? bucket.atl;
-    bucket.ctl = pickFirstNumber(row, ["ctl", "fitness", "longTermLoad"]) ?? bucket.ctl;
-    bucket.tsb = pickFirstNumber(row, ["tsb", "form"]) ?? bucket.tsb;
-  }
-
-  return [...byDate.values()].sort((a, b) => String(b.date).localeCompare(String(a.date)));
 };
 
-const baseUnifiedRow = (userId, syncedAt, row, isPrimary) => ({
-  user_id: userId,
-  date: row.date,
-  source: "intervals",
-  is_primary: isPrimary,
-  hrv: row.hrv,
-  rhr: row.rhr,
-  recovery_score: row.recovery_score,
-  sleep_hours: row.sleep_hours,
-  strain: row.strain ? Math.round(row.strain * 10) / 10 : null,
-  steps: row.steps ? Math.round(row.steps) : null,
-  active_calories: row.active_calories ? Math.round(row.active_calories) : null,
-  training_load: row.ctl ?? row.atl ?? row.strain ?? null,
-  intervals_synced_at: syncedAt,
-});
-
-const extendedUnifiedRow = (userId, syncedAt, row, isPrimary) => ({
-  ...baseUnifiedRow(userId, syncedAt, row, isPrimary),
-  duration_seconds: row.duration_seconds ? Math.round(row.duration_seconds) : null,
-  distance_meters: row.distance_meters ? Math.round(row.distance_meters) : null,
-  avg_hr: row.avg_hr_weight > 0 ? Math.round(row.avg_hr_sum / row.avg_hr_weight) : null,
-  atl: row.atl,
-  ctl: row.ctl,
-  tsb: row.tsb,
-});
-
 export default async function handler(req, res) {
-  if (req.method !== "GET") return res.status(405).json({ error: "Method not allowed" });
+  if (req.method !== "GET" && req.method !== "POST") {
+    return res.status(405).json({ error: "Method not allowed" });
+  }
 
   const token = req.headers.authorization?.replace("Bearer ", "");
   if (!token) return res.status(401).json({ error: "Unauthorized" });
@@ -241,69 +47,138 @@ export default async function handler(req, res) {
 
   const athleteId = process.env.INTERVALS_ATHLETE_ID;
   const apiKey = process.env.INTERVALS_API_KEY;
-  console.log("[intervals] fetching wellness for athlete:", athleteId);
-  console.log("[intervals] API key present:", !!apiKey);
   if (!athleteId || !apiKey) {
-    return res.status(500).json({ error: "intervals_missing_env" });
+    return res.status(503).json({ error: "intervals_missing_env", success: false });
   }
 
-  const oldest = new Date(Date.now() - DEFAULT_LOOKBACK_DAYS * 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
-  const baseUrl = `https://intervals.icu/api/v1/athlete/${athleteId}`;
+  const auth = Buffer.from(`API_KEY:${apiKey}`).toString("base64");
+  const headers = {
+    Authorization: `Basic ${auth}`,
+    Accept: "application/json",
+  };
+
+  const today = new Date().toISOString().split("T")[0];
+  const sevenDaysAgo = new Date(Date.now() - LOOKBACK_DAYS * 24 * 60 * 60 * 1000)
+    .toISOString()
+    .split("T")[0];
+  const base = `https://intervals.icu/api/v1/athlete/${athleteId}`;
+
+  const fetchJson = async (path) => {
+    const url = `${base}${path}?oldest=${encodeURIComponent(sevenDaysAgo)}&newest=${encodeURIComponent(today)}`;
+    const r = await fetch(url, { headers });
+    const text = await r.text();
+    let body = null;
+    if (text) {
+      try {
+        body = JSON.parse(text);
+      } catch {
+        body = null;
+      }
+    }
+    if (!r.ok) {
+      const err = new Error(`Intervals ${path}: ${r.status} ${text?.slice(0, 200) || ""}`);
+      err.status = r.status;
+      throw err;
+    }
+    return normalizeList(body);
+  };
 
   try {
-    const [wellnessRows, activityRows, fitnessRows] = await Promise.all([
-      fetchIntervalsResource(baseUrl, apiKey, ["/wellness-bulk", "/wellness"], oldest),
-      fetchIntervalsResource(baseUrl, apiKey, ["/activities"], oldest),
-      fetchIntervalsResource(baseUrl, apiKey, ["/fitness", "/fitnesses", "/fitness-fatigue-form"], oldest),
+    const [wellnessList, activitiesList, fitnessList] = await Promise.all([
+      fetchJson("/wellness"),
+      fetchJson("/activities"),
+      fetchJson("/fitness"),
     ]);
 
-    const rowsByDate = buildDateMap(wellnessRows, activityRows, fitnessRows);
-    if (rowsByDate.length === 0) {
-      return res.status(200).json({
-        success: true,
-        synced: false,
-        reason: "no_intervals_rows",
-        last_synced_at: new Date().toISOString(),
-      });
+    const fitnessByDate = new Map();
+    for (const row of fitnessList) {
+      const d = toIsoDate(row?.id ?? row?.date ?? row?.day);
+      if (d) fitnessByDate.set(d, row);
     }
 
     const syncedAt = new Date().toISOString();
-    const latestDate = rowsByDate[0]?.date;
-    const extendedRows = rowsByDate.map((row) => extendedUnifiedRow(userId, syncedAt, row, row.date === latestDate));
 
-    let upsertError = null;
-    const extendedUpsert = await supabase
-      .from("unified_metrics")
-      .upsert(extendedRows, { onConflict: "user_id,date,source" });
-    upsertError = extendedUpsert.error || null;
+    const wellnessRows = (wellnessList || [])
+      .map((wellness) => {
+        const date = toIsoDate(wellness?.id ?? wellness?.date);
+        if (!date) return null;
+        const fit = fitnessByDate.get(date) || {};
+        const sleepSecs = num(wellness.sleepSecs);
+        return {
+          user_id: userId,
+          date,
+          source: "intervals",
+          is_primary: true,
+          hrv: num(wellness.hrvSDNN ?? wellness.hrv),
+          rhr: num(wellness.restingHR),
+          sleep_hours: sleepSecs != null && sleepSecs > 0 ? sleepSecs / 3600 : null,
+          recovery_score: num(wellness.score),
+          training_load: num(wellness.atl),
+          vo2_max: num(wellness.vo2max),
+          atl: num(wellness.atl ?? fit.atl),
+          ctl: num(fit.ctl ?? wellness.ctl),
+          tsb: num(fit.tsb ?? fit.form ?? wellness.tsb),
+          intervals_synced_at: syncedAt,
+        };
+      })
+      .filter(Boolean);
 
-    if (upsertError) {
-      const baseRows = rowsByDate.map((row) => baseUnifiedRow(userId, syncedAt, row, row.date === latestDate));
-      const fallback = await supabase
+    let wellnessCount = 0;
+    if (wellnessRows.length > 0) {
+      const { error: wErr } = await supabase
         .from("unified_metrics")
-        .upsert(baseRows, { onConflict: "user_id,date,source" });
-      if (fallback.error) {
-        throw new Error(`unified_metrics_upsert_failed: ${fallback.error.message}`);
-      }
+        .upsert(wellnessRows, { onConflict: "user_id,date,source" });
+      if (wErr) throw new Error(`unified_metrics upsert: ${wErr.message}`);
+      wellnessCount = wellnessRows.length;
+    }
+
+    const activityPayloads = (activitiesList || [])
+      .map((activity) => {
+        const start =
+          activity.start_date_local || activity.start_date || activity.start || null;
+        return {
+          user_id: userId,
+          activity_id: String(activity.id ?? activity.activity_id ?? ""),
+          activity_type: activity.type || activity.sportType || "workout",
+          name: activity.name || activity.type || "Activity",
+          start_time: start,
+          duration_seconds: Math.round(
+            num(activity.elapsed_time ?? activity.moving_time ?? activity.duration) || 0
+          ),
+          distance_meters: num(activity.distance ?? activity.distance_meters) || 0,
+          avg_hr: Math.round(
+            num(activity.average_heartrate ?? activity.avg_hr ?? activity.averageHr) || 0
+          ),
+          max_hr: Math.round(num(activity.max_heartrate ?? activity.max_hr) || 0),
+          calories: Math.round(num(activity.calories) || 0),
+          source: "intervals",
+          raw_data: activity,
+        };
+      })
+      .filter((a) => a.activity_id);
+
+    let activitiesCount = 0;
+    if (activityPayloads.length > 0) {
+      const { error: aErr } = await supabase
+        .from("garmin_activities")
+        .upsert(activityPayloads, { onConflict: "activity_id" });
+      if (aErr) throw new Error(`garmin_activities upsert: ${aErr.message}`);
+      activitiesCount = activityPayloads.length;
     }
 
     return res.status(200).json({
       success: true,
-      synced: true,
-      user_id: userId,
-      source: "intervals",
-      rows_upserted: rowsByDate.length,
-      wellness_count: wellnessRows.length,
-      activity_count: activityRows.length,
-      fitness_count: fitnessRows.length,
-      latest_date: latestDate,
+      wellness_synced: wellnessCount,
+      activities_synced: activitiesCount,
+      date_range: `${sevenDaysAgo} to ${today}`,
       last_synced_at: syncedAt,
-      week_1_sat_hint: rowsByDate.find((r) => r.date === "2026-04-18")
-        ? "metrics_found"
-        : "no_metrics_for_week1_sat",
     });
   } catch (err) {
-    console.error("[intervals/sync] error", err);
-    return res.status(500).json({ error: "intervals_sync_failed", details: err.message });
+    console.error("[intervals/sync]", err);
+    return res.status(500).json({
+      success: false,
+      error: "intervals_sync_failed",
+      details: err.message,
+    });
   }
 }

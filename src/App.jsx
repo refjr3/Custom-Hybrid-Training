@@ -1545,6 +1545,7 @@ export default function App() {
   const [intervalsSyncing, setIntervalsSyncing] = useState(false);
   const [intervalsSyncError, setIntervalsSyncError] = useState("");
   const [intervalsLastSyncedAt, setIntervalsLastSyncedAt] = useState(null);
+  const [intervalsSyncSummary, setIntervalsSyncSummary] = useState(null);
   const [labOpen, setLabOpen] = useState(false);
   const [labMessages, setLabMessages] = useState([]);
   const [labInput, setLabInput] = useState("");
@@ -1755,12 +1756,20 @@ export default function App() {
       });
       const data = await res.json().catch(() => ({}));
       if (!res.ok) {
-        throw new Error(data.error || "Intervals sync failed");
+        throw new Error(data.details || data.error || "Intervals sync failed");
       }
+      setIntervalsSyncSummary({
+        wellness_synced: data.wellness_synced,
+        activities_synced: data.activities_synced,
+        date_range: data.date_range,
+      });
       if (data?.last_synced_at) setIntervalsLastSyncedAt(data.last_synced_at);
       await fetchUnifiedMetrics();
+      await fetchGarminActivities();
     } catch (e) {
       setIntervalsSyncError(e.message || "Intervals sync failed");
+      setIntervalsSyncSummary(null);
+      await fetchWhoopData();
     } finally {
       setIntervalsSyncing(false);
     }
@@ -2322,9 +2331,20 @@ export default function App() {
       session: getSessionNameForDay(d, "am") || d.pm || "Session",
     }));
 
-  const latestIntervalsMetric = [...unifiedMetrics]
-    .filter((m) => m?.source === "intervals")
-    .sort((a, b) => new Date(b?.created_at || b?.date || 0).getTime() - new Date(a?.created_at || a?.date || 0).getTime())[0] || null;
+  const todayMetricIso = new Date().toISOString().split("T")[0];
+  const intervalsTodayMetric = unifiedMetrics.find(
+    (m) => m?.source === "intervals" && String(m?.date || "").slice(0, 10) === todayMetricIso
+  );
+  const latestIntervalsMetric =
+    intervalsTodayMetric
+    || [...unifiedMetrics]
+      .filter((m) => m?.source === "intervals")
+      .sort(
+        (a, b) =>
+          new Date(String(b?.date || "").slice(0, 10)).getTime()
+          - new Date(String(a?.date || "").slice(0, 10)).getTime()
+      )[0]
+    || null;
   const hasIntervalsData = Boolean(latestIntervalsMetric);
   const intervalsSleepHours = Number(latestIntervalsMetric?.sleep_hours);
   const rec        = Number(latestIntervalsMetric?.recovery_score ?? whoopData?.recovery?.score ?? 0);
@@ -2614,6 +2634,23 @@ export default function App() {
                   >
                     ↺ WHOOP
                   </a>
+                  <button
+                    type="button"
+                    disabled={intervalsSyncing || !session?.access_token}
+                    onClick={() => fetchIntervalsSync()}
+                    style={{
+                      fontFamily: "monospace",
+                      fontSize: 9,
+                      color: "#444",
+                      letterSpacing: 2,
+                      background: "none",
+                      border: "none",
+                      cursor: intervalsSyncing || !session?.access_token ? "default" : "pointer",
+                      opacity: intervalsSyncing || !session?.access_token ? 0.45 : 1,
+                    }}
+                  >
+                    ↺ SYNC
+                  </button>
                   <span
                     style={{
                       fontFamily: C.fm,
