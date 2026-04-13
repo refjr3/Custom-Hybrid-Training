@@ -25,7 +25,6 @@ const normalizeList = (body) => {
   if (body && typeof body === "object") {
     if (Array.isArray(body.activities)) return body.activities;
     if (Array.isArray(body.wellness)) return body.wellness;
-    if (Array.isArray(body.fitness)) return body.fitness;
     if (Array.isArray(body.items)) return body.items;
     if (Array.isArray(body.results)) return body.results;
     return Object.entries(body).map(([key, val]) => {
@@ -94,21 +93,13 @@ export default async function handler(req, res) {
   };
 
   try {
-    const [wellnessList, activitiesList, fitnessList] = await Promise.all([
+    const [wellnessList, activitiesList] = await Promise.all([
       fetchJson("/wellness"),
       fetchJson("/activities"),
-      fetchJson("/fitness"),
     ]);
 
     console.log("[intervals/sync] wellness raw count:", (wellnessList || []).length);
     console.log("[intervals/sync] activities raw count:", (activitiesList || []).length);
-    console.log("[intervals/sync] fitness raw count:", (fitnessList || []).length);
-
-    const fitnessByDate = new Map();
-    for (const row of fitnessList) {
-      const d = toIsoDate(row?.id ?? row?.date ?? row?.day);
-      if (d) fitnessByDate.set(d, row);
-    }
 
     const syncedAt = new Date().toISOString();
 
@@ -116,11 +107,15 @@ export default async function handler(req, res) {
       .map((wellness) => {
         const date = toIsoDate(wellness?.id ?? wellness?.date);
         if (!date) return null;
-        const fit = fitnessByDate.get(date) || {};
         const sleepSecs = num(wellness.sleepSecs);
         const sleep_hours =
           sleepSecs != null && sleepSecs > 0 ? sleepSecs / 3600 : null;
         const atl = num(wellness.atl);
+        const ctl = num(wellness.ctl);
+        const tsb =
+          ctl != null && atl != null && Number.isFinite(ctl) && Number.isFinite(atl)
+            ? ctl - atl
+            : null;
         return {
           user_id: userId,
           date,
@@ -134,9 +129,9 @@ export default async function handler(req, res) {
           training_load: atl,
           strain: atl,
           vo2_max: num(wellness.vo2max),
-          atl: num(wellness.atl ?? fit.atl),
-          ctl: num(fit.ctl ?? wellness.ctl),
-          tsb: num(fit.tsb ?? fit.form ?? wellness.tsb),
+          atl,
+          ctl,
+          tsb,
           intervals_synced_at: syncedAt,
         };
       })
