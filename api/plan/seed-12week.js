@@ -12,23 +12,23 @@ const SECRET = "triad2026";
 const DAY_NAMES = ["MON", "TUE", "WED", "THU", "FRI", "SAT", "SUN"];
 
 const TEMPLATE_A = [
-  "MON — HYROX + Plyos",
-  "TUE — Z2 Erg + Mobility",
-  "WED — Full Body Lift + Z2 Erg",
+  "MON — Z2 Erg + Mobility",
+  "TUE — HYROX + Plyos",
+  "WED — Full Body + Z2 Erg",
   "THU — Z2 Run + Mobility + Core",
   "FRI — Upper Moderate",
   "SAT — Threshold/Track",
-  "SUN — Long Z2 Run (optional)",
+  "SUN — Long Z2 Run",
 ];
 
 const TEMPLATE_B = [
   "MON — Z2 Erg + Mobility",
   "TUE — Threshold/Track",
-  "WED — Z2 Run + Mobility + Core",
-  "THU — Full Body Lift + Z2 Erg",
+  "WED — Full Body + Z2 Erg",
+  "THU — Z2 Run + Mobility + Core",
   "FRI — Upper Moderate",
   "SAT — HYROX Motion",
-  "SUN — 20/20/20 Brick (optional)",
+  "SUN — 20/20/20 Brick",
 ];
 
 const BLOCKS = [
@@ -314,19 +314,19 @@ const buildWeekDays = (weekNum, phaseKey, isBrick, isDeload) => {
     ? [
         { day: "MON", label: "Z2 Erg + Mobility", note: Z2_ERG },
         { day: "TUE", label: "Threshold/Track", note: THRESHOLD_TRACK[weekNum] },
-        { day: "WED", label: "Z2 Run + Mobility + Core", note: Z2_RUN_CORE },
-        { day: "THU", label: "Full Body + Z2 Erg", note: FULL_BODY[phaseKey] },
+        { day: "WED", label: "Full Body + Z2 Erg", note: FULL_BODY[phaseKey] },
+        { day: "THU", label: "Z2 Run + Mobility + Core", note: Z2_RUN_CORE },
         { day: "FRI", label: "Upper Moderate", note: UPPER_MODERATE[phaseKey] },
         { day: "SAT", label: "HYROX Motion", note: HYROX_MOTION },
         { day: "SUN", label: "20/20/20 Brick", note: isDeload ? SUNDAY.deload : SUNDAY.brick },
       ]
     : [
-        { day: "MON", label: "HYROX + Plyos", note: HYROX_SESSION[phaseKey] },
-        { day: "TUE", label: "Z2 Erg + Mobility", note: Z2_ERG },
+        { day: "MON", label: "Z2 Erg + Mobility", note: Z2_ERG },
+        { day: "TUE", label: "HYROX + Plyos", note: HYROX_SESSION[phaseKey] },
         { day: "WED", label: "Full Body + Z2 Erg", note: FULL_BODY[phaseKey] },
         { day: "THU", label: "Z2 Run + Mobility + Core", note: Z2_RUN_CORE },
         { day: "FRI", label: "Upper Moderate", note: UPPER_MODERATE[phaseKey] },
-        { day: "SAT", label: thresholdTrackLabelForWeek(weekNum), note: THRESHOLD_TRACK[weekNum] },
+        { day: "SAT", label: "Threshold/Track", note: THRESHOLD_TRACK[weekNum] },
         { day: "SUN", label: "Long Z2 Run", note: isDeload ? SUNDAY.deload : SUNDAY.standard },
       ];
 
