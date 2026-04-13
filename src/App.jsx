@@ -2636,6 +2636,11 @@ export default function App() {
                   </a>
                   <button
                     type="button"
+                    title={
+                      intervalsSyncSummary?.date_range
+                        ? `${intervalsSyncSummary.date_range} · wellness ${intervalsSyncSummary.wellness_synced} · activities ${intervalsSyncSummary.activities_synced}`
+                        : undefined
+                    }
                     disabled={intervalsSyncing || !session?.access_token}
                     onClick={() => fetchIntervalsSync()}
                     style={{
