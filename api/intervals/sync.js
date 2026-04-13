@@ -5,7 +5,7 @@ const supabase = createClient(
   process.env.SUPABASE_SERVICE_KEY
 );
 
-const LOOKBACK_DAYS = 7;
+const LOOKBACK_DAYS = 30;
 
 const toIsoDate = (value) => {
   if (!value) return null;
@@ -68,13 +68,13 @@ export default async function handler(req, res) {
   console.log("[intervals/sync] apiKey present:", true, "length:", apiKey.length);
 
   const today = new Date().toISOString().split("T")[0];
-  const sevenDaysAgo = new Date(Date.now() - LOOKBACK_DAYS * 24 * 60 * 60 * 1000)
+  const rangeOldest = new Date(Date.now() - LOOKBACK_DAYS * 24 * 60 * 60 * 1000)
     .toISOString()
     .split("T")[0];
   const base = `https://intervals.icu/api/v1/athlete/${athleteId}`;
 
   const fetchJson = async (path) => {
-    const url = `${base}${path}?oldest=${encodeURIComponent(sevenDaysAgo)}&newest=${encodeURIComponent(today)}`;
+    const url = `${base}${path}?oldest=${encodeURIComponent(rangeOldest)}&newest=${encodeURIComponent(today)}`;
     const r = await fetch(url, { headers });
     const text = await r.text();
     let body = null;
@@ -99,6 +99,10 @@ export default async function handler(req, res) {
       fetchJson("/activities"),
       fetchJson("/fitness"),
     ]);
+
+    console.log("[intervals/sync] wellness raw count:", (wellnessList || []).length);
+    console.log("[intervals/sync] activities raw count:", (activitiesList || []).length);
+    console.log("[intervals/sync] fitness raw count:", (fitnessList || []).length);
 
     const fitnessByDate = new Map();
     for (const row of fitnessList) {
@@ -140,11 +144,38 @@ export default async function handler(req, res) {
 
     let wellnessCount = 0;
     if (wellnessRows.length > 0) {
-      const { error: wErr } = await supabase
+      console.log("[intervals/sync] wellness rows to upsert:", wellnessRows.length);
+      console.log("[intervals/sync] sample row keys:", Object.keys(wellnessRows[0] || {}).sort().join(", "));
+      let upsertData;
+      let upsertError;
+      ({ data: upsertData, error: upsertError } = await supabase
         .from("unified_metrics")
-        .upsert(wellnessRows, { onConflict: "user_id,date,source" });
-      if (wErr) throw new Error(`unified_metrics upsert: ${wErr.message}`);
+        .upsert(wellnessRows, { onConflict: "user_id,date,source" })
+        .select("id"));
+      if (
+        upsertError
+        && (upsertError.code === "42703" || String(upsertError.message || "").includes("sleep_score"))
+      ) {
+        console.warn("[intervals/sync] retrying unified_metrics upsert without sleep_score (column missing?)");
+        const stripped = wellnessRows.map(({ sleep_score: _s, ...rest }) => rest);
+        ({ data: upsertData, error: upsertError } = await supabase
+          .from("unified_metrics")
+          .upsert(stripped, { onConflict: "user_id,date,source" })
+          .select("id"));
+      }
+      console.log(
+        "[intervals/sync] unified_metrics upsert:",
+        upsertError ? `ERROR ${upsertError.code || ""} ${upsertError.message}` : "success",
+        "returned_rows:",
+        Array.isArray(upsertData) ? upsertData.length : 0
+      );
+      if (upsertError) {
+        console.error("[intervals/sync] unified_metrics upsert details:", JSON.stringify(upsertError));
+        throw new Error(`unified_metrics upsert: ${upsertError.message}`);
+      }
       wellnessCount = wellnessRows.length;
+    } else {
+      console.log("[intervals/sync] wellness rows to upsert: 0 (nothing to write)");
     }
 
     const activityPayloads = (activitiesList || [])
@@ -174,10 +205,21 @@ export default async function handler(req, res) {
 
     let activitiesCount = 0;
     if (activityPayloads.length > 0) {
-      const { error: aErr } = await supabase
+      console.log("[intervals/sync] activity rows to upsert:", activityPayloads.length);
+      const { data: actData, error: actErr } = await supabase
         .from("garmin_activities")
-        .upsert(activityPayloads, { onConflict: "activity_id" });
-      if (aErr) throw new Error(`garmin_activities upsert: ${aErr.message}`);
+        .upsert(activityPayloads, { onConflict: "activity_id" })
+        .select("activity_id");
+      console.log(
+        "[intervals/sync] garmin_activities upsert:",
+        actErr ? `ERROR ${actErr.code || ""} ${actErr.message}` : "success",
+        "returned_rows:",
+        Array.isArray(actData) ? actData.length : 0
+      );
+      if (actErr) {
+        console.error("[intervals/sync] garmin_activities upsert details:", JSON.stringify(actErr));
+        throw new Error(`garmin_activities upsert: ${actErr.message}`);
+      }
       activitiesCount = activityPayloads.length;
     }
 
@@ -185,7 +227,7 @@ export default async function handler(req, res) {
       success: true,
       wellness_synced: wellnessCount,
       activities_synced: activitiesCount,
-      date_range: `${sevenDaysAgo} to ${today}`,
+      date_range: `${rangeOldest} to ${today}`,
       last_synced_at: syncedAt,
     });
   } catch (err) {

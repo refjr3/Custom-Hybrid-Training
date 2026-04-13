@@ -2034,9 +2034,14 @@ export default function App() {
     setIntervalsSyncError("");
     try {
       const res = await fetch("/api/intervals/sync", {
-        headers: { Authorization: `Bearer ${session.access_token}` },
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${session.access_token}`,
+          "Content-Type": "application/json",
+        },
       });
       const data = await res.json().catch(() => ({}));
+      console.log("[sync] result:", data);
       if (!res.ok) {
         throw new Error(data.details || data.error || "Intervals sync failed");
       }
