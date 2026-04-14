@@ -502,15 +502,40 @@ export default async function handler(req, res) {
       .order("start_time", { ascending: false })
       .limit(180));
   }
+  if (aErr && (aErr.code === "42703" || String(aErr.message || "").toLowerCase().includes("name"))) {
+    ({ data: acts, error: aErr } = await supabase
+      .from("garmin_activities")
+      .select("activity_id, activity_type, activity_name, start_time, duration_seconds, distance_meters, avg_hr, max_hr, calories, source")
+      .eq("user_id", userId)
+      .order("start_time", { ascending: false })
+      .limit(180));
+  }
 
   if (aErr) {
     return res.status(500).json({ error: "activities_query_failed", details: aErr.message });
   }
 
-  const activities = (acts || []).map((a) => ({
-    ...a,
-    date: activityDateIso(a),
-  }));
+  const activities = (acts || []).map((a) => {
+    const date = activityDateIso(a);
+    return {
+      activity_id: a.activity_id,
+      name:
+        (a.name && String(a.name).trim())
+        || (a.activity_name && String(a.activity_name).trim())
+        || a.activity_type
+        || "Activity",
+      type: a.activity_type,
+      activity_type: a.activity_type,
+      date,
+      start_time: a.start_time,
+      duration_seconds: a.duration_seconds,
+      distance_meters: a.distance_meters,
+      avg_hr: a.avg_hr,
+      max_hr: a.max_hr,
+      calories: a.calories,
+      source: a.source,
+    };
+  });
 
   const { data: dayRows, error: dErr } = await supabase
     .from("training_days")

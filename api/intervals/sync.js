@@ -45,9 +45,9 @@ const sourcePriority = (source) => {
 };
 
 const resolveActivityName = (activity) =>
-  activity?.name
+  (typeof activity?.name === "string" && activity.name.trim())
+  || (typeof activity?.icu_name === "string" && activity.icu_name.trim())
   || activity?.activity_name
-  || activity?.athlete_name
   || activity?.description
   || activity?.title
   || activity?.type
@@ -218,15 +218,18 @@ export default async function handler(req, res) {
         const activityName = resolveActivityName(activity);
         const activitySource = normalizeActivitySource(activity.source || "intervals");
         const activityDate = normalizeIntervalsDate(activity.start_date_local || activity.start_date || start);
+        const durationRaw =
+          num(activity.moving_time ?? activity.elapsed_time ?? activity.duration) ?? 0;
         return {
           user_id: userId,
           activity_id: String(activity.id ?? activity.activity_id ?? ""),
-          activity_type: activity.type || activity.sportType || "workout",
+          activity_type:
+            activity.type || activity.sportType || activity.sport || activity.activityType || "workout",
           activity_name: activityName,
           name: activityName,
           date: activityDate,
           start_time: start,
-          duration_seconds: num(activity.elapsed_time ?? activity.moving_time ?? activity.duration) ?? 0,
+          duration_seconds: Math.round(Number(durationRaw) || 0),
           distance_meters: num(activity.distance ?? activity.distance_meters) ?? 0,
           avg_hr: num(activity.average_heartrate ?? activity.avg_hr ?? activity.averageHr),
           max_hr: num(activity.max_heartrate ?? activity.max_hr),
@@ -267,16 +270,26 @@ export default async function handler(req, res) {
         actErr
         && (actErr.code === "42703"
           || String(actErr.message || "").includes("activity_name")
-          || String(actErr.message || "").includes("date"))
+          || String(actErr.message || "").includes("date")
+          || /Could not find the 'name' column/i.test(String(actErr.message || ""))
+          || /column "name"/i.test(String(actErr.message || "")))
       ) {
-        // Backward compatible retry if the DB has not yet applied some new columns.
-        const errMsg = String(actErr.message || "").toLowerCase();
+        const msg = String(actErr.message || "");
+        const errMsg = msg.toLowerCase();
         const missingActivityName = errMsg.includes("activity_name");
         const missingDate = errMsg.includes("date");
+        const missingName =
+          /Could not find the 'name' column/i.test(msg)
+          || /column "name"/i.test(msg)
+          || (errMsg.includes("'name'") && !errMsg.includes("activity_name"));
+        if (missingName) {
+          console.warn("[intervals/sync] retrying garmin_activities upsert without name (run migrations/018_garmin_activities_name.sql)");
+        }
         const stripped = activityPayloads.map((row) => {
           const next = { ...row };
           if (missingActivityName) delete next.activity_name;
           if (missingDate) delete next.date;
+          if (missingName) delete next.name;
           return next;
         });
         ({ data: actData, error: actErr } = await supabase
