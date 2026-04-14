@@ -61,17 +61,24 @@ export default async function handler(req, res) {
     const rec   = recData.records?.[0];
     const sleep = sleepData.records?.[0];
     const cycle = cycleData.records?.[0];
+    const inBedMilli = sleep?.score?.stage_summary?.total_in_bed_time_milli;
+    const hrvMilli = rec?.score?.hrv_rmssd_milli;
+    const rhrRaw = rec?.score?.resting_heart_rate;
     return {
       recovery: {
         score: Math.round(rec?.score?.recovery_score ?? 0),
-        hrv:   Math.round(rec?.score?.hrv_rmssd_milli ?? 0),
-        rhr:   Math.round(rec?.score?.resting_heart_rate ?? 0),
+        hrv: hrvMilli != null && Number.isFinite(Number(hrvMilli)) ? Math.round(Number(hrvMilli)) : 0,
+        hrv_rmssd_milli: hrvMilli != null && Number.isFinite(Number(hrvMilli)) ? Math.round(Number(hrvMilli)) : null,
+        rhr: rhrRaw != null && Number.isFinite(Number(rhrRaw)) ? Math.round(Number(rhrRaw)) : 0,
+        resting_heart_rate: rhrRaw != null && Number.isFinite(Number(rhrRaw)) ? Math.round(Number(rhrRaw)) : null,
       },
       sleep: {
-        score:      Math.round(sleep?.score?.sleep_performance_percentage ?? 0),
-        hours:      sleep?.score?.stage_summary?.total_in_bed_time_milli
-                      ? Math.round((sleep.score.stage_summary.total_in_bed_time_milli / 3600000) * 10) / 10
-                      : 0,
+        score: Math.round(sleep?.score?.sleep_performance_percentage ?? 0),
+        hours:
+          inBedMilli != null && Number.isFinite(Number(inBedMilli))
+            ? Math.round((Number(inBedMilli) / 3600000) * 10) / 10
+            : 0,
+        total_in_bed_time_milli: inBedMilli != null && Number.isFinite(Number(inBedMilli)) ? Number(inBedMilli) : null,
         efficiency: Math.round(sleep?.score?.sleep_efficiency_percentage ?? 0),
       },
       strain: {

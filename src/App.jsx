@@ -2383,6 +2383,9 @@ export default function App() {
         return;
       }
       const data = await res.json();
+      if (import.meta.env.DEV) {
+        console.log("[WHOOP data]", JSON.stringify(data, null, 2));
+      }
       setWhoopData(data);
       setWhoopConnected(true);
     } catch (e) {
@@ -3041,9 +3044,13 @@ export default function App() {
   const rec = intervalsNum(intervalsTodayMetric, "recovery_score")
     ?? Number(whoopData?.recovery?.score ?? 0);
   const hrv = intervalsNum(intervalsTodayMetric, "hrv")
-    ?? Number(whoopData?.recovery?.hrv ?? 0);
+    ?? Number(
+      whoopData?.recovery?.hrv_rmssd_milli
+        ?? whoopData?.recovery?.hrv
+        ?? 0
+    );
   const rhr = intervalsNum(intervalsTodayMetric, "rhr")
-    ?? Number(whoopData?.recovery?.rhr ?? 0);
+    ?? Number(whoopData?.recovery?.resting_heart_rate ?? whoopData?.recovery?.rhr ?? 0);
   const sleepHoursRaw = intervalsNum(intervalsTodayMetric, "sleep_hours");
   const sleepHours = sleepHoursRaw != null && sleepHoursRaw > 0
     ? Math.round(sleepHoursRaw * 10) / 10
@@ -3248,17 +3255,33 @@ export default function App() {
         const recoveryScore = whoopData?.recovery?.score ?? 0;
         const recoveryColor =
           recoveryScore >= 67 ? "#00D4A0" : recoveryScore >= 34 ? "#f39c12" : "#FF3B30";
-        const hrvRmssd = whoopData?.recovery?.hrv_rmssd_milli;
+        const hrvMilliRaw =
+          whoopData?.recovery?.hrv_rmssd_milli ?? whoopData?.recovery?.hrv;
         const hrvCircleValue =
-          hrvRmssd != null && Number.isFinite(Number(hrvRmssd))
-            ? Math.round(Number(hrvRmssd))
+          hrvMilliRaw != null && Number.isFinite(Number(hrvMilliRaw)) && Number(hrvMilliRaw) > 0
+            ? Math.round(Number(hrvMilliRaw))
             : Number.isFinite(hrv) && hrv > 0
               ? Math.round(hrv)
               : "—";
+        const sleepScoreRaw = whoopData?.sleep?.score;
         const sleepCircleScore =
-          whoopData?.sleep?.score != null && Number.isFinite(Number(whoopData.sleep.score))
-            ? Math.round(Number(whoopData.sleep.score))
+          sleepScoreRaw != null && Number.isFinite(Number(sleepScoreRaw))
+            ? Math.round(Number(sleepScoreRaw))
             : "—";
+        const hrvRingColor = "#4a90c4";
+        const sleepRingColor = "#9b59b6";
+        const whoopRingStyle = (color) => ({
+          width: 72,
+          height: 72,
+          borderRadius: "50%",
+          border: `3px solid ${color}`,
+          boxShadow: `0 0 12px ${color}66, 0 0 24px ${color}33`,
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "center",
+          margin: "0 auto 8px",
+          background: `${color}11`,
+        });
 
         const intervalsRecoveryHistory = [...unifiedMetrics]
           .filter((m) => m?.source === "intervals")
@@ -3397,18 +3420,7 @@ export default function App() {
             <div style={{ ...cardGlass, boxShadow: `0 0 18px ${recoveryColor}22` }}>
               <div style={{ display: "flex", justifyContent: "space-around", alignItems: "center", padding: "16px 0" }}>
                 <div style={{ textAlign: "center" }}>
-                  <div
-                    style={{
-                      width: 72,
-                      height: 72,
-                      borderRadius: "50%",
-                      border: `3px solid ${recoveryColor}`,
-                      display: "flex",
-                      alignItems: "center",
-                      justifyContent: "center",
-                      margin: "0 auto 8px",
-                    }}
-                  >
+                  <div style={whoopRingStyle(recoveryColor)}>
                     <span style={{ fontSize: 20, fontWeight: 700, color: recoveryColor }}>
                       {whoopData?.recovery?.score ?? "—"}
                     </span>
@@ -3416,36 +3428,14 @@ export default function App() {
                   <div style={{ fontFamily: "monospace", fontSize: 9, color: "#888", letterSpacing: 2 }}>RECOVERY</div>
                 </div>
                 <div style={{ textAlign: "center" }}>
-                  <div
-                    style={{
-                      width: 72,
-                      height: 72,
-                      borderRadius: "50%",
-                      border: "3px solid #4a90c4",
-                      display: "flex",
-                      alignItems: "center",
-                      justifyContent: "center",
-                      margin: "0 auto 8px",
-                    }}
-                  >
-                    <span style={{ fontSize: 20, fontWeight: 700, color: "#4a90c4" }}>{hrvCircleValue}</span>
+                  <div style={whoopRingStyle(hrvRingColor)}>
+                    <span style={{ fontSize: 20, fontWeight: 700, color: hrvRingColor }}>{hrvCircleValue}</span>
                   </div>
                   <div style={{ fontFamily: "monospace", fontSize: 9, color: "#888", letterSpacing: 2 }}>HRV</div>
                 </div>
                 <div style={{ textAlign: "center" }}>
-                  <div
-                    style={{
-                      width: 72,
-                      height: 72,
-                      borderRadius: "50%",
-                      border: "3px solid #9b59b6",
-                      display: "flex",
-                      alignItems: "center",
-                      justifyContent: "center",
-                      margin: "0 auto 8px",
-                    }}
-                  >
-                    <span style={{ fontSize: 20, fontWeight: 700, color: "#9b59b6" }}>{sleepCircleScore}</span>
+                  <div style={whoopRingStyle(sleepRingColor)}>
+                    <span style={{ fontSize: 20, fontWeight: 700, color: sleepRingColor }}>{sleepCircleScore}</span>
                   </div>
                   <div style={{ fontFamily: "monospace", fontSize: 9, color: "#888", letterSpacing: 2 }}>SLEEP</div>
                 </div>
