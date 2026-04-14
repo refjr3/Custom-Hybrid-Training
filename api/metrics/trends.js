@@ -369,11 +369,14 @@ export default async function handler(req, res) {
   };
 
   const last30 = sliceLast(30);
-  const hrv30 = last30.map((r) => {
+  const localToday = todayIso || getLocalToday();
+
+  const rawHrv30 = last30.map((r) => {
     const d = String(r.date).slice(0, 10);
     const h = num(r.hrv);
     return { date: d, hrv: h };
   });
+  const hrv30 = rawHrv30.filter((d) => d.date && d.date <= localToday);
 
   const hrv7Rolling = hrv30.map((_, i) => {
     const slice = hrv30.slice(Math.max(0, i - 6), i + 1);
@@ -386,22 +389,25 @@ export default async function handler(req, res) {
     hrv7: hrv7Rolling[i] != null ? Math.round(hrv7Rolling[i] * 10) / 10 : null,
   }));
 
-  const readiness30 = last30.map((r) => ({
+  const rawReadiness30 = last30.map((r) => ({
     date: String(r.date).slice(0, 10),
     readiness: num(r.recovery_score),
   }));
+  const readiness30 = rawReadiness30.filter((d) => d.date && d.date <= localToday);
 
   const last14 = sliceLast(14);
-  const sleep14 = last14.map((r) => ({
+  const rawSleep14 = last14.map((r) => ({
     date: String(r.date).slice(0, 10),
     sleep_hours: num(r.sleep_hours),
     sleep_score: num(r.sleep_score),
   }));
+  const sleep14 = rawSleep14.filter((d) => d.date && d.date <= localToday);
 
-  const rhr30 = last30.map((r) => ({
+  const rawRhr30 = last30.map((r) => ({
     date: String(r.date).slice(0, 10),
     rhr: num(r.rhr),
   }));
+  const rhr30 = rawRhr30.filter((d) => d.date && d.date <= localToday);
 
   const rhrVals = rhr30.map((r) => r.rhr).filter((x) => x != null && Number.isFinite(x));
   const minRhr = rhrVals.length ? Math.min(...rhrVals) : null;
@@ -410,10 +416,11 @@ export default async function handler(req, res) {
       ? []
       : rhr30.filter((r) => r.rhr != null && Number(r.rhr) === minRhr).map((r) => ({ date: r.date, value: r.rhr }));
 
-  const vo2max30 = last30.map((r) => ({
+  const rawVo2max30 = last30.map((r) => ({
     date: String(r.date).slice(0, 10),
     vo2_max: num(r.vo2_max),
   }));
+  const vo2max30 = rawVo2max30.filter((d) => d.date && d.date <= localToday);
 
   const { data: acts, error: aErr } = await supabase
     .from("garmin_activities")

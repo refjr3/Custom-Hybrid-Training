@@ -239,6 +239,20 @@ function PerfIntervalsBlocks({ trends, C, glow }) {
   const [loadFlipped, setLoadFlipped] = useState(false);
   if (!trends) return null;
   const { summary, hrv30, readiness30, sleep14, rhr30, rhrPrDates, vo2max30, activities } = trends;
+  const localToday = getLocalToday();
+  const filterMetricPoints = (arr, valueKey) =>
+    (Array.isArray(arr) ? arr : []).filter((d) =>
+      d?.date
+      && d.date <= localToday
+      && d?.[valueKey] != null
+      && Number.isFinite(Number(d[valueKey]))
+      && Number(d[valueKey]) !== 0
+    );
+  const hrv30Valid = filterMetricPoints(hrv30, "hrv");
+  const readiness30Valid = filterMetricPoints(readiness30, "readiness");
+  const sleep14Valid = filterMetricPoints(sleep14, "sleep_hours");
+  const rhr30Valid = filterMetricPoints(rhr30, "rhr");
+  const vo2max30Valid = filterMetricPoints(vo2max30, "vo2_max");
   const atl = summary?.atl ?? 0;
   const ctl = summary?.ctl ?? 0;
   const tsb = summary?.tsb ?? 0;
@@ -246,16 +260,16 @@ function PerfIntervalsBlocks({ trends, C, glow }) {
   const tsbLabel = tsb > 0 ? "FRESH" : tsb >= -10 ? "NEUTRAL" : "BUILDING";
   const loadBackParagraph = getLoadInsight(atl, ctl, tsb);
 
-  const hrvFilled = fillMetricSeries(hrv30.map((d) => d.hrv));
-  const hrv7Filled = fillMetricSeries(hrv30.map((d) => d.hrv7));
+  const hrvFilled = fillMetricSeries(hrv30Valid.map((d) => d.hrv));
+  const hrv7Filled = fillMetricSeries(hrv30Valid.map((d) => d.hrv7));
   const hrvPts = hrvFilled.filter((x) => x != null && Number.isFinite(Number(x)));
   const hrvCur =
     trends.current?.hrv != null && Number.isFinite(trends.current.hrv)
       ? Number(trends.current.hrv)
       : (hrvPts.length ? hrvPts[hrvPts.length - 1] : null);
-  const hrvLast7 = (hrv30 || []).slice(-7).map((d) => d.hrv);
+  const hrvLast7 = (hrv30Valid || []).slice(-7).map((d) => d.hrv);
   const hrvAvg7 = meanFinite(hrvLast7);
-  const hrvAvg30 = meanFinite((hrv30 || []).map((d) => d.hrv));
+  const hrvAvg30 = meanFinite((hrv30Valid || []).map((d) => d.hrv));
   const hrvRangeVals = [...hrvFilled.filter((x) => x != null && Number.isFinite(Number(x))), hrvCur, hrvAvg7, hrvAvg30].filter(
     (x) => x != null && Number.isFinite(Number(x))
   );
@@ -284,16 +298,16 @@ function PerfIntervalsBlocks({ trends, C, glow }) {
       ? `Your HRV is ${(Math.round(hrvCur * 10) / 10).toFixed(1)}ms. Your baseline is ${(Math.round(hrvAvg30 * 10) / 10).toFixed(1)}ms. ${hrvTrendWord}`
       : "Log more wellness days to establish HRV context.";
 
-  const readFilled = fillMetricSeries(readiness30.map((d) => d.readiness), 50);
+  const readFilled = fillMetricSeries(readiness30Valid.map((d) => d.readiness), 50);
   const readPath = perfLinePathD(readFilled, PERF_CHART_W, PERF_CHART_H, PERF_PAD, 0, 100);
-  const readLast7 = (readiness30 || []).slice(-7).map((d) => d.readiness);
+  const readLast7 = (readiness30Valid || []).slice(-7).map((d) => d.readiness);
   const readAvg7 = meanFinite(readLast7);
   const readCur = [...readFilled].reverse().find((x) => x != null && Number.isFinite(Number(x))) ?? null;
 
-  const sleepH = sleep14.map((d) => d.sleep_hours ?? 0);
+  const sleepH = sleep14Valid.map((d) => d.sleep_hours ?? 0);
   const maxSleepH = Math.max(9, ...sleepH.map(Number), 1);
-  const barW = sleep14.length ? (PERF_CHART_W - PERF_PAD * 2) / sleep14.length - 2 : 8;
-  const sleepWeekSlice = (sleep14 || []).slice(-7);
+  const barW = sleep14Valid.length ? (PERF_CHART_W - PERF_PAD * 2) / sleep14Valid.length - 2 : 8;
+  const sleepWeekSlice = (sleep14Valid || []).slice(-7);
   const sleepWeekH = meanFinite(sleepWeekSlice.map((d) => d.sleep_hours));
   const sleepWeekScore = meanFinite(sleepWeekSlice.map((d) => d.sleep_score));
   const sleepInsight =
@@ -301,14 +315,14 @@ function PerfIntervalsBlocks({ trends, C, glow }) {
       ? `You averaged ${(Math.round(sleepWeekH * 10) / 10).toFixed(1)} hrs over the last week. Target is 8hrs.`
       : "Sync sleep data to see weekly sleep volume vs the 8h target.";
 
-  const rhrFilled = fillMetricSeries(rhr30.map((d) => d.rhr), 55);
+  const rhrFilled = fillMetricSeries(rhr30Valid.map((d) => d.rhr), 55);
   const rhrVals = rhrFilled.filter((x) => x != null && Number.isFinite(x));
   const rhrRange = perfChartRange(rhrVals.length ? rhrVals : [50, 60]);
   const rhrPath = perfLinePathD(rhrFilled, PERF_CHART_W, PERF_CHART_H, PERF_PAD, rhrRange.min, rhrRange.max);
   const prSet = new Set((rhrPrDates || []).map((p) => p.date));
-  const rhrLast7 = (rhr30 || []).slice(-7).map((d) => d.rhr);
+  const rhrLast7 = (rhr30Valid || []).slice(-7).map((d) => d.rhr);
   const rhrAvg7 = meanFinite(rhrLast7);
-  const rhrCur = [...rhr30].reverse().find((d) => d.rhr != null && Number.isFinite(Number(d.rhr)))?.rhr ?? null;
+  const rhrCur = [...rhr30Valid].reverse().find((d) => d.rhr != null && Number.isFinite(Number(d.rhr)))?.rhr ?? null;
   const rhrWindowMin = rhrVals.length ? Math.min(...rhrVals) : null;
   const prRhrRow = (trends.personalRecordRows || []).find((r) => r.key === "lowest_rhr");
   const rhrPrBpm =
@@ -322,7 +336,7 @@ function PerfIntervalsBlocks({ trends, C, glow }) {
     return PERF_PAD + ih - ((Number(v) - rhrRange.min) / vr) * ih;
   };
   const rhrIx = PERF_CHART_W - PERF_PAD;
-  const rhrSeries = (rhr30 || []).map((d) => d.rhr).filter((x) => x != null && Number.isFinite(Number(x)));
+  const rhrSeries = (rhr30Valid || []).map((d) => d.rhr).filter((x) => x != null && Number.isFinite(Number(x)));
   const rhrLast3 = meanFinite(rhrSeries.slice(-3));
   const rhrPrev3 = meanFinite(rhrSeries.slice(-6, -3));
   const rhrImproving =
@@ -332,7 +346,7 @@ function PerfIntervalsBlocks({ trends, C, glow }) {
     rhrLast3 < rhrPrev3 - 0.2;
   const rhrTrendLabel = rhrImproving ? "↓ IMPROVING" : "→ STEADY";
 
-  const vo2Filled = fillMetricSeries(vo2max30.map((d) => d.vo2_max), null);
+  const vo2Filled = fillMetricSeries(vo2max30Valid.map((d) => d.vo2_max), null);
   const vo2vals = vo2Filled.filter((x) => x != null && Number.isFinite(x));
   const vo2Range = perfChartRange(vo2vals.length ? vo2vals : [40, 55]);
   const vo2Path = perfLinePathD(vo2Filled, PERF_CHART_W, PERF_CHART_H, PERF_PAD, vo2Range.min, vo2Range.max);
@@ -552,10 +566,10 @@ function PerfIntervalsBlocks({ trends, C, glow }) {
               <line x1={PERF_PAD} y1={y8} x2={PERF_PAD + iw} y2={y8} stroke="rgba(0,243,255,0.35)" strokeDasharray="4 3" />
             );
           })()}
-          {sleep14.map((d, i) => {
+          {sleep14Valid.map((d, i) => {
             const ih = PERF_CHART_H - PERF_PAD * 2;
             const iw = PERF_CHART_W - PERF_PAD * 2;
-            const x = PERF_PAD + (sleep14.length <= 1 ? iw / 2 : (i / Math.max(sleep14.length - 1, 1)) * iw) - barW / 2;
+            const x = PERF_PAD + (sleep14Valid.length <= 1 ? iw / 2 : (i / Math.max(sleep14Valid.length - 1, 1)) * iw) - barW / 2;
             const hRaw = Number(d.sleep_hours) || 0;
             const bh = (hRaw / maxSleepH) * ih;
             const y = PERF_PAD + ih - bh;
@@ -600,11 +614,11 @@ function PerfIntervalsBlocks({ trends, C, glow }) {
             />
           )}
           {rhrPath && <path d={rhrPath} fill="none" stroke="#e07b3a" strokeWidth={2} />}
-          {rhr30.map((d, i) => {
+          {rhr30Valid.map((d, i) => {
             if (d.rhr == null || !Number.isFinite(Number(d.rhr))) return null;
             const iw = PERF_CHART_W - PERF_PAD * 2;
             const ih = PERF_CHART_H - PERF_PAD * 2;
-            const n = rhr30.length;
+            const n = rhr30Valid.length;
             const x = PERF_PAD + (n <= 1 ? iw / 2 : (i / Math.max(n - 1, 1)) * iw);
             const vr = Math.max(rhrRange.max - rhrRange.min, 1e-9);
             const y = PERF_PAD + ih - ((Number(d.rhr) - rhrRange.min) / vr) * ih;
