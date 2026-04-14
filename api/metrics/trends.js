@@ -25,6 +25,18 @@ const MONTH_TO_INDEX = {
   nov: 10,
   dec: 11,
 };
+const COMPLIANCE_KEYWORDS = {
+  "HYROX + Plyos": ["hyrox", "sled", "wall ball", "lunge"],
+  "Z2 Erg + Mobility": ["z2 erg", "ski erg", "row", "echo bike", "zone 2 erg"],
+  "Z2 Run + Mobility": ["z2 run", "zone 2 run", "easy run", "z2"],
+  "Z2 Run + Mobility + Core": ["z2 run", "zone 2 run", "easy run", "z2"],
+  "Full Body + Z2 Erg": ["lift", "strength", "upper", "lower", "full body", "weights"],
+  "Upper Moderate": ["upper", "moderate", "kb", "kettlebell"],
+  "Threshold/Track": ["threshold", "track", "intervals", "tempo"],
+  "HYROX Motion": ["hyrox motion", "motion", "hyrox class"],
+  "Long Z2 Run": ["long run", "long z2", "easy long"],
+  "20/20/20 Brick": ["brick", "20/20/20", "triathlon"],
+};
 
 function isoDaysAgo(n) {
   const today = getLocalToday();
@@ -84,22 +96,74 @@ function activityDateIso(a) {
   return String(a?.start_time || a?.date || "").slice(0, 10) || null;
 }
 
+function activityDisplayName(a) {
+  return String(a?.activity_name || a?.name || a?.activity_type || "").trim();
+}
+
+function sourcePriority(source) {
+  const s = String(source || "").toLowerCase();
+  if (s.includes("strava")) return 2;
+  if (s.includes("garmin")) return 1;
+  return 0;
+}
+
+function plannedKeywords(plannedLabel) {
+  const label = String(plannedLabel || "").trim();
+  if (!label) return [];
+  if (COMPLIANCE_KEYWORDS[label]) return COMPLIANCE_KEYWORDS[label];
+  if (label.startsWith("THRESHOLD RUN") || label.startsWith("TRACK SESSION") || label.startsWith("BENCHMARK")) {
+    return COMPLIANCE_KEYWORDS["Threshold/Track"];
+  }
+  return [];
+}
+
+function matchesPlanned(activityName, plannedLabel) {
+  if (!activityName || !plannedLabel) return false;
+  const name = String(activityName).toLowerCase();
+  const keywords = plannedKeywords(plannedLabel);
+  return keywords.some((kw) => name.includes(kw));
+}
+
+function activityTypeMatchesPlanned(activityType, plannedLabel) {
+  if (!activityType || !plannedLabel) return false;
+  const type = String(activityType).toLowerCase();
+  const label = String(plannedLabel).toLowerCase();
+  const runPlanned = label.includes("run") || label.includes("threshold") || label.includes("track");
+  const liftPlanned = label.includes("lift") || label.includes("strength") || label.includes("full body") || label.includes("upper");
+  if (runPlanned) {
+    return type.includes("run");
+  }
+  if (liftPlanned) {
+    return type.includes("weight") || type.includes("strength");
+  }
+  return false;
+}
+
 function matchingCompletedActivity(day, activities = []) {
   if (!day?.planned || !day?.date_iso) return null;
-  return activities.find((a) => {
-    const activityDate = activityDateIso(a);
-    const longEnough = Number(a?.duration_seconds || 0) >= 600;
-    return activityDate === day.date_iso && longEnough;
-  }) || null;
+  const sameDay = activities
+    .filter((a) => {
+      const activityDate = activityDateIso(a);
+      const longEnough = Number(a?.duration_seconds || 0) >= 600;
+      return activityDate === day.date_iso && longEnough;
+    })
+    .sort((a, b) => sourcePriority(b?.source) - sourcePriority(a?.source));
+  if (!sameDay.length) return null;
+
+  const plannedLabel = day?.planned_label || null;
+  if (!plannedLabel) return sameDay[0];
+
+  const keyworded = plannedKeywords(plannedLabel).length > 0;
+  const match = sameDay.find((a) =>
+    matchesPlanned(activityDisplayName(a), plannedLabel)
+      || activityTypeMatchesPlanned(a?.activity_type, plannedLabel)
+  );
+  if (match) return match;
+  return keyworded ? null : sameDay[0];
 }
 
 function isCompleted(day, activities = []) {
-  if (!day?.planned) return false;
-  return activities.some((a) => {
-    const activityDate = activityDateIso(a);
-    const longEnough = Number(a?.duration_seconds || 0) >= 600;
-    return activityDate === day.date_iso && longEnough;
-  });
+  return Boolean(matchingCompletedActivity(day, activities));
 }
 
 function fmtMmSs(sec) {
@@ -192,7 +256,7 @@ function buildComplianceWeek(currentWeekDays, activities, todayIso) {
       "| today_local_iso:",
       today
     );
-    const dayForMatch = { planned, date_iso };
+    const dayForMatch = { planned, date_iso, planned_label: plannedLabel(day) || null };
     const activity = matchingCompletedActivity(dayForMatch, activities);
     const completed = isCompleted(dayForMatch, activities);
     const duration_min =
@@ -204,7 +268,7 @@ function buildComplianceWeek(currentWeekDays, activities, todayIso) {
       date_iso,
       planned,
       planned_label: plannedLabel(day) || null,
-      actual: activity?.activity_type || null,
+      actual: activityDisplayName(activity) || activity?.activity_type || null,
       completed,
       duration: duration_min,
     };
@@ -422,12 +486,22 @@ export default async function handler(req, res) {
   }));
   const vo2max30 = rawVo2max30.filter((d) => d.date && d.date <= localToday);
 
-  const { data: acts, error: aErr } = await supabase
+  let acts;
+  let aErr;
+  ({ data: acts, error: aErr } = await supabase
     .from("garmin_activities")
-    .select("activity_id, activity_type, name, start_time, duration_seconds, distance_meters, avg_hr, max_hr, calories, source")
+    .select("activity_id, activity_type, activity_name, name, start_time, duration_seconds, distance_meters, avg_hr, max_hr, calories, source")
     .eq("user_id", userId)
     .order("start_time", { ascending: false })
-    .limit(180);
+    .limit(180));
+  if (aErr && (aErr.code === "42703" || String(aErr.message || "").includes("activity_name"))) {
+    ({ data: acts, error: aErr } = await supabase
+      .from("garmin_activities")
+      .select("activity_id, activity_type, name, start_time, duration_seconds, distance_meters, avg_hr, max_hr, calories, source")
+      .eq("user_id", userId)
+      .order("start_time", { ascending: false })
+      .limit(180));
+  }
 
   if (aErr) {
     return res.status(500).json({ error: "activities_query_failed", details: aErr.message });

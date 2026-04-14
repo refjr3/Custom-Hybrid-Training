@@ -677,7 +677,7 @@ function PerfIntervalsBlocks({ trends, C, glow }) {
               >
                 <div style={{ minWidth: 0 }}>
                   <div style={{ fontFamily: C.ff, fontSize: 13, color: C.text, letterSpacing: 0.5, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
-                    {a.name || a.activity_type}
+                    {a.activity_name || a.name || a.activity_type}
                   </div>
                   <div style={{ fontFamily: C.fm, fontSize: 7, color: C.muted, letterSpacing: 1, marginTop: 2 }}>
                     {a.activity_type}

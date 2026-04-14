@@ -31,6 +31,19 @@ const num = (v) => {
   return Number.isFinite(n) ? n : null;
 };
 
+const normalizeActivitySource = (value) => {
+  const s = String(value || "").toLowerCase();
+  if (s.includes("strava")) return "strava";
+  if (s.includes("garmin")) return "garmin";
+  return "intervals";
+};
+
+const sourcePriority = (source) => {
+  if (source === "strava") return 2;
+  if (source === "garmin") return 1;
+  return 0;
+};
+
 const normalizeList = (body) => {
   if (Array.isArray(body)) return body;
   if (body && typeof body === "object") {
@@ -186,38 +199,70 @@ export default async function handler(req, res) {
       console.log("[intervals/sync] wellness rows to upsert: 0 (nothing to write)");
     }
 
-    const activityPayloads = (activitiesList || [])
+    const rawActivityPayloads = (activitiesList || [])
       .map((activity) => {
-        const start =
-          activity.start_date_local || activity.start_date || activity.start || null;
+        const start = activity.start_date_local || activity.start_date || activity.start || null;
+        const activityName = activity.name || activity.type || "Activity";
+        const activitySource = normalizeActivitySource(activity.source || "intervals");
+        const activityDate = normalizeIntervalsDate(activity.start_date_local || activity.start_date || start);
         return {
           user_id: userId,
           activity_id: String(activity.id ?? activity.activity_id ?? ""),
           activity_type: activity.type || activity.sportType || "workout",
-          name: activity.name || activity.type || "Activity",
+          activity_name: activityName,
+          name: activityName,
+          date: activityDate,
           start_time: start,
-          duration_seconds: Math.round(
-            num(activity.elapsed_time ?? activity.moving_time ?? activity.duration) || 0
-          ),
-          distance_meters: num(activity.distance ?? activity.distance_meters) || 0,
-          avg_hr: Math.round(
-            num(activity.average_heartrate ?? activity.avg_hr ?? activity.averageHr) || 0
-          ),
-          max_hr: Math.round(num(activity.max_heartrate ?? activity.max_hr) || 0),
-          calories: Math.round(num(activity.calories) || 0),
-          source: "intervals",
+          duration_seconds: num(activity.elapsed_time ?? activity.moving_time ?? activity.duration) ?? 0,
+          distance_meters: num(activity.distance ?? activity.distance_meters) ?? 0,
+          avg_hr: num(activity.average_heartrate ?? activity.avg_hr ?? activity.averageHr),
+          max_hr: num(activity.max_heartrate ?? activity.max_hr),
+          calories: num(activity.calories ?? activity.kilojoules),
+          source: activitySource,
           raw_data: activity,
         };
       })
       .filter((a) => a.activity_id);
 
+    // If the same workout appears from multiple providers, keep the Strava copy.
+    const dedupedBySession = new Map();
+    for (const row of rawActivityPayloads) {
+      const day = row.date || normalizeIntervalsDate(row.start_time) || "";
+      const key = [
+        day,
+        String(row.activity_type || "").toLowerCase(),
+        Math.round(Number(row.duration_seconds || 0)),
+        Math.round(Number(row.distance_meters || 0)),
+      ].join("|");
+      const existing = dedupedBySession.get(key);
+      if (!existing || sourcePriority(row.source) > sourcePriority(existing.source)) {
+        dedupedBySession.set(key, row);
+      }
+    }
+    const activityPayloads = Array.from(dedupedBySession.values());
+
     let activitiesCount = 0;
     if (activityPayloads.length > 0) {
       console.log("[intervals/sync] activity rows to upsert:", activityPayloads.length);
-      const { data: actData, error: actErr } = await supabase
+      let actData;
+      let actErr;
+      ({ data: actData, error: actErr } = await supabase
         .from("garmin_activities")
         .upsert(activityPayloads, { onConflict: "activity_id" })
-        .select("activity_id");
+        .select("activity_id"));
+      if (
+        actErr
+        && (actErr.code === "42703"
+          || String(actErr.message || "").includes("activity_name")
+          || String(actErr.message || "").includes("date"))
+      ) {
+        // Backward compatible retry if the DB has not yet applied the new columns.
+        const stripped = activityPayloads.map(({ activity_name: _n, date: _d, ...rest }) => rest);
+        ({ data: actData, error: actErr } = await supabase
+          .from("garmin_activities")
+          .upsert(stripped, { onConflict: "activity_id" })
+          .select("activity_id"));
+      }
       console.log(
         "[intervals/sync] garmin_activities upsert:",
         actErr ? `ERROR ${actErr.code || ""} ${actErr.message}` : "success",
