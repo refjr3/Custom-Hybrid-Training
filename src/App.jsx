@@ -3030,9 +3030,6 @@ export default function App() {
   const intervalsTodayMetric = unifiedMetrics?.find(
     (m) => m?.source === "intervals" && String(m?.date || "").slice(0, 10) === todayLocal
   );
-  console.log("[today] todayLocal:", todayLocal);
-  console.log("[today] unifiedMetrics dates:", unifiedMetrics?.map((m) => `${m?.date}|${m?.source}`));
-  console.log("[today] intervalsTodayMetric:", intervalsTodayMetric);
   const hasIntervalsToday = Boolean(intervalsTodayMetric);
 
   const intervalsNum = (row, key) => {
@@ -3052,7 +3049,6 @@ export default function App() {
     ? Math.round(sleepHoursRaw * 10) / 10
     : Number(whoopData?.sleep?.hours ?? 0);
   const sleepEff   = whoopData?.sleep?.efficiency ?? 0;
-  const rc         = whoopColor(rec);
 
   const todayDayNames = ["SUN","MON","TUE","WED","THU","FRI","SAT"];
   const todayDayName  = todayDayNames[new Date().getDay()];
@@ -3249,6 +3245,21 @@ export default function App() {
         const todayStart = new Date(todayDateObj.getFullYear(), todayDateObj.getMonth(), todayDateObj.getDate());
         const daysAway = raceDateObj ? Math.max(0, Math.ceil((raceDateObj.getTime() - todayStart.getTime()) / (1000 * 60 * 60 * 24))) : null;
 
+        const recoveryScore = whoopData?.recovery?.score ?? 0;
+        const recoveryColor =
+          recoveryScore >= 67 ? "#00D4A0" : recoveryScore >= 34 ? "#f39c12" : "#FF3B30";
+        const hrvRmssd = whoopData?.recovery?.hrv_rmssd_milli;
+        const hrvCircleValue =
+          hrvRmssd != null && Number.isFinite(Number(hrvRmssd))
+            ? Math.round(Number(hrvRmssd))
+            : Number.isFinite(hrv) && hrv > 0
+              ? Math.round(hrv)
+              : "—";
+        const sleepCircleScore =
+          whoopData?.sleep?.score != null && Number.isFinite(Number(whoopData.sleep.score))
+            ? Math.round(Number(whoopData.sleep.score))
+            : "—";
+
         const intervalsRecoveryHistory = [...unifiedMetrics]
           .filter((m) => m?.source === "intervals")
           .sort((a, b) => new Date(a?.date || 0).getTime() - new Date(b?.date || 0).getTime())
@@ -3383,40 +3394,61 @@ export default function App() {
               </div>
             )}
 
-            <div style={{ fontFamily: "monospace", fontSize: 9, color: "#ff3b30" }}>
-              DEBUG: today={todayLocal} | metrics={unifiedMetrics?.length} | todayMetric={intervalsTodayMetric?.recovery_score ?? "null"}
-            </div>
-
-            <div style={{ ...cardGlass, boxShadow: `0 0 18px ${rc}33` }}>
-              <div style={{ display: "flex", justifyContent: "center", marginBottom: 16 }}>
-                <Ring
-                  score={rec}
-                  size={120}
-                  stroke={10}
-                  color={rc}
-                  label="RECOVERY"
-                  sublabel={whoopLabel(rec)}
-                  glowEffect
-                />
-              </div>
-              <div
-                style={{
-                  display: "grid",
-                  gridTemplateColumns: "repeat(3, 1fr)",
-                  gap: 10,
-                  marginBottom: 8,
-                }}
-              >
-                {[
-                  ["HRV", Number.isFinite(hrv) ? (Math.round(hrv * 10) / 10).toFixed(1) : "—"],
-                  ["RHR", `${Math.round(rhr)}`],
-                  ["SLEEP HRS", `${sleepHours}`],
-                ].map(([label, value]) => (
-                  <div key={label} style={{ textAlign: "center" }}>
-                    <div style={{ fontFamily: C.ff, fontSize: 28, color: C.cyan, lineHeight: 1 }}>{value}</div>
-                    <div style={{ fontFamily: C.fm, fontSize: 8, color: C.muted, letterSpacing: 2, marginTop: 4 }}>{label}</div>
+            <div style={{ ...cardGlass, boxShadow: `0 0 18px ${recoveryColor}22` }}>
+              <div style={{ display: "flex", justifyContent: "space-around", alignItems: "center", padding: "16px 0" }}>
+                <div style={{ textAlign: "center" }}>
+                  <div
+                    style={{
+                      width: 72,
+                      height: 72,
+                      borderRadius: "50%",
+                      border: `3px solid ${recoveryColor}`,
+                      display: "flex",
+                      alignItems: "center",
+                      justifyContent: "center",
+                      margin: "0 auto 8px",
+                    }}
+                  >
+                    <span style={{ fontSize: 20, fontWeight: 700, color: recoveryColor }}>
+                      {whoopData?.recovery?.score ?? "—"}
+                    </span>
                   </div>
-                ))}
+                  <div style={{ fontFamily: "monospace", fontSize: 9, color: "#888", letterSpacing: 2 }}>RECOVERY</div>
+                </div>
+                <div style={{ textAlign: "center" }}>
+                  <div
+                    style={{
+                      width: 72,
+                      height: 72,
+                      borderRadius: "50%",
+                      border: "3px solid #4a90c4",
+                      display: "flex",
+                      alignItems: "center",
+                      justifyContent: "center",
+                      margin: "0 auto 8px",
+                    }}
+                  >
+                    <span style={{ fontSize: 20, fontWeight: 700, color: "#4a90c4" }}>{hrvCircleValue}</span>
+                  </div>
+                  <div style={{ fontFamily: "monospace", fontSize: 9, color: "#888", letterSpacing: 2 }}>HRV</div>
+                </div>
+                <div style={{ textAlign: "center" }}>
+                  <div
+                    style={{
+                      width: 72,
+                      height: 72,
+                      borderRadius: "50%",
+                      border: "3px solid #9b59b6",
+                      display: "flex",
+                      alignItems: "center",
+                      justifyContent: "center",
+                      margin: "0 auto 8px",
+                    }}
+                  >
+                    <span style={{ fontSize: 20, fontWeight: 700, color: "#9b59b6" }}>{sleepCircleScore}</span>
+                  </div>
+                  <div style={{ fontFamily: "monospace", fontSize: 9, color: "#888", letterSpacing: 2 }}>SLEEP</div>
+                </div>
               </div>
             </div>
 
