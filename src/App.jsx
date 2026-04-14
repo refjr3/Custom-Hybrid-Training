@@ -80,7 +80,43 @@ function fillMetricSeries(arr, fallback = null) {
 
 const PERF_BLOCK_WEEKS_TOTAL = 12;
 
-/** Week containing today for Performance header (same date parsing idea as Plan tab). */
+function localTodayIsoClock() {
+  const n = new Date();
+  return `${n.getFullYear()}-${String(n.getMonth() + 1).padStart(2, "0")}-${String(n.getDate()).padStart(2, "0")}`;
+}
+
+function parseIsoYmdLocal(iso) {
+  if (!iso || typeof iso !== "string") return null;
+  const [yy, mm, dd] = iso.split("-").map(Number);
+  if (!yy || !mm || !dd) return null;
+  const dt = new Date(yy, mm - 1, dd);
+  return Number.isFinite(dt.getTime()) ? dt : null;
+}
+
+/** Monday (YYYY-MM-DD) of the calendar week containing `iso` (Mon–Sun, local). */
+function mondayOfCalendarWeekContainingIsoLocal(iso) {
+  const d = parseIsoYmdLocal(iso);
+  if (!d) return null;
+  const dow = d.getDay();
+  const diff = dow === 0 ? -6 : 1 - dow;
+  d.setDate(d.getDate() + diff);
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, "0");
+  const day = String(d.getDate()).padStart(2, "0");
+  return `${y}-${m}-${day}`;
+}
+
+function sundayAfterMondayIsoLocal(monIso) {
+  const d = parseIsoYmdLocal(monIso);
+  if (!d) return null;
+  d.setDate(d.getDate() + 6);
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, "0");
+  const day = String(d.getDate()).padStart(2, "0");
+  return `${y}-${m}-${day}`;
+}
+
+/** Plan week whose Mon–Sun calendar span contains today; week # = 1-based index within that block. */
 function derivePerfPlanHeader(planBlocks) {
   if (!Array.isArray(planBlocks) || planBlocks.length === 0) return null;
   const y = new Date().getFullYear();
@@ -90,73 +126,106 @@ function derivePerfPlanHeader(planBlocks) {
     if (Number.isNaN(p.getTime())) return null;
     return p.toISOString().split("T")[0];
   };
-  const allWeeks = planBlocks.flatMap((b) =>
-    (b.weeks || []).map((w) => ({
-      block: b,
-      week: w,
-      days: w.days || [],
-    }))
-  );
-  if (!allWeeks.length) return null;
-  const todayIso = new Date().toISOString().split("T")[0];
-  let hitIdx = -1;
-  let hit = null;
-  allWeeks.forEach((entry, i) => {
-    for (const day of entry.days) {
-      const iso = labelToIso(day?.date || day?.date_label);
-      if (iso === todayIso) {
-        hitIdx = i;
-        hit = entry;
+
+  const todayIso = localTodayIsoClock();
+
+  let hitBlock = null;
+  let hitWeek = null;
+  let weekIndexInBlock = -1;
+  let weekMon = null;
+  let weekSun = null;
+
+  outer: for (const block of planBlocks) {
+    const weeks = block.weeks || [];
+    for (let wi = 0; wi < weeks.length; wi++) {
+      const w = weeks[wi];
+      const days = w.days || [];
+      const isos = days.map((d) => labelToIso(d?.date || d?.date_label)).filter(Boolean);
+      if (!isos.length) continue;
+      const minIso = isos.reduce((a, b) => (a < b ? a : b));
+      const mon = mondayOfCalendarWeekContainingIsoLocal(minIso);
+      const sun = mon ? sundayAfterMondayIsoLocal(mon) : null;
+      if (!mon || !sun) continue;
+      if (todayIso >= mon && todayIso <= sun) {
+        hitBlock = block;
+        hitWeek = w;
+        weekIndexInBlock = wi;
+        weekMon = mon;
+        weekSun = sun;
+        break outer;
       }
     }
-  });
-  if (hitIdx < 0) {
-    allWeeks.forEach((entry, i) => {
-      const isos = entry.days.map((d) => labelToIso(d?.date || d?.date_label)).filter(Boolean);
-      if (!isos.length) return;
-      const lo = isos.reduce((a, b) => (a < b ? a : b));
-      const hi = isos.reduce((a, b) => (a > b ? a : b));
-      if (todayIso >= lo && todayIso <= hi) {
-        hitIdx = i;
-        hit = entry;
-      }
-    });
   }
-  if (!hit || hitIdx < 0) {
-    hit = allWeeks[0];
-    hitIdx = 0;
+
+  if (!hitWeek || weekIndexInBlock < 0) {
+    const b0 = planBlocks[0];
+    const w0 = (b0?.weeks || [])[0];
+    if (!w0) return null;
+    hitBlock = b0;
+    hitWeek = w0;
+    weekIndexInBlock = 0;
+    const isos = (w0.days || []).map((d) => labelToIso(d?.date || d?.date_label)).filter(Boolean);
+    const minIso = isos.length ? isos.reduce((a, b) => (a < b ? a : b)) : todayIso;
+    weekMon = mondayOfCalendarWeekContainingIsoLocal(minIso);
+    weekSun = weekMon ? sundayAfterMondayIsoLocal(weekMon) : null;
   }
-  const block = hit.block || {};
-  const week = hit.week || {};
+
+  const block = hitBlock || {};
+  const week = hitWeek || {};
   const phaseRaw = week.phase || block.label || block.phase || block.id || "TRAINING";
   const currentPhase = String(phaseRaw).toUpperCase();
   const weekType = String(week.phase || week.label || "BASE").toUpperCase();
-  const dates = hit.days.map((d) => labelToIso(d?.date || d?.date_label)).filter(Boolean).sort();
+  const currentWeekNum = weekIndexInBlock + 1;
+
   let weekDateRange = "";
-  if (dates.length) {
-    const a = new Date(`${dates[0]}T12:00:00Z`);
-    const b = new Date(`${dates[dates.length - 1]}T12:00:00Z`);
+  if (weekMon && weekSun) {
+    const a = parseIsoYmdLocal(weekMon);
+    const b = parseIsoYmdLocal(weekSun);
     const opt = { month: "short", day: "numeric" };
-    weekDateRange = `${a.toLocaleDateString("en-US", opt).toUpperCase()} – ${b.toLocaleDateString("en-US", opt).toUpperCase()}`;
-  } else if (week.dates) {
+    if (a && b) {
+      weekDateRange = `${a.toLocaleDateString("en-US", opt).toUpperCase()} – ${b.toLocaleDateString("en-US", opt).toUpperCase()}`;
+    }
+  }
+  if (!weekDateRange && week.dates) {
     weekDateRange = String(week.dates);
-  } else {
+  }
+  if (!weekDateRange) {
     weekDateRange = String(week.label || "").toUpperCase();
   }
+
   return {
     currentPhase,
-    currentWeekNum: hitIdx + 1,
+    currentWeekNum,
     weekDateRange,
     weekType,
   };
 }
 
-function complianceInsightLine(percent) {
+function complianceInsightFallback(percent) {
   if (percent == null || Number.isNaN(percent)) return "Add a plan and log activities to see compliance.";
-  if (percent === 100) return "Perfect week so far. Keep it up.";
+  if (percent === 100) return "Perfect so far. Stay the course.";
   if (percent >= 70) return "On track. Don't let the week slip.";
   if (percent >= 40) return "Falling behind. Prioritize quality sessions.";
   return "Rough week. Focus on what's left.";
+}
+
+function getLoadInsight(atl, ctl, tsb) {
+  const A = Number(atl) || 0;
+  const Ctl = Number(ctl) || 0;
+  const T = Number(tsb) || 0;
+  if (T > 5) {
+    return `Your form score is +${T.toFixed(1)} — you're fresh and primed to perform. Don't waste it on easy days. Hit your quality sessions hard this week.`;
+  }
+  if (T > 0) {
+    return `TSB of +${T.toFixed(1)} puts you in the optimal performance window. You've absorbed recent training and have gas in the tank.`;
+  }
+  if (T > -10) {
+    return `TSB of ${T.toFixed(1)} — you're in productive fatigue territory. This is where fitness is built. Trust the process and hit your Z2 ceiling.`;
+  }
+  if (T > -20) {
+    return `TSB of ${T.toFixed(1)} — meaningful fatigue accumulating. Your CTL of ${Ctl.toFixed(1)} shows real fitness building. Respect your recovery gates this week.`;
+  }
+  return `TSB of ${T.toFixed(1)} — you're carrying significant fatigue. ATL ${A.toFixed(1)} is well above CTL ${Ctl.toFixed(1)}. Red WHOOP days are non-negotiable rest right now.`;
 }
 
 function meanFinite(arr) {
@@ -166,6 +235,7 @@ function meanFinite(arr) {
 }
 
 function PerfIntervalsBlocks({ trends, C, glow }) {
+  const [loadFlipped, setLoadFlipped] = useState(false);
   if (!trends) return null;
   const { summary, hrv30, readiness30, sleep14, rhr30, rhrPrDates, vo2max30, activities } = trends;
   const atl = summary?.atl ?? 0;
@@ -173,10 +243,7 @@ function PerfIntervalsBlocks({ trends, C, glow }) {
   const tsb = summary?.tsb ?? 0;
   const tsbColor = tsb > 0 ? C.green : tsb >= -10 ? C.yellow : C.red;
   const tsbLabel = tsb > 0 ? "FRESH" : tsb >= -10 ? "NEUTRAL" : "BUILDING";
-  const loadInsight =
-    tsb > 0
-      ? "You're fresh on balance — a good window for quality or race-specific work."
-      : "You are building fitness. Some fatigue is expected and correct.";
+  const loadBackParagraph = getLoadInsight(atl, ctl, tsb);
 
   const hrvFilled = fillMetricSeries(hrv30.map((d) => d.hrv));
   const hrv7Filled = fillMetricSeries(hrv30.map((d) => d.hrv7));
@@ -282,32 +349,76 @@ function PerfIntervalsBlocks({ trends, C, glow }) {
     <>
       <div style={{ marginBottom: 24 }}>
         <div style={{ fontFamily: C.ff, fontSize: 18, color: C.cyan, letterSpacing: 2, marginBottom: 10 }}>TRAINING LOAD</div>
-        <div style={{ display: "flex", gap: 8 }}>
-          <div style={{ flex: 1, ...card, textAlign: "left", marginBottom: 0 }}>
-            <div style={{ fontFamily: C.fm, fontSize: 7, color: C.muted, letterSpacing: 2, marginBottom: 4 }}>ATL · ACUTE</div>
-            <div style={{ fontFamily: C.ff, fontSize: 28, color: C.text, fontWeight: 700 }}>{atl}</div>
-            <div style={{ fontFamily: C.fm, fontSize: 8, color: C.muted, marginTop: 6, lineHeight: 1.4 }}>
-              Short-term stress your body felt over the last week (EWMA).
+        <div
+          role="button"
+          tabIndex={0}
+          onClick={() => setLoadFlipped((f) => !f)}
+          onKeyDown={(e) => {
+            if (e.key === "Enter" || e.key === " ") {
+              e.preventDefault();
+              setLoadFlipped((f) => !f);
+            }
+          }}
+          style={{ perspective: 1000, cursor: "pointer", outline: "none" }}
+        >
+          <div
+            style={{
+              position: "relative",
+              minHeight: 172,
+              transformStyle: "preserve-3d",
+              transition: "transform 0.6s ease",
+              transform: loadFlipped ? "rotateY(180deg)" : "rotateY(0deg)",
+            }}
+          >
+            <div
+              style={{
+                position: "absolute",
+                left: 0,
+                right: 0,
+                top: 0,
+                backfaceVisibility: "hidden",
+                WebkitBackfaceVisibility: "hidden",
+                transform: "rotateY(0deg)",
+              }}
+            >
+              <div style={{ display: "flex", gap: 8 }}>
+                <div style={{ flex: 1, ...card, textAlign: "center", marginBottom: 0 }}>
+                  <div style={{ fontFamily: C.fm, fontSize: 7, color: C.muted, letterSpacing: 2, marginBottom: 6 }}>ATL</div>
+                  <div style={{ fontFamily: C.ff, fontSize: 28, color: C.text, fontWeight: 700 }}>{atl}</div>
+                </div>
+                <div style={{ flex: 1, ...card, textAlign: "center", marginBottom: 0 }}>
+                  <div style={{ fontFamily: C.fm, fontSize: 7, color: C.muted, letterSpacing: 2, marginBottom: 6 }}>CTL</div>
+                  <div style={{ fontFamily: C.ff, fontSize: 28, color: C.text, fontWeight: 700 }}>{ctl}</div>
+                </div>
+                <div style={{ flex: 1, ...card, textAlign: "center", marginBottom: 0, border: `1px solid ${tsbColor}33`, boxShadow: glow(tsbColor, 0.12) }}>
+                  <div style={{ fontFamily: C.fm, fontSize: 7, color: C.muted, letterSpacing: 2, marginBottom: 6 }}>TSB</div>
+                  <div style={{ fontFamily: C.ff, fontSize: 28, color: tsbColor, fontWeight: 700 }}>{tsb > 0 ? "+" : ""}{tsb}</div>
+                  <div style={{ fontFamily: C.fm, fontSize: 7, color: tsbColor, letterSpacing: 2, marginTop: 4 }}>{tsbLabel}</div>
+                </div>
+              </div>
+            </div>
+            <div
+              style={{
+                position: "absolute",
+                left: 0,
+                right: 0,
+                top: 0,
+                minHeight: 172,
+                backfaceVisibility: "hidden",
+                WebkitBackfaceVisibility: "hidden",
+                transform: "rotateY(180deg)",
+                background: C.card,
+                borderRadius: C.radius,
+                padding: "18px 16px",
+                border: `1px solid ${C.border}`,
+                ...C.glass,
+                boxSizing: "border-box",
+              }}
+            >
+              <div style={{ fontFamily: C.fs, fontSize: 14, color: C.text, lineHeight: 1.55, fontWeight: 500 }}>{loadBackParagraph}</div>
+              <div style={{ fontFamily: C.fm, fontSize: 9, color: C.cyan, letterSpacing: 2, marginTop: 16 }}>← FLIP BACK</div>
             </div>
           </div>
-          <div style={{ flex: 1, ...card, textAlign: "left", marginBottom: 0 }}>
-            <div style={{ fontFamily: C.fm, fontSize: 7, color: C.muted, letterSpacing: 2, marginBottom: 4 }}>CTL · CHRONIC</div>
-            <div style={{ fontFamily: C.ff, fontSize: 28, color: C.text, fontWeight: 700 }}>{ctl}</div>
-            <div style={{ fontFamily: C.fm, fontSize: 8, color: C.muted, marginTop: 6, lineHeight: 1.4 }}>
-              Longer-term fitness base built over several weeks (EWMA).
-            </div>
-          </div>
-          <div style={{ flex: 1, ...card, textAlign: "left", marginBottom: 0, border: `1px solid ${tsbColor}33`, boxShadow: glow(tsbColor, 0.12) }}>
-            <div style={{ fontFamily: C.fm, fontSize: 7, color: C.muted, letterSpacing: 2, marginBottom: 4 }}>TSB · FORM</div>
-            <div style={{ fontFamily: C.ff, fontSize: 28, color: tsbColor, fontWeight: 700 }}>{tsb > 0 ? "+" : ""}{tsb}</div>
-            <div style={{ fontFamily: C.fm, fontSize: 8, color: tsbColor, letterSpacing: 2, marginTop: 4 }}>{tsbLabel}</div>
-            <div style={{ fontFamily: C.fm, fontSize: 8, color: C.muted, marginTop: 6, lineHeight: 1.4 }}>
-              CTL minus ATL: positive = fresher; negative = accumulated fatigue.
-            </div>
-          </div>
-        </div>
-        <div style={{ fontFamily: C.fm, fontSize: 10, color: C.muted, letterSpacing: 0.5, marginTop: 12, lineHeight: 1.5 }}>
-          {loadInsight}
         </div>
       </div>
 
@@ -3840,7 +3951,8 @@ export default function App() {
         const prRows = Array.isArray(perfTrends?.personalRecordRows) ? perfTrends.personalRecordRows : [];
         const perfPlanHeader = derivePerfPlanHeader(planBlocks);
         const perfWeekNum = perfPlanHeader?.currentWeekNum ?? 0;
-        const perfBlockPct = perfWeekNum > 0 ? Math.round((perfWeekNum / PERF_BLOCK_WEEKS_TOTAL) * 100) : 0;
+        const perfBarPct = perfWeekNum > 0 ? Math.min((perfWeekNum / PERF_BLOCK_WEEKS_TOTAL) * 100, 100) : 0;
+        const perfBlockPct = perfWeekNum > 0 ? Math.round(perfBarPct) : 0;
 
         const zoneColors = ["#555", C.blue, C.yellow, "#FF7700", C.red];
         const zoneData = [0,0,0,0,0];
@@ -3869,7 +3981,7 @@ export default function App() {
                   {perfPlanHeader.weekDateRange} · {perfPlanHeader.weekType} WEEK
                 </div>
                 <div style={{ marginTop:10, height:4, background:"rgba(255,255,255,0.08)", borderRadius:2 }}>
-                  <div style={{ width:`${(perfPlanHeader.currentWeekNum / PERF_BLOCK_WEEKS_TOTAL) * 100}%`, height:"100%", background:"#00F3FF", borderRadius:2 }} />
+                  <div style={{ width:`${perfBarPct}%`, height:"100%", background:"#00F3FF", borderRadius:2 }} />
                 </div>
                 <div style={{ fontFamily:"monospace", fontSize:9, color:"#444", marginTop:4 }}>
                   {perfBlockPct}% OF BLOCK COMPLETE
@@ -3897,7 +4009,7 @@ export default function App() {
                 </div>
               </div>
               <div style={{ fontFamily:C.fm, fontSize:11, color:C.muted, letterSpacing:0.3, marginBottom:12, lineHeight:1.5 }}>
-                {complianceInsightLine(compliancePct)}
+                {complianceWeek?.insight ?? complianceInsightFallback(compliancePct)}
               </div>
               {!perfTrendsLoading && perfTrends && complianceDays.length === 0 && (
                 <div style={{ fontFamily:C.fm, fontSize:9, color:C.muted, letterSpacing:1, marginBottom:10 }}>
@@ -3906,12 +4018,25 @@ export default function App() {
               )}
               <div style={{ display:"flex", gap:4, marginBottom:4 }}>
                 {complianceDays.map((d, i) => {
-                  const icon = d.status === "completed" ? "✅" : d.status === "missed" ? "❌" : "—";
-                  const bg = d.status === "completed" ? `${C.green}33` : d.status === "missed" ? `${C.red}44` : C.card;
+                  let icon = "—";
+                  let bg = C.card;
+                  if (d.status === "completed") {
+                    icon = "✅";
+                    bg = `${C.green}33`;
+                  } else if (d.status === "missed") {
+                    icon = "❌";
+                    bg = `${C.red}44`;
+                  } else if (d.status === "pending") {
+                    icon = "○";
+                    bg = `${C.cyan}22`;
+                  } else if (d.status === "future" || d.status === "rest") {
+                    icon = "—";
+                    bg = C.card;
+                  }
                   return (
                     <div key={`${d.day}_${i}`} style={{ flex:1, background:bg, borderRadius:8, padding:"8px 2px", textAlign:"center", border:`1px solid ${C.border}` }}>
                       <div style={{ fontFamily:C.fm, fontSize:7, color:C.muted, letterSpacing:1, marginBottom:4 }}>{d.day}</div>
-                      <div style={{ fontSize:12 }}>{icon}</div>
+                      <div style={{ fontSize:14, color: d.status === "pending" ? C.cyan : C.text, lineHeight:1 }}>{icon}</div>
                     </div>
                   );
                 })}

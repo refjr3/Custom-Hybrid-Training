@@ -27,6 +27,46 @@ function dateLabelToIso(dateLabel) {
   return parsed.toISOString().split("T")[0];
 }
 
+/** YYYY-MM-DD in local calendar (matches date_label parsing). */
+function localTodayIso() {
+  const n = new Date();
+  const y = n.getFullYear();
+  const m = String(n.getMonth() + 1).padStart(2, "0");
+  const d = String(n.getDate()).padStart(2, "0");
+  return `${y}-${m}-${d}`;
+}
+
+function parseIsoYmd(iso) {
+  if (!iso || typeof iso !== "string") return null;
+  const [yy, mm, dd] = iso.split("-").map(Number);
+  if (!yy || !mm || !dd) return null;
+  const dt = new Date(yy, mm - 1, dd);
+  return Number.isFinite(dt.getTime()) ? dt : null;
+}
+
+/** Monday (YYYY-MM-DD) of the calendar week containing `iso` (Mon–Sun, local). */
+function mondayOfCalendarWeekContainingIso(iso) {
+  const d = parseIsoYmd(iso);
+  if (!d) return null;
+  const dow = d.getDay();
+  const diff = dow === 0 ? -6 : 1 - dow;
+  d.setDate(d.getDate() + diff);
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, "0");
+  const day = String(d.getDate()).padStart(2, "0");
+  return `${y}-${m}-${day}`;
+}
+
+function sundayAfterMondayIso(monIso) {
+  const d = parseIsoYmd(monIso);
+  if (!d) return null;
+  d.setDate(d.getDate() + 6);
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, "0");
+  const day = String(d.getDate()).padStart(2, "0");
+  return `${y}-${m}-${day}`;
+}
+
 function activityDateIso(a) {
   if (!a?.start_time) return null;
   return String(a.start_time).slice(0, 10);
@@ -82,6 +122,10 @@ function ewmaSeries(dailyLoadsAsc, tau) {
 
 function findCurrentWeekDayRows(dayRows, todayIso) {
   if (!Array.isArray(dayRows) || !dayRows.length) return [];
+  const weekMon = mondayOfCalendarWeekContainingIso(todayIso);
+  const weekSun = weekMon ? sundayAfterMondayIso(weekMon) : null;
+  if (!weekMon || !weekSun) return [];
+
   const byWeek = new Map();
   for (const d of dayRows) {
     const wid = d.week_id || "_";
@@ -91,21 +135,10 @@ function findCurrentWeekDayRows(dayRows, todayIso) {
   let chosen = null;
   for (const [, days] of byWeek) {
     const isos = days.map((x) => dateLabelToIso(x.date_label)).filter(Boolean);
-    if (isos.includes(todayIso)) {
+    if (!isos.length) continue;
+    if (isos.some((iso) => iso >= weekMon && iso <= weekSun)) {
       chosen = days;
       break;
-    }
-  }
-  if (!chosen) {
-    for (const [, days] of byWeek) {
-      const isos = days.map((x) => dateLabelToIso(x.date_label)).filter(Boolean);
-      if (!isos.length) continue;
-      const lo = isos.reduce((a, b) => (a < b ? a : b));
-      const hi = isos.reduce((a, b) => (a > b ? a : b));
-      if (todayIso >= lo && todayIso <= hi) {
-        chosen = days;
-        break;
-      }
     }
   }
   if (!chosen) return [];
@@ -114,8 +147,9 @@ function findCurrentWeekDayRows(dayRows, todayIso) {
   );
 }
 
-function buildComplianceWeek(currentWeekDays, activities) {
-  const days = (currentWeekDays || []).map((day) => {
+function buildComplianceWeek(currentWeekDays, activities, todayIso) {
+  const today = todayIso || localTodayIso();
+  const rows = (currentWeekDays || []).map((day) => {
     const date_iso = dateLabelToIso(day.date_label);
     const planned = isPlannedTrainingDay(day);
     const activity = activities.find((a) => activityDateIso(a) === date_iso);
@@ -124,23 +158,55 @@ function buildComplianceWeek(currentWeekDays, activities) {
       activity?.duration_seconds != null
         ? Math.round(Number(activity.duration_seconds) / 60)
         : null;
-    let status = "rest";
-    if (planned) status = completed ? "completed" : "missed";
     return {
       day: day.day_name,
       date_iso,
-      planned: plannedLabel(day) || null,
+      planned,
+      planned_label: plannedLabel(day) || null,
       actual: activity?.activity_type || null,
       completed,
       duration: duration_min,
-      status,
     };
   });
-  const plannedOnly = days.filter((d) => d.status !== "rest");
-  const done = days.filter((d) => d.status === "completed").length;
+
+  const days = rows.map((d) => {
+    if (!d.date_iso) {
+      return { ...d, status: "rest" };
+    }
+    if (d.date_iso > today) {
+      return { ...d, status: "future" };
+    }
+    if (d.date_iso < today && d.planned && !d.completed) {
+      return { ...d, status: "missed" };
+    }
+    if (d.completed) {
+      return { ...d, status: "completed" };
+    }
+    if (!d.planned) {
+      return { ...d, status: "rest" };
+    }
+    return { ...d, status: "pending" };
+  });
+
+  const pastPlanned = days.filter((x) => x.date_iso && x.date_iso <= today && x.planned);
+  const pastPlannedDone = days.filter((x) => x.date_iso && x.date_iso <= today && x.planned && x.completed);
   const percent =
-    plannedOnly.length > 0 ? Math.round((done / plannedOnly.length) * 100) : null;
-  return { percent, days };
+    pastPlanned.length > 0 ? Math.round((pastPlannedDone.length / pastPlanned.length) * 100) : null;
+
+  let insight = "Add a plan and log activities to see compliance.";
+  if (pastPlanned.length === 0) {
+    insight = "Week just started. First session coming up.";
+  } else if (percent === 100) {
+    insight = "Perfect so far. Stay the course.";
+  } else if (percent >= 70) {
+    insight = "On track. Don't let the week slip.";
+  } else if (percent >= 40) {
+    insight = "Falling behind. Prioritize quality sessions.";
+  } else {
+    insight = "Rough week. Focus on what's left.";
+  }
+
+  return { percent, days, insight };
 }
 
 function buildPersonalRecords(activities, unifiedAll) {
@@ -216,7 +282,7 @@ export default async function handler(req, res) {
   const userId = authData.user.id;
 
   const cutoff = isoDaysAgo(60);
-  const todayIso = new Date().toISOString().split("T")[0];
+  const todayIso = localTodayIso();
 
   const { data: rows, error: mErr } = await supabase
     .from("unified_metrics")
@@ -325,7 +391,7 @@ export default async function handler(req, res) {
   }
 
   const currentWeekDayRows = findCurrentWeekDayRows(dayRows || [], todayIso);
-  const complianceWeek = buildComplianceWeek(currentWeekDayRows, activities);
+  const complianceWeek = buildComplianceWeek(currentWeekDayRows, activities, todayIso);
 
   const { data: allMetrics, error: uAllErr } = await supabase
     .from("unified_metrics")
