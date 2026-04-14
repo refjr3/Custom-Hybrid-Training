@@ -44,6 +44,16 @@ const sourcePriority = (source) => {
   return 0;
 };
 
+const resolveActivityName = (activity) =>
+  activity?.name
+  || activity?.activity_name
+  || activity?.athlete_name
+  || activity?.description
+  || activity?.title
+  || activity?.type
+  || activity?.sportType
+  || "Activity";
+
 const normalizeList = (body) => {
   if (Array.isArray(body)) return body;
   if (body && typeof body === "object") {
@@ -122,6 +132,9 @@ export default async function handler(req, res) {
 
     console.log("[intervals/sync] wellness raw count:", (wellnessList || []).length);
     console.log("[intervals/sync] activities raw count:", (activitiesList || []).length);
+    if ((activitiesList || []).length > 0) {
+      console.log("[intervals/sync] sample activity:", JSON.stringify(activitiesList[0]));
+    }
 
     const syncedAt = new Date().toISOString();
 
@@ -202,7 +215,7 @@ export default async function handler(req, res) {
     const rawActivityPayloads = (activitiesList || [])
       .map((activity) => {
         const start = activity.start_date_local || activity.start_date || activity.start || null;
-        const activityName = activity.name || activity.type || "Activity";
+        const activityName = resolveActivityName(activity);
         const activitySource = normalizeActivitySource(activity.source || "intervals");
         const activityDate = normalizeIntervalsDate(activity.start_date_local || activity.start_date || start);
         return {
@@ -256,8 +269,16 @@ export default async function handler(req, res) {
           || String(actErr.message || "").includes("activity_name")
           || String(actErr.message || "").includes("date"))
       ) {
-        // Backward compatible retry if the DB has not yet applied the new columns.
-        const stripped = activityPayloads.map(({ activity_name: _n, date: _d, ...rest }) => rest);
+        // Backward compatible retry if the DB has not yet applied some new columns.
+        const errMsg = String(actErr.message || "").toLowerCase();
+        const missingActivityName = errMsg.includes("activity_name");
+        const missingDate = errMsg.includes("date");
+        const stripped = activityPayloads.map((row) => {
+          const next = { ...row };
+          if (missingActivityName) delete next.activity_name;
+          if (missingDate) delete next.date;
+          return next;
+        });
         ({ data: actData, error: actErr } = await supabase
           .from("garmin_activities")
           .upsert(stripped, { onConflict: "activity_id" })
