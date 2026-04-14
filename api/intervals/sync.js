@@ -25,6 +25,8 @@ const normalizeIntervalsDate = (value) => {
 };
 
 const num = (v) => {
+  if (v == null) return null;
+  if (typeof v === "string" && v.trim() === "") return null;
   const n = Number(v);
   return Number.isFinite(n) ? n : null;
 };
@@ -114,6 +116,15 @@ export default async function handler(req, res) {
       .map((wellness) => {
         const date = normalizeIntervalsDate(wellness?.id ?? wellness?.date);
         if (!date) return null;
+        if (date === today) {
+          console.log("[intervals/sync] today wellness:", {
+            date: wellness?.id ?? wellness?.date ?? null,
+            readiness: wellness?.readiness ?? null,
+            hrv: wellness?.hrv ?? null,
+            restingHR: wellness?.restingHR ?? null,
+            sleepScore: wellness?.sleepScore ?? null,
+          });
+        }
         const sleep_hours = wellness.sleepSecs ? wellness.sleepSecs / 3600 : null;
         const tsb =
           wellness.ctl != null && wellness.atl != null
