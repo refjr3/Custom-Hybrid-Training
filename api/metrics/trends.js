@@ -11,6 +11,20 @@ const supabase = createClient(
 );
 
 const DAY_ORDER = { MON: 0, TUE: 1, WED: 2, THU: 3, FRI: 4, SAT: 5, SUN: 6 };
+const MONTH_TO_INDEX = {
+  jan: 0,
+  feb: 1,
+  mar: 2,
+  apr: 3,
+  may: 4,
+  jun: 5,
+  jul: 6,
+  aug: 7,
+  sep: 8,
+  oct: 9,
+  nov: 10,
+  dec: 11,
+};
 
 function isoDaysAgo(n) {
   const today = getLocalToday();
@@ -25,7 +39,12 @@ function num(v) {
 function dateLabelToIso(dateLabel) {
   if (!dateLabel || typeof dateLabel !== "string") return null;
   const y = parseInt(String(getLocalToday() || "").slice(0, 4), 10) || new Date().getFullYear();
-  const parsed = new Date(`${dateLabel.trim()} ${y}`);
+  const match = dateLabel.trim().match(/^([A-Za-z]{3})\s+(\d{1,2})$/);
+  if (!match) return null;
+  const monthIdx = MONTH_TO_INDEX[match[1].toLowerCase()];
+  if (monthIdx === undefined) return null;
+  // Use noon UTC so Eastern conversion stays on the intended calendar day.
+  const parsed = new Date(Date.UTC(y, monthIdx, Number(match[2]), 12, 0, 0));
   if (!Number.isFinite(parsed.getTime())) return null;
   return formatEasternYmdFromDate(parsed);
 }
@@ -62,8 +81,25 @@ function sundayAfterMondayIso(monIso) {
 }
 
 function activityDateIso(a) {
-  if (!a?.start_time) return null;
-  return String(a.start_time).slice(0, 10);
+  return String(a?.start_time || a?.date || "").slice(0, 10) || null;
+}
+
+function matchingCompletedActivity(day, activities = []) {
+  if (!day?.planned || !day?.date_iso) return null;
+  return activities.find((a) => {
+    const activityDate = activityDateIso(a);
+    const longEnough = Number(a?.duration_seconds || 0) >= 600;
+    return activityDate === day.date_iso && longEnough;
+  }) || null;
+}
+
+function isCompleted(day, activities = []) {
+  if (!day?.planned) return false;
+  return activities.some((a) => {
+    const activityDate = activityDateIso(a);
+    const longEnough = Number(a?.duration_seconds || 0) >= 600;
+    return activityDate === day.date_iso && longEnough;
+  });
 }
 
 function fmtMmSs(sec) {
@@ -146,8 +182,19 @@ function buildComplianceWeek(currentWeekDays, activities, todayIso) {
   const rows = (currentWeekDays || []).map((day) => {
     const date_iso = dateLabelToIso(day.date_label);
     const planned = isPlannedTrainingDay(day);
-    const activity = activities.find((a) => activityDateIso(a) === date_iso);
-    const completed = Boolean(activity);
+    console.log(
+      "[metrics/trends][compliance] day:",
+      day.day_name,
+      "| date_label:",
+      day.date_label,
+      "| date_iso:",
+      date_iso,
+      "| today_local_iso:",
+      today
+    );
+    const dayForMatch = { planned, date_iso };
+    const activity = matchingCompletedActivity(dayForMatch, activities);
+    const completed = isCompleted(dayForMatch, activities);
     const duration_min =
       activity?.duration_seconds != null
         ? Math.round(Number(activity.duration_seconds) / 60)
