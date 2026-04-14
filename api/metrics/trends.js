@@ -229,22 +229,31 @@ function buildComplianceWeek(currentWeekDays, activities, todayIso) {
     return { ...d, status: "pending" };
   });
 
-  const pastPlanned = days.filter((x) => x.date_iso && x.date_iso < today && x.planned);
-  const pastPlannedDone = days.filter((x) => x.date_iso && x.date_iso < today && x.planned && x.completed);
-  const percent =
-    pastPlanned.length > 0 ? Math.round((pastPlannedDone.length / pastPlanned.length) * 100) : null;
+  const pastPlanned = days.filter((d) => d.date_iso && d.date_iso < today && d.planned);
+  const pastCompleted = days.filter((d) => d.date_iso && d.date_iso < today && d.completed);
+  const todayDay = days.find((d) => d.date_iso === today);
+  const todayCompleted = Boolean(todayDay?.completed);
+
+  // Include today in totals when it's planned/completed.
+  const totalCompleted = pastCompleted.length + (todayCompleted ? 1 : 0);
+  const totalPlanned = pastPlanned.length + (todayDay?.planned ? 1 : 0);
+  const percent = totalPlanned > 0
+    ? Math.round((totalCompleted / totalPlanned) * 100)
+    : null;
 
   let insight = "Add a plan and log activities to see compliance.";
-  if (pastPlanned.length === 0) {
-    insight = "Week just started. First session coming up.";
-  } else if (percent === 100) {
+  if (totalCompleted > 0 && percent === 100) {
     insight = "Perfect so far. Stay the course.";
-  } else if (percent >= 70) {
-    insight = "On track. Don't let the week slip.";
-  } else if (percent >= 40) {
-    insight = "Falling behind. Prioritize quality sessions.";
+  } else if (totalCompleted > 0 && percent >= 70) {
+    insight = "On track. Strong start to the week.";
+  } else if (totalCompleted > 0 && percent >= 40) {
+    insight = "Good start. Keep the momentum going.";
+  } else if (totalCompleted > 0) {
+    insight = "You've started. Build on it.";
+  } else if (todayDay?.planned && !todayCompleted) {
+    insight = "First session of the week is today. Let's go.";
   } else {
-    insight = "Rough week. Focus on what's left.";
+    insight = "Week just started. First session coming up.";
   }
 
   return { percent, days, insight };
