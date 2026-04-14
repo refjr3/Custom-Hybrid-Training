@@ -2,9 +2,7 @@ import { useState, useEffect, useRef } from "react";
 import { createClient } from "@supabase/supabase-js";
 import {
   getLocalToday,
-  getLocalTomorrow,
   formatEasternYmdFromDate,
-  addCalendarDaysToIsoYmd,
 } from "../lib/getLocalToday.js";
 import AuthScreen from "./AuthScreen";
 import Onboarding from "./Onboarding";
@@ -233,6 +231,21 @@ function meanFinite(arr) {
   const v = arr.filter((x) => x != null && Number.isFinite(Number(x))).map(Number);
   if (!v.length) return null;
   return v.reduce((a, b) => a + b, 0) / v.length;
+}
+
+function formatLocalYmd(date) {
+  if (!(date instanceof Date) || Number.isNaN(date.getTime())) return null;
+  return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(date.getDate()).padStart(2, "0")}`;
+}
+
+function getDeviceLocalTodayYmd() {
+  return formatLocalYmd(new Date());
+}
+
+function getDeviceLocalTomorrowYmd() {
+  const d = new Date();
+  d.setDate(d.getDate() + 1);
+  return formatLocalYmd(d);
 }
 
 function PerfIntervalsBlocks({ trends, C, glow }) {
@@ -3013,9 +3026,9 @@ export default function App() {
       session: getSessionNameForDay(d, "am") || d.pm || "Session",
     }));
 
-  const todayMetricIso = getLocalToday();
-  const intervalsTodayMetric = unifiedMetrics.find(
-    (m) => m?.source === "intervals" && String(m?.date || "").slice(0, 10) === todayMetricIso
+  const todayLocal = getDeviceLocalTodayYmd();
+  const intervalsTodayMetric = unifiedMetrics?.find(
+    (m) => m?.source === "intervals" && String(m?.date || "").slice(0, 10) === todayLocal
   );
   const hasIntervalsToday = Boolean(intervalsTodayMetric);
 
@@ -3173,7 +3186,8 @@ export default function App() {
           day: "numeric",
         }).toUpperCase();
         const athleteName = profile?.name?.toUpperCase() || "ATHLETE";
-        const PLAN_YEAR = parseInt(String(getLocalToday() || "").slice(0, 4), 10) || 2026;
+        const todayDateIso = getDeviceLocalTodayYmd();
+        const PLAN_YEAR = parseInt(String(todayDateIso || "").slice(0, 4), 10) || 2026;
         const allPlanEntries = planBlocks
           .flatMap((b) => (b?.weeks || []).map((w) => ({ block: b, week: w })))
           .flatMap(({ block, week }) => (week?.days || []).map((day) => ({ block, week, day })));
@@ -3181,10 +3195,9 @@ export default function App() {
           if (!label) return null;
           const parsed = new Date(`${String(label).trim()} ${PLAN_YEAR}`);
           if (Number.isNaN(parsed.getTime())) return null;
-          return formatEasternYmdFromDate(parsed);
+          return formatLocalYmd(parsed);
         };
-        const todayDateIso = getLocalToday();
-        const tomorrowDateIso = getLocalTomorrow() || addCalendarDaysToIsoYmd(getLocalToday(), 1) || "";
+        const tomorrowDateIso = getDeviceLocalTomorrowYmd();
         const todayEntry = allPlanEntries.find(({ day }) => dayLabelToIso(day?.date || day?.date_label) === todayDateIso) || null;
         const tomorrowEntry = allPlanEntries.find(({ day }) => dayLabelToIso(day?.date || day?.date_label) === tomorrowDateIso) || null;
         const currentWeekDays = todayEntry?.week?.days || [];

@@ -16,6 +16,14 @@ const toIsoDate = (value) => {
   return parsed.toISOString().split("T")[0];
 };
 
+const normalizeIntervalsDate = (value) => {
+  if (!value) return null;
+  // Intervals wellness ids are already YYYY-MM-DD and should be persisted as-is.
+  if (typeof value === "string" && /^\d{4}-\d{2}-\d{2}$/.test(value)) return value;
+  if (typeof value === "string" && /^\d{4}-\d{2}-\d{2}/.test(value)) return value.slice(0, 10);
+  return toIsoDate(value);
+};
+
 const num = (v) => {
   const n = Number(v);
   return Number.isFinite(n) ? n : null;
@@ -104,7 +112,7 @@ export default async function handler(req, res) {
 
     const wellnessRows = (wellnessList || [])
       .map((wellness) => {
-        const date = toIsoDate(wellness?.id ?? wellness?.date);
+        const date = normalizeIntervalsDate(wellness?.id ?? wellness?.date);
         if (!date) return null;
         const sleep_hours = wellness.sleepSecs ? wellness.sleepSecs / 3600 : null;
         const tsb =
