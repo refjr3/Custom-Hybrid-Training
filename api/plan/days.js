@@ -1,4 +1,5 @@
 import { createClient } from "@supabase/supabase-js";
+// Plan day labels are interpreted on the client using US Eastern dates (see ../../lib/getLocalToday.js).
 
 const supabase = createClient(
   process.env.SUPABASE_URL,

@@ -1,17 +1,20 @@
 import { createClient } from "@supabase/supabase-js";
+import {
+  getLocalToday,
+  formatEasternYmdFromDate,
+  addCalendarDaysToIsoYmd,
+} from "../../lib/getLocalToday.js";
 
 const supabase = createClient(
   process.env.SUPABASE_URL,
   process.env.SUPABASE_SERVICE_KEY
 );
 
-const DAY_MS = 86400000;
-
 const DAY_ORDER = { MON: 0, TUE: 1, WED: 2, THU: 3, FRI: 4, SAT: 5, SUN: 6 };
 
 function isoDaysAgo(n) {
-  const d = new Date(Date.now() - n * DAY_MS);
-  return d.toISOString().split("T")[0];
+  const today = getLocalToday();
+  return today ? addCalendarDaysToIsoYmd(today, -n) : null;
 }
 
 function num(v) {
@@ -21,19 +24,10 @@ function num(v) {
 
 function dateLabelToIso(dateLabel) {
   if (!dateLabel || typeof dateLabel !== "string") return null;
-  const y = new Date().getFullYear();
+  const y = parseInt(String(getLocalToday() || "").slice(0, 4), 10) || new Date().getFullYear();
   const parsed = new Date(`${dateLabel.trim()} ${y}`);
   if (!Number.isFinite(parsed.getTime())) return null;
-  return parsed.toISOString().split("T")[0];
-}
-
-/** YYYY-MM-DD in local calendar (matches date_label parsing). */
-function localTodayIso() {
-  const n = new Date();
-  const y = n.getFullYear();
-  const m = String(n.getMonth() + 1).padStart(2, "0");
-  const d = String(n.getDate()).padStart(2, "0");
-  return `${y}-${m}-${d}`;
+  return formatEasternYmdFromDate(parsed);
 }
 
 function parseIsoYmd(iso) {
@@ -148,7 +142,7 @@ function findCurrentWeekDayRows(dayRows, todayIso) {
 }
 
 function buildComplianceWeek(currentWeekDays, activities, todayIso) {
-  const today = todayIso || localTodayIso();
+  const today = todayIso || getLocalToday();
   const rows = (currentWeekDays || []).map((day) => {
     const date_iso = dateLabelToIso(day.date_label);
     const planned = isPlannedTrainingDay(day);
@@ -188,8 +182,8 @@ function buildComplianceWeek(currentWeekDays, activities, todayIso) {
     return { ...d, status: "pending" };
   });
 
-  const pastPlanned = days.filter((x) => x.date_iso && x.date_iso <= today && x.planned);
-  const pastPlannedDone = days.filter((x) => x.date_iso && x.date_iso <= today && x.planned && x.completed);
+  const pastPlanned = days.filter((x) => x.date_iso && x.date_iso < today && x.planned);
+  const pastPlannedDone = days.filter((x) => x.date_iso && x.date_iso < today && x.planned && x.completed);
   const percent =
     pastPlanned.length > 0 ? Math.round((pastPlannedDone.length / pastPlanned.length) * 100) : null;
 
@@ -282,7 +276,7 @@ export default async function handler(req, res) {
   const userId = authData.user.id;
 
   const cutoff = isoDaysAgo(60);
-  const todayIso = localTodayIso();
+  const todayIso = getLocalToday();
 
   const { data: rows, error: mErr } = await supabase
     .from("unified_metrics")

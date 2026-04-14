@@ -1,5 +1,11 @@
 import { useState, useEffect, useRef } from "react";
 import { createClient } from "@supabase/supabase-js";
+import {
+  getLocalToday,
+  getLocalTomorrow,
+  formatEasternYmdFromDate,
+  addCalendarDaysToIsoYmd,
+} from "../lib/getLocalToday.js";
 import AuthScreen from "./AuthScreen";
 import Onboarding from "./Onboarding";
 import PlanBuilder from "./PlanBuilder";
@@ -80,11 +86,6 @@ function fillMetricSeries(arr, fallback = null) {
 
 const PERF_BLOCK_WEEKS_TOTAL = 12;
 
-function localTodayIsoClock() {
-  const n = new Date();
-  return `${n.getFullYear()}-${String(n.getMonth() + 1).padStart(2, "0")}-${String(n.getDate()).padStart(2, "0")}`;
-}
-
 function parseIsoYmdLocal(iso) {
   if (!iso || typeof iso !== "string") return null;
   const [yy, mm, dd] = iso.split("-").map(Number);
@@ -124,10 +125,10 @@ function derivePerfPlanHeader(planBlocks) {
     if (!label || typeof label !== "string") return null;
     const p = new Date(`${label.trim()} ${y}`);
     if (Number.isNaN(p.getTime())) return null;
-    return p.toISOString().split("T")[0];
+    return formatEasternYmdFromDate(p);
   };
 
-  const todayIso = localTodayIsoClock();
+  const todayIso = getLocalToday();
 
   let hitBlock = null;
   let hitWeek = null;
@@ -2472,37 +2473,34 @@ export default function App() {
     }
   };
 
-  const parseDateLabelToUtc = (label, year = new Date().getUTCFullYear()) => {
-    if (!label || typeof label !== "string") return null;
-    const match = label.trim().match(/^([A-Za-z]{3})\s+(\d{1,2})$/);
-    if (!match) return null;
-    const monthIdx = MONTH_TO_INDEX[match[1].toLowerCase()];
-    if (monthIdx === undefined) return null;
-    return new Date(Date.UTC(year, monthIdx, Number(match[2])));
-  };
-
   const selectDefaultPlanPosition = (blocks) => {
     if (!Array.isArray(blocks) || blocks.length === 0) return null;
-    const todayIso = new Date().toISOString().split("T")[0];
-    const todayUtc = new Date(`${todayIso}T00:00:00.000Z`);
-    const currentYear = todayUtc.getUTCFullYear();
+    const todayIso = getLocalToday();
+    const currentYear = parseInt(String(todayIso || "").slice(0, 4), 10) || new Date().getFullYear();
     let earliestWeek = null;
+
+    const labelToPlanIso = (label) => {
+      if (!label) return null;
+      const parsed = new Date(`${String(label).trim()} ${currentYear}`);
+      if (Number.isNaN(parsed.getTime())) return null;
+      return formatEasternYmdFromDate(parsed);
+    };
 
     for (const block of blocks) {
       for (const wk of (block?.weeks || [])) {
-        const weekDates = (wk?.days || [])
-          .map((d) => parseDateLabelToUtc(d?.date, currentYear))
+        const weekIsos = (wk?.days || [])
+          .map((d) => labelToPlanIso(d?.date || d?.date_label))
           .filter(Boolean)
-          .sort((a, b) => a.getTime() - b.getTime());
+          .sort();
+        if (!weekIsos.length) continue;
+        const weekLo = weekIsos[0];
+        const weekHi = weekIsos[weekIsos.length - 1];
 
-        const weekStart = weekDates[0] || null;
-        const weekEnd = weekDates[weekDates.length - 1] || null;
-
-        if (weekStart && (!earliestWeek || weekStart < earliestWeek.weekStart)) {
-          earliestWeek = { blockId: block.id, weekId: wk.id, weekStart };
+        if (!earliestWeek || weekLo < earliestWeek.weekLo) {
+          earliestWeek = { blockId: block.id, weekId: wk.id, weekLo };
         }
 
-        if (weekStart && weekEnd && todayUtc >= weekStart && todayUtc <= weekEnd) {
+        if (todayIso >= weekLo && todayIso <= weekHi) {
           return { blockId: block.id, weekId: wk.id };
         }
       }
@@ -3001,7 +2999,7 @@ export default function App() {
       session: getSessionNameForDay(d, "am") || d.pm || "Session",
     }));
 
-  const todayMetricIso = new Date().toISOString().split("T")[0];
+  const todayMetricIso = getLocalToday();
   const intervalsTodayMetric = unifiedMetrics.find(
     (m) => m?.source === "intervals" && String(m?.date || "").slice(0, 10) === todayMetricIso
   );
@@ -3161,7 +3159,7 @@ export default function App() {
           day: "numeric",
         }).toUpperCase();
         const athleteName = profile?.name?.toUpperCase() || "ATHLETE";
-        const PLAN_YEAR = 2026;
+        const PLAN_YEAR = parseInt(String(getLocalToday() || "").slice(0, 4), 10) || 2026;
         const allPlanEntries = planBlocks
           .flatMap((b) => (b?.weeks || []).map((w) => ({ block: b, week: w })))
           .flatMap(({ block, week }) => (week?.days || []).map((day) => ({ block, week, day })));
@@ -3169,12 +3167,10 @@ export default function App() {
           if (!label) return null;
           const parsed = new Date(`${String(label).trim()} ${PLAN_YEAR}`);
           if (Number.isNaN(parsed.getTime())) return null;
-          return parsed.toISOString().split("T")[0];
+          return formatEasternYmdFromDate(parsed);
         };
-        const todayDateIso = new Date().toISOString().split("T")[0];
-        const tomorrowDateObj = new Date();
-        tomorrowDateObj.setDate(tomorrowDateObj.getDate() + 1);
-        const tomorrowDateIso = tomorrowDateObj.toISOString().split("T")[0];
+        const todayDateIso = getLocalToday();
+        const tomorrowDateIso = getLocalTomorrow() || addCalendarDaysToIsoYmd(getLocalToday(), 1) || "";
         const todayEntry = allPlanEntries.find(({ day }) => dayLabelToIso(day?.date || day?.date_label) === todayDateIso) || null;
         const tomorrowEntry = allPlanEntries.find(({ day }) => dayLabelToIso(day?.date || day?.date_label) === tomorrowDateIso) || null;
         const currentWeekDays = todayEntry?.week?.days || [];

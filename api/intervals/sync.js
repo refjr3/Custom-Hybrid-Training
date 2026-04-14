@@ -1,4 +1,5 @@
 import { createClient } from "@supabase/supabase-js";
+import { getLocalToday, addCalendarDaysToIsoYmd } from "../../lib/getLocalToday.js";
 
 const supabase = createClient(
   process.env.SUPABASE_URL,
@@ -66,10 +67,8 @@ export default async function handler(req, res) {
   console.log("[intervals/sync] athleteId:", athleteId);
   console.log("[intervals/sync] apiKey present:", true, "length:", apiKey.length);
 
-  const today = new Date().toISOString().split("T")[0];
-  const rangeOldest = new Date(Date.now() - LOOKBACK_DAYS * 24 * 60 * 60 * 1000)
-    .toISOString()
-    .split("T")[0];
+  const today = getLocalToday();
+  const rangeOldest = addCalendarDaysToIsoYmd(today, -LOOKBACK_DAYS) || today;
   const base = `https://intervals.icu/api/v1/athlete/${athleteId}`;
 
   const fetchJson = async (path) => {
