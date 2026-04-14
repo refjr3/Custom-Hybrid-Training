@@ -3030,6 +3030,9 @@ export default function App() {
   const intervalsTodayMetric = unifiedMetrics?.find(
     (m) => m?.source === "intervals" && String(m?.date || "").slice(0, 10) === todayLocal
   );
+  console.log("[today] todayLocal:", todayLocal);
+  console.log("[today] unifiedMetrics dates:", unifiedMetrics?.map((m) => `${m?.date}|${m?.source}`));
+  console.log("[today] intervalsTodayMetric:", intervalsTodayMetric);
   const hasIntervalsToday = Boolean(intervalsTodayMetric);
 
   const intervalsNum = (row, key) => {
@@ -3379,6 +3382,10 @@ export default function App() {
                 </a>
               </div>
             )}
+
+            <div style={{ fontFamily: "monospace", fontSize: 9, color: "#ff3b30" }}>
+              DEBUG: today={todayLocal} | metrics={unifiedMetrics?.length} | todayMetric={intervalsTodayMetric?.recovery_score ?? "null"}
+            </div>
 
             <div style={{ ...cardGlass, boxShadow: `0 0 18px ${rc}33` }}>
               <div style={{ display: "flex", justifyContent: "center", marginBottom: 16 }}>
