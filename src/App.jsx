@@ -20,18 +20,46 @@ const supabase = createClient(
   supabaseKey || "placeholder"
 );
 
+/** EMBER design system — warm ember glass over fixed viewport gradient (see index.html body). */
+const EMBER = {
+  bg: "transparent",
+  glass: "rgba(255,120,30,0.08)",
+  glassBorder: "rgba(255,140,50,0.15)",
+  glassHover: "rgba(255,120,30,0.12)",
+  accent: "#ffaa44",
+  accentSoft: "rgba(255,170,68,0.4)",
+  accentBorder: "rgba(255,140,50,0.2)",
+  text: "rgba(255,220,180,0.95)",
+  textSecondary: "rgba(255,180,80,0.5)",
+  textMuted: "rgba(255,140,50,0.35)",
+  green: "#5dffa0",
+  greenGlass: "rgba(93,255,160,0.12)",
+  red: "#ff6b6b",
+  yellow: "#ffd166",
+  divider: "rgba(255,140,50,0.08)",
+};
+
 const C = {
-  bg:"#0A0A0A", surface:"#111111",
-  card:"rgba(255,255,255,0.04)", card2:"rgba(255,255,255,0.07)",
-  cardSolid:"#141414",
-  border:"rgba(255,255,255,0.08)", divider:"#444444",
-  text:"#FFFFFF", muted:"#888888", light:"#555555",
-  red:"#FF3B30", green:"#00D4A0", yellow:"#FFD600", blue:"#0088FF", cyan:"#00F3FF",
-  ff:"'Bebas Neue','Arial Black',sans-serif",
-  fm:"'Space Mono',monospace",
-  fs:"'Inter',-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif",
-  glass:{ backdropFilter:"blur(16px)", WebkitBackdropFilter:"blur(16px)" },
-  radius:16,
+  bg: EMBER.bg,
+  surface: EMBER.glass,
+  card: EMBER.glass,
+  card2: EMBER.glassHover,
+  cardSolid: "rgba(26,16,10,0.88)",
+  border: EMBER.glassBorder,
+  divider: EMBER.divider,
+  text: EMBER.text,
+  muted: EMBER.textMuted,
+  light: EMBER.textSecondary,
+  red: EMBER.red,
+  green: EMBER.green,
+  yellow: EMBER.yellow,
+  blue: "#7eb8ff",
+  cyan: EMBER.accent,
+  ff: "'Syne',sans-serif",
+  fm: "'Space Mono',monospace",
+  fs: "'Syne',sans-serif",
+  glass: { backdropFilter: "blur(24px)", WebkitBackdropFilter: "blur(24px)" },
+  radius: 22,
 };
 const glow = (color, i=0.3) => `0 0 20px ${color}${Math.round(i*255).toString(16).padStart(2,"0")}, 0 0 60px ${color}${Math.round(i*0.4*255).toString(16).padStart(2,"0")}`;
 
@@ -1547,7 +1575,7 @@ const AIChat = ({ whoopData, currentWeek, recentActivities, onPlanChange, userNa
       <div style={{ flex:1, overflowY:"auto", padding:"16px 20px", display:"flex", flexDirection:"column", gap:12 }}>
         {messages.map((m, i) => (
           <div key={i} style={{ display:"flex", flexDirection:"column", alignItems: m.role==="user" ? "flex-end" : "flex-start" }}>
-            <div style={{ maxWidth:"85%", padding:"12px 16px", borderRadius: m.role==="user" ? "16px 16px 4px 16px" : "16px 16px 16px 4px", background: m.role==="user" ? "rgba(0,243,255,0.15)" : C.card, color: m.role==="user" ? C.text : C.text, border: m.role==="user" ? `1px solid ${C.cyan}33` : `1px solid ${C.border}`, ...C.glass }}>
+            <div style={{ maxWidth:"85%", padding:"12px 16px", borderRadius: m.role==="user" ? "16px 16px 4px 16px" : "16px 16px 16px 4px", background: m.role==="user" ? "rgba(255,170,68,0.14)" : C.card, color: m.role==="user" ? C.text : C.text, border: m.role==="user" ? `1px solid ${C.cyan}33` : `1px solid ${C.border}`, ...C.glass }}>
               {m.attachment?.media_type?.startsWith("image/") && (
                 <img src={`data:${m.attachment.media_type};base64,${m.attachment.data}`} alt={m.attachment.name} style={{ width:"100%", borderRadius:8, marginBottom: m.content ? 8 : 0, display:"block" }} />
               )}
@@ -2914,16 +2942,16 @@ export default function App() {
   // ── Auth routing — must come after all hooks ───────────────────────────────
   if (authLoading) {
     return (
-      <div style={{ minHeight: "100vh", background: C.bg, color: C.text, fontFamily: C.fs, maxWidth: 480, margin: "0 auto", padding: "16px 16px 80px" }}>
+      <div style={{ minHeight: "100vh", background: C.bg, color: C.text, fontFamily: C.fs, maxWidth: 480, margin: "0 auto", padding: "16px 16px 88px" }}>
         <div style={{ fontFamily: C.fm, fontSize: 8, color: C.muted, letterSpacing: 3, textTransform: "uppercase" }}>
           {new Date().toLocaleDateString("en-US", { weekday: "long", month: "long", day: "numeric" })}
         </div>
-        <div style={{ fontFamily: C.ff, fontSize: 32, letterSpacing: 2, marginTop: 4 }}>ATHLETE</div>
-        <div style={{ height: 1, background: `${C.cyan}55`, marginTop: 12, marginBottom: 16 }} />
+        <div style={{ fontFamily: C.ff, fontWeight: 800, fontSize: 28, letterSpacing: 4, marginTop: 4 }}>TRIAD</div>
+        <div style={{ height: 1, background: EMBER.divider, marginTop: 12, marginBottom: 16 }} />
         <div style={{ display: "grid", gap: 16 }}>
           {[0, 1, 2].map((i) => (
-            <div key={i} style={{ borderRadius: 16, padding: 20, background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.08)", ...C.glass }}>
-              <div className="shimmer" style={{ fontFamily: C.ff, fontSize: 18, letterSpacing: 2 }}>LOADING</div>
+            <div key={i} style={{ borderRadius: C.radius, padding: "18px 20px", background: C.card, border: `1px solid ${C.border}`, ...C.glass }}>
+              <div className="shimmer" style={{ fontFamily: C.ff, fontWeight: 700, fontSize: 16, letterSpacing: 3 }}>LOADING</div>
             </div>
           ))}
         </div>
@@ -3075,8 +3103,6 @@ export default function App() {
     setPlanBuilderOpen(true);
   };
 
-  console.log("[PlanDetail] selected day:", selDay, "session:", sess);
-
   const NoPlanState = () => {
     return (
       <div style={{ display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", padding: "60px 24px", textAlign: "center" }}>
@@ -3091,13 +3117,14 @@ export default function App() {
             onClick={openPlanBuilder}
             style={{
               padding: "12px 14px",
-              background: C.green,
-              color: "#000",
+              background: EMBER.accent,
+              color: "#1a0f06",
               border: "none",
-              borderRadius: 10,
+              borderRadius: C.radius,
               cursor: "pointer",
               fontFamily: C.ff,
               fontSize: 14,
+              fontWeight: 700,
               letterSpacing: 2,
             }}
           >
@@ -3146,11 +3173,11 @@ export default function App() {
   );
 
   return (
-    <div style={{ minHeight:"100vh", background:C.bg, color:C.text, fontFamily:C.fs, maxWidth:480, margin:"0 auto", paddingBottom:80 }}>
+    <div style={{ minHeight:"100vh", background:C.bg, color:C.text, fontFamily:C.fs, maxWidth:480, margin:"0 auto", paddingBottom:88 }}>
       {showEntrance && (
-        <div style={{ position:"fixed", inset:0, zIndex:9999, background:"#000", display:"flex", flexDirection:"column", alignItems:"center", justifyContent:"center", animation:"entrance-fade 2.8s ease forwards" }}>
-          <div style={{ fontSize:64, animation:"entrance-scale 1s cubic-bezier(.175,.885,.32,1.275) forwards", transform:"scale(0)" }}>△</div>
-          <div style={{ fontFamily:C.fm, fontSize:10, color:C.cyan, letterSpacing:6, marginTop:20, opacity:0, animation:"entrance-text 0.8s ease 0.6s forwards" }}>HYBRID PERFORMANCE OS</div>
+        <div style={{ position:"fixed", inset:0, zIndex:9999, background:"rgba(15,8,0,0.94)", display:"flex", flexDirection:"column", alignItems:"center", justifyContent:"center", animation:"entrance-fade 2.8s ease forwards", backdropFilter:"blur(8px)" }}>
+          <div style={{ fontSize:64, color:EMBER.accent, animation:"entrance-scale 1s cubic-bezier(.175,.885,.32,1.275) forwards", transform:"scale(0)" }}>△</div>
+          <div style={{ fontFamily:C.fm, fontSize:10, color:EMBER.accent, letterSpacing:6, marginTop:20, opacity:0, animation:"entrance-text 0.8s ease 0.6s forwards" }}>HYBRID PERFORMANCE OS</div>
           <style>{`
             @keyframes entrance-scale { 0%{transform:scale(0);opacity:0} 60%{transform:scale(1.1);opacity:1} 100%{transform:scale(1);opacity:1} }
             @keyframes entrance-text { 0%{opacity:0;transform:translateY(8px)} 100%{opacity:1;transform:translateY(0)} }
@@ -3163,19 +3190,13 @@ export default function App() {
 
       {nav === "today" && (() => {
         const cardGlass = {
-          background: "rgba(255,255,255,0.04)",
-          border: "1px solid rgba(255,255,255,0.10)",
-          borderRadius: 16,
-          padding: 20,
+          background: C.card,
+          border: `1px solid ${C.border}`,
+          borderRadius: C.radius,
+          padding: "18px 20px",
           ...C.glass,
         };
-        const darkCardGlass = {
-          background: "rgba(255,255,255,0.02)",
-          border: "1px solid rgba(255,255,255,0.08)",
-          borderRadius: 16,
-          padding: 20,
-          ...C.glass,
-        };
+        const perfHdr = derivePerfPlanHeader(planBlocks);
         const z2TotalMinutes = Math.max(0, Number(stravaZ2Data?.totalMinutes || 0));
         const z2TargetMinutes = Math.max(1, Number(stravaZ2Data?.targetMinutes || 240));
         const z2Progress = Math.max(0, Math.min(100, Math.round((z2TotalMinutes / z2TargetMinutes) * 100)));
@@ -3186,12 +3207,8 @@ export default function App() {
           const minutes = safe % 60;
           return `${hours}h ${String(minutes).padStart(2, "0")}min`;
         };
-        const headerDate = new Date().toLocaleDateString("en-US", {
-          weekday: "long",
-          month: "long",
-          day: "numeric",
-        }).toUpperCase();
-        const athleteName = profile?.name?.toUpperCase() || "ATHLETE";
+        const headerDateShort = new Date().toLocaleDateString("en-US", { month: "short", day: "numeric" }).toUpperCase();
+        const athleteName = (profile?.name || "Athlete").toUpperCase();
         const todayDateIso = getDeviceLocalTodayYmd();
         const PLAN_YEAR = parseInt(String(todayDateIso || "").slice(0, 4), 10) || 2026;
         const allPlanEntries = planBlocks
@@ -3252,37 +3269,6 @@ export default function App() {
         const todayStart = new Date(todayDateObj.getFullYear(), todayDateObj.getMonth(), todayDateObj.getDate());
         const daysAway = raceDateObj ? Math.max(0, Math.ceil((raceDateObj.getTime() - todayStart.getTime()) / (1000 * 60 * 60 * 24))) : null;
 
-        const recoveryScore = whoopData?.recovery?.score ?? 0;
-        const recoveryColor =
-          recoveryScore >= 67 ? "#00D4A0" : recoveryScore >= 34 ? "#f39c12" : "#FF3B30";
-        const hrvMilliRaw =
-          whoopData?.recovery?.hrv_rmssd_milli ?? whoopData?.recovery?.hrv;
-        const hrvCircleValue =
-          hrvMilliRaw != null && Number.isFinite(Number(hrvMilliRaw)) && Number(hrvMilliRaw) > 0
-            ? Math.round(Number(hrvMilliRaw))
-            : Number.isFinite(hrv) && hrv > 0
-              ? Math.round(hrv)
-              : "—";
-        const sleepScoreRaw = whoopData?.sleep?.score;
-        const sleepCircleScore =
-          sleepScoreRaw != null && Number.isFinite(Number(sleepScoreRaw))
-            ? Math.round(Number(sleepScoreRaw))
-            : "—";
-        const hrvRingColor = "#4a90c4";
-        const sleepRingColor = "#9b59b6";
-        const whoopRingStyle = (color) => ({
-          width: 72,
-          height: 72,
-          borderRadius: "50%",
-          border: `3px solid ${color}`,
-          boxShadow: `0 0 12px ${color}66, 0 0 24px ${color}33`,
-          display: "flex",
-          alignItems: "center",
-          justifyContent: "center",
-          margin: "0 auto 8px",
-          background: `${color}11`,
-        });
-
         const intervalsRecoveryHistory = [...unifiedMetrics]
           .filter((m) => m?.source === "intervals")
           .sort((a, b) => new Date(a?.date || 0).getTime() - new Date(b?.date || 0).getTime())
@@ -3330,83 +3316,128 @@ export default function App() {
           )
         );
 
+        const gateUpper = whoopLabel(Number(rec) || 0);
+        const gateRule = todayCardData?.note || "Execute as programmed.";
+        const recoveryBadge =
+          gateUpper === "GREEN"
+            ? { bg: "rgba(93,255,160,0.12)", border: "1px solid rgba(93,255,160,0.2)", fg: EMBER.green }
+            : gateUpper === "YELLOW"
+              ? { bg: "rgba(255,209,102,0.14)", border: "1px solid rgba(255,209,102,0.28)", fg: EMBER.yellow }
+              : { bg: "rgba(255,107,107,0.12)", border: "1px solid rgba(255,107,107,0.22)", fg: EMBER.red };
+        const hrvDisp =
+          Number.isFinite(hrv) && hrv > 0 ? `${Math.round(hrv)}ms` : "—";
+        const rhrDisp =
+          Number.isFinite(rhr) && rhr > 0 ? `${Math.round(rhr)}bpm` : "—";
+        const sleepDisp =
+          sleepHours > 0 ? `${sleepHours}hr` : "—";
+        const recDisp =
+          whoopDisconnected || !Number.isFinite(Number(rec)) || Number(rec) <= 0
+            ? "—"
+            : String(Math.round(Number(rec)));
+        const sessionStructure =
+          (todayWorkout?.steps || [])
+            .filter((s) => s && !String(s).startsWith("—"))
+            .slice(0, 3)
+            .map((s) => String(s).replace(/^[•\d.)\s-]+/, "").trim())
+            .filter(Boolean)
+            .join(" · ")
+          || (todaySessionName && String(todaySessionName).includes(" — ")
+            ? String(todaySessionName).split(" — ").slice(1).join(" · ")
+            : `${todayZone.zone} · ${todayZone.hr}`);
+        const tomorrowStructure =
+          (tomorrowWorkout?.steps || [])
+            .filter((s) => s && !String(s).startsWith("—"))
+            .slice(0, 2)
+            .map((s) => String(s).replace(/^[•\d.)\s-]+/, "").trim())
+            .filter(Boolean)
+            .join(" · ")
+          || String(tomorrowDuration || "—");
+        const phaseLine = `${(perfHdr?.currentPhase || "TRAINING").toUpperCase()} · WEEK ${perfHdr?.currentWeekNum ?? 1} OF ${PERF_BLOCK_WEEKS_TOTAL}`;
+        const gateWord = gateUpper.charAt(0) + gateUpper.slice(1).toLowerCase();
+
         return (
-          <div style={{ padding: "0 16px 16px", display: "flex", flexDirection: "column", gap: 16, overflowX: "hidden" }}>
-            <div style={{ ...cardGlass, paddingBottom: 14 }}>
-              <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12 }}>
-                <div style={{ fontFamily: C.fm, fontSize: 9, color: C.muted, letterSpacing: 2.5, textTransform: "uppercase" }}>
-                  {headerDate}
-                </div>
-                <div style={{ display:"flex", alignItems:"center", gap:10 }}>
-                  <a
-                    href="/api/auth/login"
-                    style={{
-                      fontFamily: C.fm,
-                      fontSize: 9,
-                      color: "#444",
-                      letterSpacing: 2,
-                      textDecoration: "none",
-                      textTransform: "uppercase",
-                    }}
-                  >
-                    ↺ WHOOP
-                  </a>
-                  <button
-                    type="button"
-                    title={
-                      intervalsSyncSummary?.date_range
-                        ? `${intervalsSyncSummary.date_range} · wellness ${intervalsSyncSummary.wellness_synced} · activities ${intervalsSyncSummary.activities_synced}`
-                        : undefined
-                    }
-                    disabled={intervalsSyncing || !session?.access_token}
-                    onClick={() => fetchIntervalsSync()}
-                    style={{
-                      fontFamily: "monospace",
-                      fontSize: 9,
-                      color: "#444",
-                      letterSpacing: 2,
-                      background: "none",
-                      border: "none",
-                      cursor: intervalsSyncing || !session?.access_token ? "default" : "pointer",
-                      opacity: intervalsSyncing || !session?.access_token ? 0.45 : 1,
-                    }}
-                  >
-                    ↺ SYNC
-                  </button>
-                </div>
+          <div style={{ padding: "12px 16px 20px", display: "flex", flexDirection: "column", gap: 16, overflowX: "hidden" }}>
+            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12 }}>
+              <div style={{ fontFamily: C.ff, fontWeight: 800, fontSize: 13, color: C.text, letterSpacing: 5 }}>
+                TRIAD
               </div>
-              <div style={{ fontFamily: C.ff, fontSize: 38, color: C.text, lineHeight: 1, letterSpacing: 1, marginTop: 8 }}>
+              <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                <div style={{ fontFamily: C.fm, fontSize: 10, color: C.muted, letterSpacing: 3, textTransform: "uppercase" }}>
+                  {headerDateShort}
+                </div>
+                <a
+                  href="/api/auth/login"
+                  style={{
+                    fontFamily: C.fm,
+                    fontSize: 8,
+                    color: C.muted,
+                    letterSpacing: 2,
+                    textDecoration: "none",
+                    textTransform: "uppercase",
+                  }}
+                >
+                  ↺ WHOOP
+                </a>
+                <button
+                  type="button"
+                  title={
+                    intervalsSyncSummary?.date_range
+                      ? `${intervalsSyncSummary.date_range} · wellness ${intervalsSyncSummary.wellness_synced} · activities ${intervalsSyncSummary.activities_synced}`
+                      : undefined
+                  }
+                  disabled={intervalsSyncing || !session?.access_token}
+                  onClick={() => fetchIntervalsSync()}
+                  style={{
+                    fontFamily: C.fm,
+                    fontSize: 8,
+                    color: C.muted,
+                    letterSpacing: 2,
+                    background: "none",
+                    border: "none",
+                    cursor: intervalsSyncing || !session?.access_token ? "default" : "pointer",
+                    opacity: intervalsSyncing || !session?.access_token ? 0.45 : 1,
+                    textTransform: "uppercase",
+                  }}
+                >
+                  ↺ SYNC
+                </button>
+              </div>
+            </div>
+
+            <div>
+              <div style={{ fontFamily: C.ff, fontWeight: 800, fontSize: 36, color: C.text, lineHeight: 1.05, letterSpacing: 0.5 }}>
                 {athleteName}
               </div>
-              <div style={{ height: 1, background: "rgba(0,243,255,0.7)", marginTop: 12 }} />
+              <div style={{ fontFamily: C.fm, fontSize: 9, color: C.muted, letterSpacing: 3, textTransform: "uppercase", marginTop: 6 }}>
+                {phaseLine}
+              </div>
             </div>
 
             {whoopDisconnected && (
               <div
                 style={{
-                  background: "rgba(255,59,48,0.1)",
-                  border: "1px solid rgba(255,59,48,0.3)",
-                  borderRadius: 12,
-                  padding: "12px 16px",
+                  ...cardGlass,
+                  background: "rgba(255,107,107,0.08)",
+                  border: "1px solid rgba(255,107,107,0.25)",
                   display: "flex",
                   justifyContent: "space-between",
                   alignItems: "center",
                 }}
               >
                 <div>
-                  <div style={{ fontFamily: C.fm, fontSize: 10, color: "#FF3B30", letterSpacing: 2 }}>WHOOP DISCONNECTED</div>
-                  <div style={{ fontFamily: C.fm, fontSize: 9, color: "#888", marginTop: 2 }}>Tap to reconnect</div>
+                  <div style={{ fontFamily: C.fm, fontSize: 10, color: EMBER.red, letterSpacing: 3 }}>WHOOP DISCONNECTED</div>
+                  <div style={{ fontFamily: C.fm, fontSize: 9, color: C.light, marginTop: 2, letterSpacing: 1 }}>Tap to reconnect</div>
                 </div>
                 <a
                   href="/api/auth/login"
                   style={{
-                    background: "#FF3B30",
-                    color: "#fff",
+                    background: EMBER.red,
+                    color: "#1a0a06",
                     border: "none",
-                    borderRadius: 8,
+                    borderRadius: 10,
                     padding: "8px 14px",
                     fontFamily: C.fm,
-                    fontSize: 10,
+                    fontSize: 9,
                     letterSpacing: 2,
                     textDecoration: "none",
                     cursor: "pointer",
@@ -3417,33 +3448,51 @@ export default function App() {
               </div>
             )}
 
-            <div style={{ ...cardGlass, boxShadow: `0 0 18px ${recoveryColor}22` }}>
-              <div style={{ display: "flex", justifyContent: "space-around", alignItems: "center", padding: "16px 0" }}>
-                <div style={{ textAlign: "center" }}>
-                  <div style={whoopRingStyle(recoveryColor)}>
-                    <span style={{ fontSize: 20, fontWeight: 700, color: recoveryColor }}>
-                      {whoopData?.recovery?.score ?? "—"}
-                    </span>
-                  </div>
-                  <div style={{ fontFamily: "monospace", fontSize: 9, color: "#888", letterSpacing: 2 }}>RECOVERY</div>
+            <div style={cardGlass}>
+              <div style={{ fontFamily: C.fm, fontSize: 9, color: C.muted, letterSpacing: 3, textTransform: "uppercase", marginBottom: 4 }}>
+                RECOVERY
+              </div>
+              <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", gap: 12 }}>
+                <div style={{ fontFamily: C.ff, fontWeight: 800, fontSize: 64, color: C.text, lineHeight: 0.95, letterSpacing: -1 }}>
+                  {recDisp}
                 </div>
-                <div style={{ textAlign: "center" }}>
-                  <div style={whoopRingStyle(hrvRingColor)}>
-                    <span style={{ fontSize: 20, fontWeight: 700, color: hrvRingColor }}>{hrvCircleValue}</span>
-                  </div>
-                  <div style={{ fontFamily: "monospace", fontSize: 9, color: "#888", letterSpacing: 2 }}>HRV</div>
+                <div
+                  style={{
+                    background: recoveryBadge.bg,
+                    border: recoveryBadge.border,
+                    borderRadius: 20,
+                    padding: "3px 12px",
+                    fontSize: 10,
+                    color: recoveryBadge.fg,
+                    fontFamily: C.fm,
+                    letterSpacing: 1,
+                    flexShrink: 0,
+                    marginTop: 8,
+                  }}
+                >
+                  ● {gateWord}
                 </div>
-                <div style={{ textAlign: "center" }}>
-                  <div style={whoopRingStyle(sleepRingColor)}>
-                    <span style={{ fontSize: 20, fontWeight: 700, color: sleepRingColor }}>{sleepCircleScore}</span>
+              </div>
+              <div style={{ fontFamily: C.ff, fontSize: 12, color: EMBER.accent, marginTop: 10, lineHeight: 1.35 }}>
+                ● {gateWord} — {gateRule}
+              </div>
+              <div style={{ height: 1, background: EMBER.divider, margin: "14px 0 12px" }} />
+              <div style={{ display: "flex", justifyContent: "space-between", gap: 8, flexWrap: "wrap" }}>
+                {[
+                  ["HRV", hrvDisp],
+                  ["RHR", rhrDisp],
+                  ["SLEEP", sleepDisp],
+                ].map(([k, v]) => (
+                  <div key={k} style={{ fontFamily: C.fm, fontSize: 9, letterSpacing: 2, textTransform: "uppercase" }}>
+                    <span style={{ color: C.muted }}>{k} </span>
+                    <span style={{ color: C.text }}>{v}</span>
                   </div>
-                  <div style={{ fontFamily: "monospace", fontSize: 9, color: "#888", letterSpacing: 2 }}>SLEEP</div>
-                </div>
+                ))}
               </div>
             </div>
 
             <div style={cardGlass}>
-              <div style={{ fontFamily: C.fm, fontSize: 8, color: C.cyan, letterSpacing: 2.5, textTransform: "uppercase", marginBottom: 10 }}>
+              <div style={{ fontFamily: C.fm, fontSize: 8, color: C.muted, letterSpacing: 3, textTransform: "uppercase", marginBottom: 10 }}>
                 Z2 THIS WEEK
               </div>
               {stravaZ2Loading ? (
@@ -3455,10 +3504,10 @@ export default function App() {
                   href={session?.user?.id ? `/api/strava/login?uid=${encodeURIComponent(session.user.id)}` : "/api/strava/login"}
                   style={{
                     display: "inline-block",
-                    background: C.cyan,
-                    color: "#000",
+                    background: EMBER.accent,
+                    color: "#1a0f06",
                     border: "none",
-                    borderRadius: 8,
+                    borderRadius: 10,
                     padding: "10px 14px",
                     fontFamily: C.fm,
                     fontSize: 10,
@@ -3478,7 +3527,7 @@ export default function App() {
                       marginTop: 10,
                       background: "transparent",
                       border: `1px solid ${C.border}`,
-                      borderRadius: 8,
+                      borderRadius: 10,
                       padding: "8px 12px",
                       color: C.text,
                       fontFamily: C.fm,
@@ -3492,10 +3541,10 @@ export default function App() {
                 </div>
               ) : (
                 <>
-                  <div style={{ width: "100%", height: 8, borderRadius: 999, background: "#1D1D1D", overflow: "hidden", marginBottom: 10 }}>
-                    <div style={{ width: `${z2Progress}%`, height: "100%", background: "#00F3FF", borderRadius: 999, transition: "width 0.4s ease" }} />
+                  <div style={{ width: "100%", height: 8, borderRadius: 999, background: "rgba(255,140,50,0.12)", overflow: "hidden", marginBottom: 10 }}>
+                    <div style={{ width: `${z2Progress}%`, height: "100%", background: EMBER.accent, borderRadius: 999, transition: "width 0.4s ease" }} />
                   </div>
-                  <div style={{ fontFamily: C.ff, fontSize: 18, color: C.text, marginBottom: 10 }}>
+                  <div style={{ fontFamily: C.ff, fontWeight: 700, fontSize: 18, color: C.text, marginBottom: 10 }}>
                     {formatMinutesLabel(z2TotalMinutes)} / {formatMinutesLabel(z2TargetMinutes)}
                   </div>
                   <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
@@ -3513,9 +3562,9 @@ export default function App() {
                             alignItems: "center",
                             gap: 8,
                             padding: "8px 10px",
-                            borderRadius: 10,
-                            background: "rgba(255,255,255,0.03)",
-                            border: "1px solid rgba(255,255,255,0.08)",
+                            borderRadius: 12,
+                            background: EMBER.glassHover,
+                            border: `1px solid ${EMBER.accentBorder}`,
                           }}
                         >
                           <div style={{ minWidth: 0 }}>
@@ -3526,7 +3575,7 @@ export default function App() {
                               {activity?.type || "Workout"} · {activity?.date || "This week"}
                             </div>
                           </div>
-                          <div style={{ fontFamily: C.fm, fontSize: 9, color: C.cyan, letterSpacing: 1.5, whiteSpace: "nowrap" }}>
+                          <div style={{ fontFamily: C.fm, fontSize: 9, color: EMBER.accent, letterSpacing: 1.5, whiteSpace: "nowrap" }}>
                             {Math.max(0, Number(activity?.z2Minutes || 0))} MIN
                           </div>
                         </div>
@@ -3538,21 +3587,36 @@ export default function App() {
             </div>
 
             <div style={cardGlass}>
-              <div style={{ fontFamily: C.fm, fontSize: 8, color: C.cyan, letterSpacing: 2.5, textTransform: "uppercase", marginBottom: 10 }}>TODAY'S SESSION</div>
+              <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 8, flexWrap: "wrap" }}>
+                <span style={{ fontFamily: C.fm, fontSize: 8, color: C.muted, letterSpacing: 3, textTransform: "uppercase" }}>
+                  TODAY ·
+                </span>
+                <div
+                  style={{
+                    background: "rgba(255,120,30,0.12)",
+                    border: "1px solid rgba(255,140,50,0.2)",
+                    borderRadius: 20,
+                    padding: "2px 10px",
+                    fontSize: 9,
+                    color: EMBER.accent,
+                    fontFamily: C.fm,
+                    letterSpacing: 2,
+                    textTransform: "uppercase",
+                  }}
+                >
+                  ⬡ {todayMeta.tag}
+                </div>
+              </div>
               {hasTodaySession ? (
                 <>
-            <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 8 }}>
-                    <span style={{ fontSize: 34, lineHeight: 1, color: todayMeta.color }}>{todayMeta.icon}</span>
-                    <span style={{ background: `${todayMeta.color}22`, border: `1px solid ${todayMeta.color}44`, color: todayMeta.color, borderRadius: 999, padding: "4px 10px", fontFamily: C.fm, fontSize: 9, letterSpacing: 1.5 }}>
-                      {todayMeta.tag}
-                    </span>
+                  <div style={{ fontFamily: C.ff, fontWeight: 700, fontSize: 17, color: C.text, lineHeight: 1.15 }}>
+                    {todaySessionLabel}
                   </div>
-                  <div style={{ fontFamily: C.ff, fontSize: 30, color: C.text, lineHeight: 1.05 }}>{todaySessionLabel}</div>
-                  <div style={{ fontFamily: C.fm, fontSize: 9, color: C.muted, letterSpacing: 1.5, marginTop: 8 }}>
-                    {todayDuration} · {todayZone.zone} · {todayZone.hr}
+                  <div style={{ fontFamily: C.fm, fontSize: 9, color: C.muted, letterSpacing: 2, marginTop: 6, lineHeight: 1.4 }}>
+                    {sessionStructure}
                   </div>
                   {todayCoachingNote && (
-                    <div style={{ fontFamily: C.fs, fontSize: 12, color: "#aaa", lineHeight: 1.55, marginTop: 8 }}>
+                    <div style={{ fontFamily: C.fs, fontSize: 12, color: C.light, lineHeight: 1.55, marginTop: 8 }}>
                       {todayCoachingNote}
                     </div>
                   )}
@@ -3566,48 +3630,58 @@ export default function App() {
                         setSelDay(todayCardData.day);
                         setSess("am");
                       }}
-                      style={{ background: "transparent", border: "none", color: C.cyan, fontFamily: C.ff, fontSize: 14, letterSpacing: 2, cursor: "pointer" }}
+                      style={{ background: "transparent", border: "none", color: EMBER.accent, fontFamily: C.ff, fontSize: 13, fontWeight: 700, letterSpacing: 2, cursor: "pointer" }}
                     >
                       VIEW WORKOUT →
                     </button>
                   </div>
                 </>
               ) : (
-                <div style={{ fontFamily: C.ff, fontSize: 26, color: C.text, lineHeight: 1.1 }}>
+                <div style={{ fontFamily: C.ff, fontWeight: 700, fontSize: 20, color: C.text, lineHeight: 1.15 }}>
                   REST DAY<span style={{ color: C.muted }}> — Recovery is the work</span>
                 </div>
               )}
             </div>
 
-            <div style={darkCardGlass}>
-              <div style={{ fontFamily: C.fm, fontSize: 8, color: C.muted, letterSpacing: 2.5, textTransform: "uppercase", marginBottom: 10 }}>TOMORROW</div>
-              <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-                <span style={{ fontSize: 24, color: tomorrowMeta.color }}>{tomorrowMeta.icon}</span>
-                <div>
-                  <div style={{ fontFamily: C.ff, fontSize: 22, color: C.text, lineHeight: 1.1 }}>{tomorrowSessionLabel}</div>
-                  <div style={{ fontFamily: C.fm, fontSize: 8, color: C.muted, letterSpacing: 1.5, marginTop: 3 }}>{tomorrowDuration}</div>
-                </div>
+            <div style={{ ...cardGlass, opacity: 0.45 }}>
+              <div style={{ fontFamily: C.fm, fontSize: 8, color: C.muted, letterSpacing: 3, textTransform: "uppercase", marginBottom: 8 }}>
+                TOMORROW
+              </div>
+              <div style={{ fontFamily: C.ff, fontWeight: 700, fontSize: 17, color: C.text, lineHeight: 1.15 }}>
+                {tomorrowSessionLabel}
+              </div>
+              <div style={{ fontFamily: C.fm, fontSize: 9, color: C.muted, letterSpacing: 2, marginTop: 4 }}>
+                {tomorrowStructure}
               </div>
             </div>
 
             {hasRaceCountdown && (
               <div style={cardGlass}>
-                <div style={{ fontFamily: C.fm, fontSize: 8, color: C.cyan, letterSpacing: 2.5, textTransform: "uppercase", marginBottom: 10 }}>RACE COUNTDOWN</div>
-                <div style={{ display: "flex", alignItems: "flex-end", justifyContent: "space-between", gap: 10 }}>
-                  <div>
-                    <div style={{ fontFamily: C.ff, fontSize: 24, color: C.text, lineHeight: 1.1 }}>🏁 {raceName}</div>
-                    <div style={{ fontFamily: C.ff, fontSize: 46, color: C.text, lineHeight: 1, marginTop: 8 }}>{daysAway}</div>
-                    <div style={{ fontFamily: C.fm, fontSize: 8, color: C.muted, letterSpacing: 2, marginTop: 4 }}>{daysAway} DAYS AWAY</div>
+                <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", gap: 12 }}>
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <div style={{ fontFamily: C.fm, fontSize: 8, color: C.muted, letterSpacing: 3, textTransform: "uppercase" }}>
+                      NEXT RACE
+                    </div>
+                    <div style={{ fontFamily: C.ff, fontWeight: 700, fontSize: 15, color: C.text, lineHeight: 1.2, marginTop: 6 }}>
+                      {raceName}
+                    </div>
+                  </div>
+                  <div style={{ textAlign: "right", flexShrink: 0 }}>
+                    <div style={{ fontFamily: C.ff, fontWeight: 800, fontSize: 32, color: C.text, lineHeight: 1 }}>
+                      {daysAway}
+                    </div>
+                    <div style={{ fontFamily: C.fm, fontSize: 8, color: C.muted, letterSpacing: 3, textTransform: "uppercase", marginTop: 2 }}>
+                      DAYS
+                    </div>
                   </div>
                 </div>
-                <div style={{ marginTop: 16 }}>
-                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 6 }}>
-                    <span style={{ fontFamily: C.fm, fontSize: 8, color: C.muted, letterSpacing: 2 }}>RACE READINESS</span>
-                    <span style={{ fontFamily: C.ff, fontSize: 16, color: readinessColor }}>{readinessScore}%</span>
-                  </div>
-                  <div style={{ width: "100%", height: 8, borderRadius: 999, background: "#1D1D1D", overflow: "hidden" }}>
-                    <div style={{ width: `${readinessScore}%`, height: "100%", background: readinessColor, borderRadius: 999, transition: "width 0.4s ease" }} />
-                  </div>
+                <div style={{ height: 1, background: EMBER.divider, margin: "14px 0 10px" }} />
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 6 }}>
+                  <span style={{ fontFamily: C.fm, fontSize: 8, color: C.muted, letterSpacing: 3, textTransform: "uppercase" }}>RACE READINESS</span>
+                  <span style={{ fontFamily: C.ff, fontWeight: 700, fontSize: 15, color: readinessColor }}>{readinessScore}%</span>
+                </div>
+                <div style={{ width: "100%", height: 6, borderRadius: 999, background: "rgba(255,140,50,0.12)", overflow: "hidden" }}>
+                  <div style={{ width: `${readinessScore}%`, height: "100%", background: readinessColor, borderRadius: 999, transition: "width 0.4s ease" }} />
                 </div>
               </div>
             )}
@@ -3623,17 +3697,17 @@ export default function App() {
 
       {nav === "plan" && !planLoading && planBlocks.length === 0 && !planBuilderDismissed && (
         <div style={{ textAlign: "center", padding: "60px 24px" }}>
-          <div style={{ color: "#888", letterSpacing: 3, fontSize: 11, marginBottom: 16 }}>NO TRAINING PLAN FOUND</div>
+          <div style={{ fontFamily: C.fm, color: C.muted, letterSpacing: 3, fontSize: 10, marginBottom: 16, textTransform: "uppercase" }}>NO TRAINING PLAN FOUND</div>
           <button
             onClick={() => setPlanBuilderOpen(true)}
-            style={{ background: "#00F3FF", color: "#000", border: "none", borderRadius: 12, padding: "16px 32px", fontSize: 13, fontWeight: 700, letterSpacing: 2, cursor: "pointer" }}
+            style={{ background: EMBER.accent, color: "#1a0f06", border: "none", borderRadius: C.radius, padding: "16px 32px", fontFamily: C.ff, fontSize: 14, fontWeight: 700, letterSpacing: 2, cursor: "pointer" }}
           >
             BUILD MY PLAN
           </button>
           <button
             type="button"
             onClick={dismissPlanBuilderFor24h}
-            style={{ display: "block", margin: "16px auto 0", background: "transparent", color: "#666", fontSize: 12, border: "none", cursor: "pointer", fontFamily: "inherit" }}
+            style={{ display: "block", margin: "16px auto 0", background: "transparent", color: C.muted, fontSize: 11, border: "none", cursor: "pointer", fontFamily: C.fm, letterSpacing: 2 }}
           >
             I&apos;ll do it later
           </button>
@@ -3658,16 +3732,16 @@ export default function App() {
                     style={{
                       flexShrink:0,
                       padding:"8px 14px",
-                      background: active ? C.cyan : C.card,
-                      color: active ? "#000000" : C.muted,
-                      border: active ? "1px solid transparent" : `1px solid ${C.border}`,
+                      background: active ? EMBER.glassHover : C.card,
+                      color: active ? EMBER.accent : C.muted,
+                      border: active ? `1px solid ${EMBER.accentBorder}` : `1px solid ${C.border}`,
                       borderRadius:20,
                       cursor:"pointer",
                       fontFamily:C.fm,
                       fontSize:9,
-                      letterSpacing:2,
+                      letterSpacing:3,
                       textTransform:"uppercase",
-                      ...(!active ? C.glass : {}),
+                      ...C.glass,
                     }}
                   >
                     {b.label}
@@ -3677,7 +3751,7 @@ export default function App() {
             </div>
           </div>
 
-          <div style={{ marginTop:14, display:"flex", gap:10, overflowX:"auto", scrollbarWidth:"none", msOverflowStyle:"none" }}>
+          <div style={{ marginTop:14, display:"flex", gap:8, overflowX:"auto", scrollbarWidth:"none", msOverflowStyle:"none" }}>
             {weeks.map((w) => {
               const active = weekId === w.id;
               return (
@@ -3689,18 +3763,19 @@ export default function App() {
                   }}
                   style={{
                     flexShrink:0,
-                    padding:"8px 0",
-                    background:"transparent",
-                    color: active ? C.text : C.muted,
-                    border: active ? "1.5px solid rgba(255,255,255,0.4)" : "1.5px solid transparent",
-                    borderRadius:10,
+                    padding:"8px 12px",
+                    background: active ? EMBER.glassHover : C.card,
+                    color: active ? EMBER.accent : C.muted,
+                    border: active ? `1px solid ${EMBER.accentBorder}` : `1px solid ${C.border}`,
+                    borderRadius:20,
                     cursor:"pointer",
                     textAlign:"left",
                     minWidth:76,
+                    ...C.glass,
                   }}
                 >
-                  <div style={{ fontFamily:C.fm, fontSize:9, letterSpacing:2, textTransform:"uppercase" }}>{w.label.includes("·") ? w.label.split("·")[1]?.trim() : w.label}</div>
-                  <div style={{ fontFamily:C.fm, fontSize:8, color:"#555", letterSpacing:1, marginTop:2 }}>{w.dates}</div>
+                  <div style={{ fontFamily:C.fm, fontSize:9, letterSpacing:3, textTransform:"uppercase" }}>{w.label.includes("·") ? w.label.split("·")[1]?.trim() : w.label}</div>
+                  <div style={{ fontFamily:C.fm, fontSize:8, color:C.light, letterSpacing:1, marginTop:2 }}>{w.dates}</div>
                 </button>
               );
             })}
@@ -3737,10 +3812,10 @@ export default function App() {
                   }}
                   style={{
                     minHeight:140,
-                    background: isSelected ? "rgba(255,255,255,0.08)" : C.card,
-                    border: isSelected ? "1.5px solid rgba(255,255,255,0.35)" : isToday ? `1.5px solid ${C.cyan}` : `1px solid ${C.border}`,
-                    boxShadow: isToday ? "0 0 12px rgba(0,243,255,0.15)" : "none",
-                    borderRadius:16,
+                    background: isSelected ? EMBER.glassHover : C.card,
+                    border: isSelected ? `1.5px solid ${EMBER.accent}` : isToday ? `1px solid ${EMBER.accentBorder}` : `1px solid ${C.border}`,
+                    boxShadow: isToday ? "0 0 18px rgba(255,170,68,0.35)" : "none",
+                    borderRadius:C.radius,
                     padding:"8px 6px",
                     display:"flex",
                     flexDirection:"column",
@@ -3754,7 +3829,7 @@ export default function App() {
                   }}
                 >
                   <div style={{ width:"100%", display:"flex", justifyContent:"space-between", alignItems:"center" }}>
-                    <span style={{ fontFamily:C.fm, fontSize:9, color:"#555", letterSpacing:2, textTransform:"uppercase" }}>{d.day}</span>
+                    <span style={{ fontFamily:C.fm, fontSize:9, color:C.muted, letterSpacing:3, textTransform:"uppercase" }}>{d.day}</span>
                     <span style={{ fontFamily:C.fm, fontSize:10, color:C.text }}>{dateLabel}</span>
                   </div>
                   {completed && (
@@ -3784,7 +3859,7 @@ export default function App() {
                 marginTop: 16,
                 background: C.card,
                 border: `1px solid ${C.border}`,
-                borderRadius: 16,
+                borderRadius: C.radius,
                 overflow: "hidden",
                 maxHeight: dayData ? 520 : 0,
                 opacity: dayData ? 1 : 0,
@@ -3799,7 +3874,7 @@ export default function App() {
                     <button
                       key={s}
                       onClick={() => setSess(s)}
-                      style={{ flex:1, padding:"10px 12px", background:"transparent", border:"none", borderBottom: sess===s ? `1.5px solid ${C.cyan}` : "1.5px solid transparent", color: sess===s ? C.text : C.muted, cursor:"pointer", fontFamily:C.fm, fontSize:9, letterSpacing:2, textTransform:"uppercase" }}
+                      style={{ flex:1, padding:"10px 12px", background:"transparent", border:"none", borderBottom: sess===s ? `1.5px solid ${EMBER.accent}` : "1.5px solid transparent", color: sess===s ? C.text : C.muted, cursor:"pointer", fontFamily:C.fm, fontSize:9, letterSpacing:3, textTransform:"uppercase" }}
                     >
                       {l}
                     </button>
@@ -4021,26 +4096,26 @@ export default function App() {
 
         return (
           <div style={{ padding:"20px" }}>
-            <div style={{ fontFamily:C.ff, fontSize:28, letterSpacing:2, marginBottom:4 }}>PERFORMANCE<span style={{ color:C.cyan }}>.</span></div>
+            <div style={{ fontFamily:C.ff, fontSize:28, letterSpacing:2, marginBottom:4 }}>PERFORMANCE<span style={{ color:EMBER.accent }}>.</span></div>
             <div style={{ fontFamily:C.fm, fontSize:7, color:C.muted, letterSpacing:3, marginBottom:16, textTransform:"uppercase" }}>TRAINING ANALYTICS</div>
 
             {perfPlanHeader ? (
-              <div style={{ background:"rgba(0,243,255,0.06)", border:"1px solid rgba(0,243,255,0.2)", borderRadius:12, padding:"14px 16px", marginBottom:16 }}>
-                <div style={{ fontFamily:"monospace", fontSize:9, color:"#00F3FF", letterSpacing:3 }}>
+              <div style={{ background:EMBER.glass, border:`1px solid ${EMBER.accentBorder}`, borderRadius:C.radius, padding:"18px 20px", marginBottom:16, ...C.glass }}>
+                <div style={{ fontFamily:C.fm, fontSize:9, color:EMBER.accent, letterSpacing:3, textTransform:"uppercase" }}>
                   {perfPlanHeader.currentPhase} — WEEK {perfPlanHeader.currentWeekNum} OF {PERF_BLOCK_WEEKS_TOTAL}
                 </div>
-                <div style={{ fontFamily:"monospace", fontSize:11, color:"#888", marginTop:4 }}>
+                <div style={{ fontFamily:C.fm, fontSize:10, color:C.light, marginTop:4, letterSpacing:1 }}>
                   {perfPlanHeader.weekDateRange} · {perfPlanHeader.weekType} WEEK
                 </div>
-                <div style={{ marginTop:10, height:4, background:"rgba(255,255,255,0.08)", borderRadius:2 }}>
-                  <div style={{ width:`${perfBarPct}%`, height:"100%", background:"#00F3FF", borderRadius:2 }} />
+                <div style={{ marginTop:10, height:4, background:"rgba(255,140,50,0.12)", borderRadius:2 }}>
+                  <div style={{ width:`${perfBarPct}%`, height:"100%", background:EMBER.accent, borderRadius:2 }} />
                 </div>
-                <div style={{ fontFamily:"monospace", fontSize:9, color:"#444", marginTop:4 }}>
+                <div style={{ fontFamily:C.fm, fontSize:9, color:C.muted, marginTop:4, letterSpacing:2, textTransform:"uppercase" }}>
                   {perfBlockPct}% OF BLOCK COMPLETE
                 </div>
               </div>
             ) : (
-              <div style={{ fontFamily:C.fm, fontSize:9, color:C.muted, letterSpacing:1, marginBottom:16, lineHeight:1.5, padding:"12px 14px", borderRadius:12, border:`1px solid ${C.border}`, background:C.card }}>
+              <div style={{ fontFamily:C.fm, fontSize:9, color:C.muted, letterSpacing:1, marginBottom:16, lineHeight:1.5, padding:"18px 20px", borderRadius:C.radius, border:`1px solid ${C.border}`, background:C.card, ...C.glass }}>
                 No plan loaded — phase and week context appear once your training block is on the Plan tab.
               </div>
             )}
@@ -4239,12 +4314,12 @@ export default function App() {
         </div>
       )}
 
-      <div style={{ position:"fixed", bottom:0, left:"50%", transform:"translateX(-50%)", width:"100%", maxWidth:480, background:C.bg, borderTop:`1px solid ${C.border}`, display:"flex", zIndex:100, ...C.glass }}>
+      <div style={{ position:"fixed", bottom:0, left:"50%", transform:"translateX(-50%)", width:"100%", maxWidth:480, background:"rgba(255,120,30,0.06)", borderTop:"1px solid rgba(255,140,50,0.1)", display:"flex", zIndex:100, backdropFilter:"blur(28px)", WebkitBackdropFilter:"blur(28px)" }}>
         {[["today","⚡","TODAY"],["plan","📅","PLAN"],["perf","🏆","PERF"],["supps","💊","SUPPS"],["stats","📊","STATS"]].map(([id,icon,label]) => (
           <button key={id} onClick={() => setNav(id)} style={{ flex:1, padding:"10px 4px 22px", background:"transparent", border:"none", cursor:"pointer", display:"flex", flexDirection:"column", alignItems:"center", gap:3 }}>
             <div style={{ fontSize:18 }}>{icon}</div>
-            <div style={{ fontFamily:C.fm, fontSize:7, letterSpacing:2, color: nav===id ? C.cyan : C.muted, fontWeight: nav===id ? 700 : 400, textTransform:"uppercase" }}>{label}</div>
-            {nav===id && <div style={{ width:4, height:4, borderRadius:"50%", background:C.cyan, marginTop:1 }} />}
+            <div style={{ fontFamily:C.fm, fontSize:7, letterSpacing:2, color: nav===id ? EMBER.accent : "rgba(255,140,50,0.3)", fontWeight: nav===id ? 700 : 400, textTransform:"uppercase" }}>{label}</div>
+            {nav===id && <div style={{ width:4, height:4, borderRadius:"50%", background:EMBER.accent, marginTop:1 }} />}
           </button>
         ))}
       </div>
@@ -4292,7 +4367,7 @@ export default function App() {
               )}
               {labMessages.map((m, i) => (
                 <div key={i} style={{ display:"flex", flexDirection:"column", alignItems: m.role==="user" ? "flex-end" : "flex-start" }}>
-                  <div style={{ maxWidth:"90%", padding:"8px 12px", borderRadius: m.role==="user" ? "12px 12px 4px 12px" : "12px 12px 12px 4px", background: m.role==="user" ? "rgba(0,243,255,0.15)" : C.card, border: m.role==="user" ? `1px solid ${C.cyan}33` : `1px solid ${C.border}` }}>
+                  <div style={{ maxWidth:"90%", padding:"8px 12px", borderRadius: m.role==="user" ? "12px 12px 4px 12px" : "12px 12px 12px 4px", background: m.role==="user" ? "rgba(255,170,68,0.14)" : C.card, border: m.role==="user" ? `1px solid ${C.cyan}33` : `1px solid ${C.border}` }}>
                     <div style={{ fontFamily:C.fs, fontSize:11, color:C.text, lineHeight:1.5 }}>{renderMarkdown(m.content)}</div>
                   </div>
                   {m.clarifyingQuestions && !m.cqSubmitted && (

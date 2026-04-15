@@ -1,12 +1,22 @@
 import { useState, useEffect, useRef } from "react";
 
 const C = {
-  bg:"#000000", card:"#1a1a1a", card2:"#222222",
-  border:"#2a2a2a", text:"#ffffff", muted:"#888888", light:"#555555",
-  red:"#FF3C00", green:"#00D4A0", yellow:"#FFD600", blue:"#0088FF",
-  ff:"'Bebas Neue','Arial Black',sans-serif",
-  fm:"'Space Mono',monospace",
-  fs:"'Inter',-apple-system,sans-serif",
+  bg: "transparent",
+  card: "rgba(255,120,30,0.08)",
+  card2: "rgba(255,120,30,0.12)",
+  border: "rgba(255,140,50,0.15)",
+  text: "rgba(255,220,180,0.95)",
+  muted: "rgba(255,140,50,0.35)",
+  light: "rgba(255,180,80,0.5)",
+  red: "#ff6b6b",
+  green: "#5dffa0",
+  yellow: "#ffd166",
+  blue: "#7eb8ff",
+  accent: "#ffaa44",
+  ff: "'Syne',sans-serif",
+  fm: "'Space Mono',monospace",
+  fs: "'Syne',sans-serif",
+  glass: { backdropFilter: "blur(24px)", WebkitBackdropFilter: "blur(24px)" },
 };
 
 const input = {
