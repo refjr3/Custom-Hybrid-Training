@@ -355,30 +355,103 @@ function weeklyZ2MinutesFromGarminActivities(activities) {
   return Math.round(mins);
 }
 
-function garminZ2ActivityRowsThisWeek(activities) {
-  if (!Array.isArray(activities)) return [];
-  const lo = startOfCalendarWeekLocalMs();
-  const hi = endOfCalendarWeekLocalMs();
-  const cand = [];
-  for (const a of activities) {
-    if (!a?.start_time || a.avg_hr == null || !a.duration_seconds) continue;
-    const t = new Date(a.start_time).getTime();
-    if (t < lo || t >= hi) continue;
-    const hr = Number(a.avg_hr);
-    if (!Number.isFinite(hr) || hr < 132 || hr > 151) continue;
-    cand.push(a);
+/** Context for POST /api/synthesis/morning { mode: "brief" } (plan + wearable aggregates). */
+function buildMorningBriefApiContext({
+  planBlocks,
+  whoopData,
+  profile,
+  stravaConnected,
+  stravaZ2Data,
+  garminConnected,
+  garminActivities,
+  unifiedMetrics,
+}) {
+  const perfHdr = derivePerfPlanHeader(planBlocks);
+  const recovery = whoopData?.recovery?.score ?? null;
+  const hrv = whoopData?.recovery?.hrv_rmssd_milli ?? whoopData?.recovery?.hrv ?? null;
+  const sleep = whoopData?.sleep?.score ?? null;
+  const rhr = whoopData?.recovery?.resting_heart_rate ?? whoopData?.recovery?.rhr ?? null;
+
+  let todaySession = null;
+  let tomorrowSession = null;
+  let complianceThisWeek = 0;
+  let weeklyZ2Minutes = 0;
+
+  if (stravaConnected && stravaZ2Data != null) {
+    weeklyZ2Minutes = Math.max(0, Number(stravaZ2Data.totalMinutes) || 0);
+  } else if (garminConnected && Array.isArray(garminActivities)) {
+    weeklyZ2Minutes = weeklyZ2MinutesFromGarminActivities(garminActivities);
   }
-  cand.sort((a, b) => new Date(b.start_time).getTime() - new Date(a.start_time).getTime());
-  return cand.map((a) => {
-    const mins = Math.round(Math.max(0, Number(a.duration_seconds) || 0) / 60);
-    const d = new Date(a.start_time);
+
+  if (!Array.isArray(planBlocks) || planBlocks.length === 0) {
     return {
-      name: a.activity_name || a.name || a.activity_type || "Activity",
-      type: a.activity_type || "Workout",
-      date: d.toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric" }),
-      z2Minutes: mins,
+      recovery,
+      hrv,
+      sleep,
+      rhr,
+      todaySession,
+      tomorrowSession,
+      weekNum: perfHdr?.currentWeekNum ?? 1,
+      phase: perfHdr?.currentPhase || "Training",
+      daysToRace: null,
+      weeklyZ2Minutes: Math.round(weeklyZ2Minutes),
+      complianceThisWeek,
     };
-  });
+  }
+
+  const todayDateIso = getDeviceLocalTodayYmd();
+  const tomorrowDateIso = getDeviceLocalTomorrowYmd();
+  const PLAN_YEAR = parseInt(String(todayDateIso || "").slice(0, 4), 10) || 2026;
+  const allPlanEntries = planBlocks
+    .flatMap((b) => (b?.weeks || []).map((w) => ({ block: b, week: w })))
+    .flatMap(({ block, week }) => (week?.days || []).map((day) => ({ block, week, day })));
+  const dayLabelToIso = (label) => {
+    if (!label) return null;
+    const parsed = new Date(`${String(label).trim()} ${PLAN_YEAR}`);
+    if (Number.isNaN(parsed.getTime())) return null;
+    return formatLocalYmd(parsed);
+  };
+  const todayEntry = allPlanEntries.find(({ day }) => dayLabelToIso(day?.date || day?.date_label) === todayDateIso) || null;
+  const tomorrowEntry = allPlanEntries.find(({ day }) => dayLabelToIso(day?.date || day?.date_label) === tomorrowDateIso) || null;
+  const currentWeekDays = todayEntry?.week?.days || [];
+  const todayCardData = todayEntry?.day || null;
+  const tomorrowDayData = tomorrowEntry?.day || null;
+
+  todaySession = todayCardData?.am_session_custom ?? null;
+  tomorrowSession = tomorrowDayData?.am_session_custom ?? null;
+
+  complianceThisWeek = currentWeekDays.filter((d) => {
+    const iso = dayLabelToIso(d?.date || d?.date_label);
+    if (!iso) return false;
+    return unifiedMetrics.some(
+      (m) =>
+        m?.source === "intervals"
+        && m?.date === iso
+        && Number(m?.training_load ?? m?.strain ?? m?.active_calories ?? m?.steps ?? 0) > 0
+    );
+  }).length;
+
+  const racesList = Array.isArray(profile?.races) ? profile.races : [];
+  const primaryRace = racesList.find((r) => r?.is_primary && r?.date) || racesList.find((r) => r?.date) || null;
+  const raceDate = primaryRace?.date || profile?.target_race_date || null;
+  const raceDateObj = raceDate ? new Date(`${raceDate}T00:00:00`) : null;
+  const todayStart = new Date();
+  todayStart.setHours(0, 0, 0, 0);
+  const daysAway = raceDateObj ? Math.max(0, Math.ceil((raceDateObj.getTime() - todayStart.getTime()) / (1000 * 60 * 60 * 24))) : null;
+
+  return {
+    recovery,
+    hrv,
+    sleep,
+    rhr,
+    todaySession,
+    tomorrowSession,
+    weekNum: perfHdr?.currentWeekNum ?? 1,
+    phase: perfHdr?.currentPhase || "Training",
+    daysToRace: daysAway,
+    weeklyZ2Minutes: Math.round(weeklyZ2Minutes),
+    complianceThisWeek,
+  };
 }
 
 function PerfIntervalsBlocks({ trends, C, glow }) {
@@ -1432,11 +1505,12 @@ const makeInitialChatMessages = (userName) => ([
   { role:"assistant", content:`Hey ${userName || "there"} — I have your WHOOP data, training plan, and biomarkers loaded. What do you need?`, planChange:null }
 ]);
 
-const AIChat = ({ whoopData, currentWeek, recentActivities, onPlanChange, userName, persona, onPersonaChange, proactiveBadge, authToken }) => {
+const AIChat = ({ whoopData, currentWeek, recentActivities, onPlanChange, userName, persona, onPersonaChange, proactiveBadge, authToken, expandRequest }) => {
   const [messages, setMessages] = useState(makeInitialChatMessages(userName));
   const [input, setInput] = useState("");
   const [loading, setLoading] = useState(false);
   const [expanded, setExpanded] = useState(false);
+  const expandRequestPrev = useRef(0);
   const [attachment, setAttachment] = useState(null);
   const [showPersonas, setShowPersonas] = useState(false);
   const [isRecording, setIsRecording] = useState(false);
@@ -1478,6 +1552,13 @@ const AIChat = ({ whoopData, currentWeek, recentActivities, onPlanChange, userNa
   useEffect(() => {
     if (expanded) messagesEndRef.current?.scrollIntoView({ behavior:"smooth" });
   }, [messages, expanded]);
+
+  useEffect(() => {
+    if (expandRequest != null && expandRequest > expandRequestPrev.current) {
+      expandRequestPrev.current = expandRequest;
+      setExpanded(true);
+    }
+  }, [expandRequest]);
 
   const startFreshSession = () => {
     setMessages(makeInitialChatMessages(userName));
@@ -2359,6 +2440,9 @@ export default function App() {
   const [proactiveMessages, setProactiveMessages] = useState([]);
   const [proactiveBadge, setProactiveBadge] = useState(0);
   const [weeklyReview, setWeeklyReview] = useState(null);
+  const [coachBrief, setCoachBrief] = useState("");
+  const [coachBriefLoading, setCoachBriefLoading] = useState(false);
+  const [coachExpandSignal, setCoachExpandSignal] = useState(0);
   const [showReadinessBreakdown, setShowReadinessBreakdown] = useState(false);
   const [unifiedMetrics, setUnifiedMetrics] = useState([]);
   const [intervalsSyncing, setIntervalsSyncing] = useState(false);
@@ -2782,6 +2866,55 @@ export default function App() {
       });
   }, [whoopData, planBlocks]);
 
+  useEffect(() => {
+    if (!session?.access_token) return;
+    let cancelled = false;
+    (async () => {
+      setCoachBriefLoading(true);
+      try {
+        const context = buildMorningBriefApiContext({
+          planBlocks,
+          whoopData,
+          profile,
+          stravaConnected,
+          stravaZ2Data,
+          garminConnected,
+          garminActivities,
+          unifiedMetrics,
+        });
+        const res = await fetch("/api/synthesis/morning", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${session.access_token}`,
+          },
+          body: JSON.stringify({ mode: "brief", context }),
+        });
+        const data = await res.json().catch(() => ({}));
+        if (!cancelled) {
+          setCoachBrief(typeof data.brief === "string" ? data.brief : "");
+        }
+      } catch {
+        if (!cancelled) setCoachBrief("");
+      } finally {
+        if (!cancelled) setCoachBriefLoading(false);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [
+    session?.access_token,
+    planBlocks,
+    whoopData,
+    profile,
+    stravaConnected,
+    stravaZ2Data,
+    garminConnected,
+    garminActivities,
+    unifiedMetrics,
+  ]);
+
   // Proactive Coaching: check HRV trend + Sunday weekly review
   useEffect(() => {
     if (!whoopData || !session?.access_token) return;
@@ -3187,7 +3320,6 @@ export default function App() {
   const intervalsTodayMetric = unifiedMetrics?.find(
     (m) => m?.source === "intervals" && String(m?.date || "").slice(0, 10) === todayLocal
   );
-  const hasIntervalsToday = Boolean(intervalsTodayMetric);
 
   const intervalsNum = (row, key) => {
     if (!row || row[key] == null || row[key] === "") return null;
@@ -3335,15 +3467,6 @@ export default function App() {
         })();
         const z2WearableConnected = stravaConnected || garminConnected;
         const z2HeaderDone = !z2WearableConnected ? "—" : stravaConnected && stravaZ2Loading ? "…" : String(Math.round(weeklyZ2Minutes));
-        const z2ActivitiesList = (() => {
-          if (stravaConnected) {
-            if (stravaZ2Loading || stravaZ2Error) return [];
-            return Array.isArray(stravaZ2Data?.activities) ? stravaZ2Data.activities : [];
-          }
-          if (garminConnected) return garminZ2ActivityRowsThisWeek(garminActivities);
-          return [];
-        })();
-        const headerDateShort = new Date().toLocaleDateString("en-US", { month: "short", day: "numeric" }).toUpperCase();
         const todayDateIso = getDeviceLocalTodayYmd();
         const PLAN_YEAR = parseInt(String(todayDateIso || "").slice(0, 4), 10) || 2026;
         const allPlanEntries = planBlocks
@@ -3358,7 +3481,6 @@ export default function App() {
         const tomorrowDateIso = getDeviceLocalTomorrowYmd();
         const todayEntry = allPlanEntries.find(({ day }) => dayLabelToIso(day?.date || day?.date_label) === todayDateIso) || null;
         const tomorrowEntry = allPlanEntries.find(({ day }) => dayLabelToIso(day?.date || day?.date_label) === tomorrowDateIso) || null;
-        const currentWeekDays = todayEntry?.week?.days || [];
         const todayCardData = todayEntry?.day || null;
         const todaySessionName = todayCardData ? getSessionNameForDay(todayCardData, "am") : null;
         const todaySessionKey = todayCardData?.am_session || todayCardData?.am;
@@ -3404,55 +3526,7 @@ export default function App() {
         const todayStart = new Date(todayDateObj.getFullYear(), todayDateObj.getMonth(), todayDateObj.getDate());
         const daysAway = raceDateObj ? Math.max(0, Math.ceil((raceDateObj.getTime() - todayStart.getTime()) / (1000 * 60 * 60 * 24))) : null;
 
-        const intervalsRecoveryHistory = [...unifiedMetrics]
-          .filter((m) => m?.source === "intervals")
-          .sort((a, b) => new Date(a?.date || 0).getTime() - new Date(b?.date || 0).getTime())
-          .map((m) => Number(m?.recovery_score))
-          .filter((n) => Number.isFinite(n))
-          .slice(-7);
-        const recoveryHistory = intervalsRecoveryHistory.length > 0
-          ? intervalsRecoveryHistory
-          : [
-              ...(Array.isArray(whoopData?.recovery_history) ? whoopData.recovery_history : []),
-              ...(Array.isArray(whoopData?.recovery?.history) ? whoopData.recovery.history : []),
-            ]
-              .map((v) => Number(v?.score ?? v))
-              .filter((n) => Number.isFinite(n))
-              .slice(-7);
-        const recoveryTrend = recoveryHistory.length > 0
-          ? Math.round(recoveryHistory.reduce((s, n) => s + n, 0) / recoveryHistory.length)
-          : rec;
-        const plannedForWeek = currentWeekDays.filter((d) => getSessionNameForDay(d, "am") || d?.pm).length;
-        const completedForWeek = currentWeekDays.filter((d) => {
-          const iso = dayLabelToIso(d?.date || d?.date_label);
-          if (!iso) return false;
-          return unifiedMetrics.some(
-            (m) => m?.source === "intervals"
-              && m?.date === iso
-              && Number(
-                m?.training_load
-                ?? m?.strain
-                ?? m?.active_calories
-                ?? m?.steps
-                ?? 0
-              ) > 0
-          );
-        }).length;
-        const compliance = plannedForWeek > 0 ? Math.round((completedForWeek / plannedForWeek) * 100) : 80;
-        const readinessScore = Math.max(0, Math.min(100, Math.round(recoveryTrend * 0.6 + compliance * 0.4)));
-        const readinessColor = readinessScore > 75 ? C.green : readinessScore >= 50 ? C.yellow : C.red;
-
-        const whoopDisconnected = !hasIntervalsToday && (
-          !whoopData
-          || (
-            Number(rec || 0) <= 0
-            && Number(hrv || 0) <= 0
-            && Number(sleepHours || 0) <= 0
-          )
-        );
-
         const gateUpper = whoopLabel(Number(rec) || 0);
-        const gateRule = todayCardData?.note || "Execute as programmed.";
         const recoveryBadge =
           gateUpper === "GREEN"
             ? { bg: "rgba(93,255,160,0.12)", border: "1px solid rgba(93,255,160,0.2)", fg: DS.green }
@@ -3466,7 +3540,7 @@ export default function App() {
         const sleepDisp =
           sleepHours > 0 ? `${sleepHours}hr` : "—";
         const recDisp =
-          whoopDisconnected || !Number.isFinite(Number(rec)) || Number(rec) <= 0
+          !Number.isFinite(Number(rec)) || Number(rec) <= 0
             ? "—"
             : String(Math.round(Number(rec)));
         const sessionStructure =
@@ -3488,13 +3562,7 @@ export default function App() {
             .join(" · ")
           || String(tomorrowDuration || "—");
         const gateWord = gateUpper.charAt(0) + gateUpper.slice(1).toLowerCase();
-        const firstName = (profile?.name || "Athlete").split(/\s+/)[0] || "Athlete";
-        const dayLabel = new Date().toLocaleDateString("en-US", { weekday: "long" });
-        const jd = new Date().getDay();
-        const todayIndex = jd === 0 ? 6 : jd - 1;
-        const weekNumHdr = perfHdr?.currentWeekNum ?? 1;
         const phaseNameHdr = perfHdr?.currentPhase || "Training";
-        const daysCompletedTicks = Math.min(56, Math.max(0, completedForWeek * 8));
         const raceDateStr = raceDate
           ? new Date(`${raceDate}T12:00:00`).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })
           : "";
@@ -3506,56 +3574,6 @@ export default function App() {
 
         return (
           <div style={{ padding: "12px 16px 20px", display: "flex", flexDirection: "column", gap: 14, overflowX: "hidden" }}>
-            <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", gap: 8 }}>
-              <div style={{ fontSize: 10, fontWeight: 500, color: "rgba(255,255,255,0.22)", letterSpacing: "3px", textTransform: "uppercase", marginBottom: 2, fontFamily: C.fs }}>
-                {dayLabel} · Week {weekNumHdr} · {phaseNameHdr}
-              </div>
-              <div style={{ display: "flex", alignItems: "center", gap: 8, flexShrink: 0 }}>
-                <span style={{ fontFamily: C.fs, fontSize: 8, color: C.muted, letterSpacing: 2 }}>{headerDateShort}</span>
-                <a href="/api/auth/login" style={{ fontFamily: C.fs, fontSize: 8, color: C.muted, letterSpacing: 2, textDecoration: "none", textTransform: "uppercase" }}>WHOOP</a>
-                <button
-                  type="button"
-                  title={intervalsSyncSummary?.date_range ? `${intervalsSyncSummary.date_range} · wellness ${intervalsSyncSummary.wellness_synced}` : undefined}
-                  disabled={intervalsSyncing || !session?.access_token}
-                  onClick={() => fetchIntervalsSync()}
-                  style={{ fontFamily: C.fs, fontSize: 8, color: C.muted, letterSpacing: 2, background: "none", border: "none", cursor: intervalsSyncing || !session?.access_token ? "default" : "pointer", opacity: intervalsSyncing || !session?.access_token ? 0.45 : 1, textTransform: "uppercase" }}
-                >
-                  SYNC
-                </button>
-              </div>
-            </div>
-
-            <div style={{ display: "flex", gap: "2.5px", alignItems: "center", marginBottom: 8, flexWrap: "wrap" }}>
-              {Array.from({ length: 56 }).map((_, i) => (
-                <span
-                  key={i}
-                  style={{
-                    width: 1,
-                    height: i === todayIndex ? 5 : 8,
-                    borderRadius: "0.5px",
-                    flexShrink: 0,
-                    background: i < daysCompletedTicks ? DS.gold : i === todayIndex ? "rgba(201,168,117,0.35)" : DS.goldDim,
-                  }}
-                />
-              ))}
-            </div>
-
-            <div style={{ fontSize: 46, fontWeight: 600, color: "#fff", lineHeight: 1.05, letterSpacing: "-1.5px", marginBottom: 8, fontFamily: C.fs }}>
-              Make <em style={{ fontFamily: C.serif, fontStyle: "italic", fontWeight: 400, letterSpacing: "-1.2px" }}>today</em>
-              <br />
-              count, {firstName}.
-            </div>
-
-            {whoopDisconnected && (
-              <div style={{ ...glassCard, padding: "14px 18px", background: "rgba(255,80,80,0.07)", border: "1px solid rgba(255,100,100,0.28)", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-                <div>
-                  <div style={{ fontFamily: C.fs, fontSize: 10, color: DS.red, letterSpacing: 3, fontWeight: 600 }}>WHOOP DISCONNECTED</div>
-                  <div style={{ fontFamily: C.fs, fontSize: 9, color: C.light, marginTop: 2 }}>Tap to reconnect</div>
-                </div>
-                <a href="/api/auth/login" style={{ background: DS.red, color: "#fff", border: "none", borderRadius: 10, padding: "8px 14px", fontFamily: C.fs, fontSize: 9, letterSpacing: 2, textDecoration: "none" }}>RECONNECT</a>
-              </div>
-            )}
-
             <div style={creamCard}>
               <div style={{ position: "absolute", top: 0, left: "5%", right: "5%", height: 1, background: "linear-gradient(90deg,transparent,rgba(255,255,255,0.9) 50%,transparent)", pointerEvents: "none" }} />
               <div style={{ position: "absolute", top: -30, right: -30, width: 160, height: 130, background: "radial-gradient(ellipse at top right, rgba(255,255,255,0.4) 0%, transparent 65%)", pointerEvents: "none" }} />
@@ -3583,65 +3601,6 @@ export default function App() {
               </div>
             </div>
 
-            <div style={glassCard}>
-              <div style={specularTop()} />
-              <div style={{ position: "absolute", top: -20, right: -20, width: 120, height: 120, background: "radial-gradient(circle,rgba(210,190,155,0.10) 0%,transparent 70%)", pointerEvents: "none" }} />
-              <div style={{ padding: "20px 22px", position: "relative", zIndex: 1 }}>
-                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 10 }}>
-                  <div style={{ fontSize: 9, fontWeight: 600, color: "rgba(255,255,255,0.25)", letterSpacing: "2.5px", textTransform: "uppercase", fontFamily: C.fs }}>
-                    Today · {todayMeta.tag}
-                  </div>
-                  <div style={{ width: 7, height: 7, borderRadius: "50%", background: DS.green, boxShadow: "0 0 8px rgba(93,255,160,0.5)", marginTop: 2 }} />
-                </div>
-                <div style={{ fontSize: 21, fontWeight: 600, color: "#fff", letterSpacing: "-0.5px", lineHeight: 1.1, marginBottom: 5, fontFamily: C.fs }}>
-                  {hasTodaySession ? todaySessionLabel : "Rest"}
-                </div>
-                <div style={{ fontSize: 11, color: "rgba(255,255,255,0.3)", lineHeight: 1.5, fontFamily: C.fs }}>
-                  {sessionStructure || (hasTodaySession ? "" : "Recovery is the work.")}
-                </div>
-                {todayCoachingNote ? (
-                  <div style={{ fontSize: 11, color: "rgba(255,255,255,0.35)", lineHeight: 1.45, marginTop: 6, fontFamily: C.fs }}>{todayCoachingNote}</div>
-                ) : null}
-                <div style={{ height: 1, background: "rgba(255,255,255,0.07)", margin: "14px 0" }} />
-                <div style={{ display: "flex", gap: 18, flexWrap: "wrap" }}>
-                  <div style={{ fontSize: 10, color: "rgba(255,255,255,0.22)", fontFamily: C.fs }}>
-                    Duration <strong style={{ color: "rgba(255,255,255,0.55)", fontWeight: 500 }}>{todayDuration}</strong>
-                  </div>
-                  <div style={{ fontSize: 10, color: "rgba(255,255,255,0.22)", fontFamily: C.fs }}>
-                    Zone <strong style={{ color: "rgba(255,255,255,0.55)", fontWeight: 500 }}>{todayZone.zone}</strong>
-                  </div>
-                  <div style={{ fontSize: 10, color: "rgba(255,255,255,0.22)", fontFamily: C.fs }}>
-                    Phase <strong style={{ color: "rgba(255,255,255,0.55)", fontWeight: 500 }}>{phaseNameHdr}</strong>
-                  </div>
-                </div>
-                {hasTodaySession ? (
-                  <div style={{ display: "flex", justifyContent: "flex-end", marginTop: 12 }}>
-                    <button
-                      type="button"
-                      onClick={() => {
-                        if (!todayCardData) return;
-                        setNav("plan");
-                        if (todayEntry?.block?.id) setBlockId(todayEntry.block.id);
-                        if (todayEntry?.week?.id) setWeekId(todayEntry.week.id);
-                        setSelDay(todayCardData.day);
-                        setSess("am");
-                      }}
-                      style={{ background: "transparent", border: "none", color: DS.gold, fontFamily: C.fs, fontSize: 12, fontWeight: 600, letterSpacing: 2, cursor: "pointer" }}
-                    >
-                      VIEW WORKOUT →
-                    </button>
-                  </div>
-                ) : null}
-              </div>
-            </div>
-
-            <div style={{ ...ghostCard, padding: "16px 18px" }}>
-              <div style={{ fontSize: 8, fontWeight: 600, color: "rgba(255,255,255,0.22)", letterSpacing: "3px", textTransform: "uppercase", marginBottom: 8, fontFamily: C.fs }}>Tomorrow</div>
-              <div style={{ fontSize: 17, fontWeight: 600, color: "#fff", lineHeight: 1.15, fontFamily: C.fs }}>{tomorrowSessionLabel}</div>
-              <div style={{ fontSize: 9, color: "rgba(255,255,255,0.28)", marginTop: 4, fontFamily: C.fs, lineHeight: 1.4 }}>{tomorrowStructure}</div>
-            </div>
-
-            {/* Z2 Weekly Progress */}
             <div style={glassCard}>
               <div style={specularTop()} />
               <div style={{ position: "absolute", top: -20, right: -20, width: 120, height: 120, background: "radial-gradient(circle,rgba(210,190,155,0.10) 0%,transparent 70%)", pointerEvents: "none" }} />
@@ -3739,22 +3698,93 @@ export default function App() {
                   {" · Target "}
                   <span style={{ color: "rgba(255,255,255,0.5)" }}>{formatMinutesLabel(TARGET_Z2_MIN)}</span>
                 </div>
-                {z2ActivitiesList.length > 0 ? (
-                  <div style={{ display: "flex", flexDirection: "column", gap: 6, marginTop: 10 }}>
-                    {z2ActivitiesList.map((activity, idx) => (
-                      <div
-                        key={`${activity?.name || "a"}-${activity?.date || idx}`}
-                        style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 8, padding: "8px 10px", borderRadius: 12, background: "rgba(255,255,255,0.06)", border: "1px solid rgba(201,168,117,0.25)" }}
-                      >
-                        <div style={{ minWidth: 0 }}>
-                          <div style={{ fontFamily: C.fs, fontSize: 12, color: C.text, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{activity?.name || "Activity"}</div>
-                          <div style={{ fontFamily: C.fs, fontSize: 8, color: C.muted, marginTop: 2 }}>{activity?.type || "Workout"} · {activity?.date || "This week"}</div>
-                        </div>
-                        <div style={{ fontFamily: C.fs, fontSize: 9, color: DS.gold, whiteSpace: "nowrap" }}>{Math.max(0, Number(activity?.z2Minutes || 0))} min</div>
-                      </div>
-                    ))}
+              </div>
+            </div>
+
+            <div style={glassCard}>
+              <div style={specularTop()} />
+              <div style={{ position: "absolute", top: -20, right: -20, width: 120, height: 120, background: "radial-gradient(circle,rgba(210,190,155,0.10) 0%,transparent 70%)", pointerEvents: "none" }} />
+              <div style={{ padding: "20px 22px", position: "relative", zIndex: 1 }}>
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 10 }}>
+                  <div style={{ fontSize: 9, fontWeight: 600, color: "rgba(255,255,255,0.25)", letterSpacing: "2.5px", textTransform: "uppercase", fontFamily: C.fs }}>
+                    Today · {todayMeta.tag}
+                  </div>
+                  <div style={{ width: 7, height: 7, borderRadius: "50%", background: DS.green, boxShadow: "0 0 8px rgba(93,255,160,0.5)", marginTop: 2 }} />
+                </div>
+                <div style={{ fontSize: 21, fontWeight: 600, color: "#fff", letterSpacing: "-0.5px", lineHeight: 1.1, marginBottom: 5, fontFamily: C.fs }}>
+                  {hasTodaySession ? todaySessionLabel : "Rest"}
+                </div>
+                <div style={{ fontSize: 11, color: "rgba(255,255,255,0.3)", lineHeight: 1.5, fontFamily: C.fs }}>
+                  {sessionStructure || (hasTodaySession ? "" : "Recovery is the work.")}
+                </div>
+                {todayCoachingNote ? (
+                  <div style={{ fontSize: 11, color: "rgba(255,255,255,0.35)", lineHeight: 1.45, marginTop: 6, fontFamily: C.fs }}>{todayCoachingNote}</div>
+                ) : null}
+                <div style={{ height: 1, background: "rgba(255,255,255,0.07)", margin: "14px 0" }} />
+                <div style={{ display: "flex", gap: 18, flexWrap: "wrap" }}>
+                  <div style={{ fontSize: 10, color: "rgba(255,255,255,0.22)", fontFamily: C.fs }}>
+                    Duration <strong style={{ color: "rgba(255,255,255,0.55)", fontWeight: 500 }}>{todayDuration}</strong>
+                  </div>
+                  <div style={{ fontSize: 10, color: "rgba(255,255,255,0.22)", fontFamily: C.fs }}>
+                    Zone <strong style={{ color: "rgba(255,255,255,0.55)", fontWeight: 500 }}>{todayZone.zone}</strong>
+                  </div>
+                  <div style={{ fontSize: 10, color: "rgba(255,255,255,0.22)", fontFamily: C.fs }}>
+                    Phase <strong style={{ color: "rgba(255,255,255,0.55)", fontWeight: 500 }}>{phaseNameHdr}</strong>
+                  </div>
+                </div>
+                {hasTodaySession ? (
+                  <div style={{ display: "flex", justifyContent: "flex-end", marginTop: 12 }}>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        if (!todayCardData) return;
+                        setNav("plan");
+                        if (todayEntry?.block?.id) setBlockId(todayEntry.block.id);
+                        if (todayEntry?.week?.id) setWeekId(todayEntry.week.id);
+                        setSelDay(todayCardData.day);
+                        setSess("am");
+                      }}
+                      style={{ background: "transparent", border: "none", color: DS.gold, fontFamily: C.fs, fontSize: 12, fontWeight: 600, letterSpacing: 2, cursor: "pointer" }}
+                    >
+                      VIEW WORKOUT →
+                    </button>
                   </div>
                 ) : null}
+              </div>
+            </div>
+
+            <div style={{ ...ghostCard, padding: "16px 18px" }}>
+              <div style={{ fontSize: 8, fontWeight: 600, color: "rgba(255,255,255,0.22)", letterSpacing: "3px", textTransform: "uppercase", marginBottom: 8, fontFamily: C.fs }}>Tomorrow</div>
+              <div style={{ fontSize: 17, fontWeight: 600, color: "#fff", lineHeight: 1.15, fontFamily: C.fs }}>{tomorrowSessionLabel}</div>
+              <div style={{ fontSize: 9, color: "rgba(255,255,255,0.28)", marginTop: 4, fontFamily: C.fs, lineHeight: 1.4 }}>{tomorrowStructure}</div>
+            </div>
+
+            <div style={glassCard}>
+              <div style={specularTop()} />
+              <div style={{ position: "absolute", top: -20, right: -20, width: 120, height: 120, background: "radial-gradient(circle,rgba(210,190,155,0.10) 0%,transparent 70%)", pointerEvents: "none" }} />
+              <div style={{ padding: "20px 22px", position: "relative", zIndex: 1 }}>
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 14 }}>
+                  <div style={{ fontSize: 9, fontWeight: 600, color: "rgba(255,255,255,0.22)", letterSpacing: "2.5px", textTransform: "uppercase", fontFamily: C.fs }}>AI Coach</div>
+                  <div style={{ fontSize: 9, color: "rgba(255,255,255,0.18)", letterSpacing: "1px", fontFamily: C.fs }}>Today&apos;s brief</div>
+                </div>
+                {coachBriefLoading ? (
+                  <div style={{ height: 60, background: "rgba(255,255,255,0.04)", borderRadius: 10, animation: "coach-brief-pulse 2s ease-in-out infinite" }} />
+                ) : (
+                  <>
+                    <div style={{ fontSize: 14, fontWeight: 400, color: "rgba(255,255,255,0.78)", lineHeight: 1.6, letterSpacing: "-0.1px", marginBottom: 16, fontFamily: C.fs }}>
+                      {coachBrief || "Your coach is reviewing your data..."}
+                    </div>
+                    <div style={{ display: "flex", gap: 8 }}>
+                      <button
+                        type="button"
+                        onClick={() => setCoachExpandSignal((s) => s + 1)}
+                        style={{ background: "rgba(201,168,117,0.1)", border: "1px solid rgba(201,168,117,0.2)", borderRadius: 20, padding: "7px 14px", fontSize: 11, fontWeight: 600, color: "#C9A875", cursor: "pointer", fontFamily: C.fs }}
+                      >
+                        Ask your coach ↗
+                      </button>
+                    </div>
+                  </>
+                )}
               </div>
             </div>
 
@@ -3773,16 +3803,6 @@ export default function App() {
                   <div style={{ textAlign: "right" }}>
                     <div style={{ fontFamily: C.serif, fontSize: 48, color: DS.base, lineHeight: 1, letterSpacing: "-2px" }}>{daysAway}</div>
                     <div style={{ fontSize: 9, fontWeight: 600, color: "rgba(13,14,16,0.3)", letterSpacing: "2px", textTransform: "uppercase", fontFamily: C.fs }}>Days</div>
-                  </div>
-                </div>
-                <div style={{ padding: "0 22px 16px", position: "relative", zIndex: 1 }}>
-                  <div style={{ height: 1, background: "rgba(13,14,16,0.08)", marginBottom: 10 }} />
-                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 6 }}>
-                    <span style={{ fontFamily: C.fs, fontSize: 8, color: "rgba(13,14,16,0.35)", letterSpacing: 3, textTransform: "uppercase", fontWeight: 600 }}>Race readiness</span>
-                    <span style={{ fontFamily: C.fs, fontWeight: 700, fontSize: 15, color: readinessColor }}>{readinessScore}%</span>
-                  </div>
-                  <div style={{ width: "100%", height: 6, borderRadius: 999, background: "rgba(13,14,16,0.08)", overflow: "hidden" }}>
-                    <div style={{ width: `${readinessScore}%`, height: "100%", background: readinessColor, borderRadius: 999, transition: "width 0.4s ease" }} />
                   </div>
                 </div>
               </div>
@@ -4456,7 +4476,7 @@ export default function App() {
         ))}
       </div>
 
-      <AIChat whoopData={whoopData} currentWeek={week} recentActivities={recentActivities} onPlanChange={handlePlanChange} userName={profile?.name} persona={coachPersona} onPersonaChange={handlePersonaChange} proactiveBadge={proactiveBadge} authToken={session?.access_token} />
+      <AIChat whoopData={whoopData} currentWeek={week} recentActivities={recentActivities} onPlanChange={handlePlanChange} userName={profile?.name} persona={coachPersona} onPersonaChange={handlePersonaChange} proactiveBadge={proactiveBadge} authToken={session?.access_token} expandRequest={coachExpandSignal} />
 
       <PlanBuilder
         open={planBuilderOpen}

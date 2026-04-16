@@ -13,18 +13,77 @@ const HIGH_INTENSITY_PATTERNS = [
 function isHighIntensity(sessionName) {
   if (!sessionName) return false;
   const upper = sessionName.toUpperCase();
-  return HIGH_INTENSITY_PATTERNS.some(p => upper.includes(p));
+  return HIGH_INTENSITY_PATTERNS.some((p) => upper.includes(p));
 }
 
-export default async function handler(req, res) {
-  if (req.method !== "POST") return res.status(405).json({ error: "Method not allowed" });
+function fmt(v) {
+  if (v == null || v === "") return "—";
+  if (typeof v === "number" && !Number.isFinite(v)) return "—";
+  return String(v);
+}
 
-  const token = req.headers.authorization?.replace("Bearer ", "");
-  if (!token) return res.status(401).json({ error: "Unauthorized" });
+async function handleMorningBrief(req, res) {
+  const ctx = req.body?.context || {};
+  const recovery = fmt(ctx.recovery);
+  const hrv = fmt(ctx.hrv);
+  const sleep = fmt(ctx.sleep);
+  const rhr = fmt(ctx.rhr);
+  const todaySession = fmt(ctx.todaySession);
+  const tomorrowSession = fmt(ctx.tomorrowSession);
+  const weekNum = fmt(ctx.weekNum);
+  const phase = fmt(ctx.phase);
+  const daysToRace = fmt(ctx.daysToRace);
+  const weeklyZ2Minutes = fmt(ctx.weeklyZ2Minutes);
+  const complianceThisWeek = fmt(ctx.complianceThisWeek);
 
-  const { data: { user }, error: authErr } = await supabase.auth.getUser(token);
-  if (authErr || !user) return res.status(401).json({ error: "Invalid token" });
+  const prompt = `You are a hybrid athlete coach. Give a 2-3 sentence morning brief for this athlete.
+Be direct, specific, and motivating. Reference their actual data. No fluff.
 
+Recovery: ${recovery}% | HRV: ${hrv}ms | Sleep: ${sleep}%
+RHR: ${rhr} bpm
+Today: ${todaySession}
+Tomorrow: ${tomorrowSession}
+Phase: Week ${weekNum} - ${phase}
+Days to race: ${daysToRace}
+Weekly Z2 so far: ${weeklyZ2Minutes} min
+Sessions completed this week: ${complianceThisWeek}
+
+Keep it under 60 words. Sound like a coach, not a bot.`;
+
+  if (!process.env.ANTHROPIC_API_KEY) {
+    return res.status(200).json({ brief: "", error: "missing_ai_key" });
+  }
+
+  try {
+    const response = await fetch("https://api.anthropic.com/v1/messages", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "x-api-key": process.env.ANTHROPIC_API_KEY,
+        "anthropic-version": "2023-06-01",
+      },
+      body: JSON.stringify({
+        model: "claude-sonnet-4-6",
+        max_tokens: 220,
+        messages: [{ role: "user", content: prompt }],
+      }),
+    });
+
+    const data = await response.json();
+    if (data.error) {
+      console.error("[synthesis/morning brief] Claude error:", data.error);
+      return res.status(200).json({ brief: "", error: "ai_error" });
+    }
+
+    const text = (data.content?.[0]?.text || "").trim();
+    return res.status(200).json({ brief: text || "" });
+  } catch (err) {
+    console.error("[synthesis/morning brief]", err);
+    return res.status(200).json({ brief: "", error: "exception" });
+  }
+}
+
+async function handleLegacyRecoverySynthesis(req, res, user) {
   const { recovery_score, session_name, week_id, day } = req.body;
 
   if (recovery_score === undefined || recovery_score === null) {
@@ -90,13 +149,22 @@ Return ONLY a JSON object (no markdown fences):
     }
 
     const DAY_MAP = {
-      monday:"MON", tuesday:"TUE", wednesday:"WED",
-      thursday:"THU", friday:"FRI", saturday:"SAT", sunday:"SUN",
+      monday: "MON",
+      tuesday: "TUE",
+      wednesday: "WED",
+      thursday: "THU",
+      friday: "FRI",
+      saturday: "SAT",
+      sunday: "SUN",
     };
     const normalizedDay = DAY_MAP[day.toLowerCase()] || day.toUpperCase().slice(0, 3);
 
     const weekRow = await supabase
-      .from("training_weeks").select("id, week_id").eq("id", week_id).eq("user_id", user.id).single();
+      .from("training_weeks")
+      .select("id, week_id")
+      .eq("id", week_id)
+      .eq("user_id", user.id)
+      .single();
 
     if (!weekRow.data) {
       return res.status(200).json({ modified: false, reason: "week_not_found" });
@@ -124,9 +192,27 @@ Return ONLY a JSON object (no markdown fences):
       note: updatePayload.ai_modification_note,
       custom_session: updatePayload.am_session_custom,
     });
-
   } catch (err) {
     console.error("[synthesis] error:", err);
     return res.status(200).json({ modified: false, reason: "exception" });
   }
+}
+
+export default async function handler(req, res) {
+  if (req.method !== "POST") return res.status(405).json({ error: "Method not allowed" });
+
+  const token = req.headers.authorization?.replace("Bearer ", "");
+  if (!token) return res.status(401).json({ error: "Unauthorized" });
+
+  const {
+    data: { user },
+    error: authErr,
+  } = await supabase.auth.getUser(token);
+  if (authErr || !user) return res.status(401).json({ error: "Invalid token" });
+
+  if (req.body?.mode === "brief") {
+    return handleMorningBrief(req, res);
+  }
+
+  return handleLegacyRecoverySynthesis(req, res, user);
 }

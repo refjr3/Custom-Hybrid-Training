@@ -32,6 +32,16 @@ button:active {
   transform: scale(0.97);
 }
 
+@keyframes coach-brief-pulse {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.38;
+  }
+}
+
 @keyframes pulse-glow {
   0%,
   100% {
