@@ -2,14 +2,14 @@ import { useState } from "react";
 
 const C = {
   bg: "#0D0D0D",
-  card: "rgba(255,255,255,0.04)",
-  border: "rgba(255,255,255,0.08)",
-  cyan: "#00F3FF",
+  card: "rgba(255,255,255,0.055)",
+  border: "rgba(255,255,255,0.13)",
+  cyan: "#C9A875",
   red: "#FF3B30",
   green: "#00D4A0",
   text: "#FFFFFF",
   muted: "#888888",
-  fm: "monospace",
+  fm: "'DM Sans',sans-serif",
 };
 
 const STEP_COLORS = {
@@ -301,7 +301,7 @@ export default function WorkoutEditorSheet({ open, sport: initialSport, blocks, 
                             const num = parseFloat(p);
                             const unit = p.replace(/[\d.]/g, "");
                             updateDuration(step.id, { value: String(num), unit: unit || config.defaultUnit });
-                          }} style={{ background: "rgba(255,255,255,0.04)", border: `1px solid ${C.border}`, borderRadius: 6, padding: "4px 10px", color: C.muted, fontFamily: C.fm, fontSize: 9, cursor: "pointer" }}>
+                          }} style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 6, padding: "4px 10px", color: C.muted, fontFamily: C.fm, fontSize: 9, cursor: "pointer" }}>
                             {p}
                           </button>
                         ))}

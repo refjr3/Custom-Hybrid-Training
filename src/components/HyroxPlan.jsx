@@ -147,7 +147,7 @@ export default function HyroxPlan() {
   const phase = PHASES[week.phase];
 
   return (
-    <div style={{ minHeight: "100vh", background: "#080808", color: "#d4d4d4", fontFamily: "'Courier New', Courier, monospace" }}>
+    <div style={{ minHeight: "100vh", background: "#080808", color: "#d4d4d4", fontFamily: "'DM Sans', sans-serif" }}>
       {/* Header */}
       <div style={{ background: "#0f0f0f", borderBottom: "1px solid #1c1c1c", padding: "16px 20px 0", position: "sticky", top: 0, zIndex: 100 }}>
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-end", marginBottom: 12 }}>
@@ -168,7 +168,7 @@ export default function HyroxPlan() {
               color: activeTab === k ? "#000" : "#444",
               border: "none", padding: "7px 14px", fontSize: 9, letterSpacing: 3,
               textTransform: "uppercase", cursor: "pointer",
-              fontFamily: "'Courier New', monospace", fontWeight: 900,
+              fontFamily: "'DM Sans', sans-serif", fontWeight: 900,
               borderRadius: "3px 3px 0 0",
             }}>{l}</button>
           ))}
@@ -202,7 +202,7 @@ export default function HyroxPlan() {
                     color: selectedWeek === i ? "#000" : "#555",
                     border: `1px solid ${selectedWeek === i ? p.color : "#1e1e1e"}`,
                     borderRadius: 3, padding: "5px 10px", fontSize: 10, fontWeight: 700,
-                    cursor: "pointer", fontFamily: "'Courier New', monospace", letterSpacing: 1,
+                    cursor: "pointer", fontFamily: "'DM Sans', sans-serif", letterSpacing: 1,
                     textAlign: "center", lineHeight: 1.4,
                   }}>
                     <div>W{w.week}</div>
@@ -232,7 +232,7 @@ export default function HyroxPlan() {
                   border: `1px solid ${whoopLevel === k ? v.color : "#222"}`,
                   borderRadius: 3, padding: "5px 12px", fontSize: 10,
                   cursor: "pointer", color: whoopLevel === k ? v.color : "#444",
-                  fontFamily: "'Courier New', monospace", fontWeight: whoopLevel === k ? 700 : 400,
+                  fontFamily: "'DM Sans', sans-serif", fontWeight: whoopLevel === k ? 700 : 400,
                 }}>{v.emoji} {v.label}</button>
               ))}
             </div>

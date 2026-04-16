@@ -1,5 +1,6 @@
 import React from 'react'
 import ReactDOM from 'react-dom/client'
+import './index.css'
 import App from './App'
 
 class ErrorBoundary extends React.Component {
@@ -19,7 +20,7 @@ class ErrorBoundary extends React.Component {
   render() {
     if (this.state.error) {
       return (
-        <div style={{ color: 'white', padding: 20, background: '#0a0a0a', minHeight: '100vh' }}>
+        <div style={{ color: 'white', padding: 20, background: '#0D0E10', minHeight: '100vh', fontFamily: '"DM Sans", sans-serif' }}>
           <h2>Something went wrong</h2>
           <pre style={{ color: '#ff3b30', fontSize: 12 }}>{this.state.error}</pre>
         </div>

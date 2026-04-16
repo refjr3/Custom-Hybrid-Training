@@ -11,10 +11,10 @@ const C = {
   border: "#2A2A2A",
   text: "#FFFFFF",
   muted: "#888888",
-  cyan: "#00F3FF",
-  ff: "'Bebas Neue','Arial Black',sans-serif",
-  fm: "'Space Mono',monospace",
-  fs: "'Inter',-apple-system,sans-serif",
+  cyan: "#C9A875",
+  ff: "'DM Sans',sans-serif",
+  fm: "'DM Sans',sans-serif",
+  fs: "'DM Sans',sans-serif",
 };
 
 const SPORTS = [

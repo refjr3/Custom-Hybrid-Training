@@ -20,45 +20,90 @@ const supabase = createClient(
   supabaseKey || "placeholder"
 );
 
-/** EMBER design system — warm ember glass over fixed viewport gradient (see index.html body). */
-const EMBER = {
+/** DM Sans / DM Serif + gold glass — global background in index.css */
+const DS = {
   bg: "transparent",
-  glass: "rgba(255,120,30,0.08)",
-  glassBorder: "rgba(255,140,50,0.15)",
-  glassHover: "rgba(255,120,30,0.12)",
-  accent: "#ffaa44",
-  accentSoft: "rgba(255,170,68,0.4)",
-  accentBorder: "rgba(255,140,50,0.2)",
-  text: "rgba(255,220,180,0.95)",
-  textSecondary: "rgba(255,180,80,0.5)",
-  textMuted: "rgba(255,140,50,0.35)",
+  base: "#0D0E10",
+  gold: "#C9A875",
+  goldDim: "#3A3530",
+  cream: "#F0EBE2",
+  text: "rgba(255,255,255,0.92)",
+  textMuted: "rgba(255,255,255,0.25)",
+  textDim: "rgba(255,255,255,0.12)",
   green: "#5dffa0",
-  greenGlass: "rgba(93,255,160,0.12)",
   red: "#ff6b6b",
   yellow: "#ffd166",
-  divider: "rgba(255,140,50,0.08)",
+  sans: "'DM Sans', sans-serif",
+  serif: "'DM Serif Display', serif",
+  divider: "rgba(255,255,255,0.08)",
 };
 
+const glassCard = {
+  position: "relative",
+  background: "rgba(255,255,255,0.055)",
+  backdropFilter: "blur(28px) saturate(1.4)",
+  WebkitBackdropFilter: "blur(28px) saturate(1.4)",
+  borderRadius: 22,
+  border: "1px solid rgba(255,255,255,0.13)",
+  overflow: "hidden",
+  marginBottom: 10,
+};
+
+const creamCard = {
+  position: "relative",
+  background: "linear-gradient(145deg, rgba(245,240,232,0.96) 0%, rgba(232,225,213,0.92) 60%, rgba(220,212,198,0.88) 100%)",
+  backdropFilter: "blur(20px) saturate(1.2)",
+  WebkitBackdropFilter: "blur(20px) saturate(1.2)",
+  borderRadius: 22,
+  border: "1px solid rgba(255,255,255,0.25)",
+  overflow: "hidden",
+  marginBottom: 10,
+};
+
+const ghostCard = {
+  position: "relative",
+  background: "rgba(255,255,255,0.022)",
+  backdropFilter: "blur(20px)",
+  WebkitBackdropFilter: "blur(20px)",
+  borderRadius: 18,
+  border: "1px solid rgba(255,255,255,0.07)",
+  overflow: "hidden",
+  marginBottom: 10,
+  opacity: 0.6,
+};
+
+const specularTop = (left = "8%", right = "8%") => ({
+  position: "absolute",
+  top: 0,
+  left,
+  right,
+  height: 1,
+  background: "linear-gradient(90deg, transparent, rgba(255,255,255,0.35) 30%, rgba(255,255,255,0.5) 50%, rgba(255,255,255,0.35) 70%, transparent)",
+  pointerEvents: "none",
+});
+
 const C = {
-  bg: EMBER.bg,
-  surface: EMBER.glass,
-  card: EMBER.glass,
-  card2: EMBER.glassHover,
-  cardSolid: "rgba(26,16,10,0.88)",
-  border: EMBER.glassBorder,
-  divider: EMBER.divider,
-  text: EMBER.text,
-  muted: EMBER.textMuted,
-  light: EMBER.textSecondary,
-  red: EMBER.red,
-  green: EMBER.green,
-  yellow: EMBER.yellow,
-  blue: "#7eb8ff",
-  cyan: EMBER.accent,
-  ff: "'Syne',sans-serif",
-  fm: "'Space Mono',monospace",
-  fs: "'Syne',sans-serif",
-  glass: { backdropFilter: "blur(24px)", WebkitBackdropFilter: "blur(24px)" },
+  bg: DS.bg,
+  surface: "rgba(255,255,255,0.055)",
+  card: "rgba(255,255,255,0.055)",
+  card2: "rgba(255,255,255,0.08)",
+  cardSolid: "rgba(18,19,22,0.92)",
+  border: "rgba(255,255,255,0.13)",
+  divider: DS.divider,
+  text: DS.text,
+  muted: DS.textMuted,
+  light: "rgba(255,255,255,0.45)",
+  red: DS.red,
+  green: DS.green,
+  yellow: DS.yellow,
+  blue: "#8fa8c4",
+  cyan: DS.gold,
+  gold: DS.gold,
+  ff: DS.sans,
+  fm: DS.sans,
+  fs: DS.sans,
+  serif: DS.serif,
+  glass: { backdropFilter: "blur(28px) saturate(1.4)", WebkitBackdropFilter: "blur(28px) saturate(1.4)" },
   radius: 22,
 };
 const glow = (color, i=0.3) => `0 0 20px ${color}${Math.round(i*255).toString(16).padStart(2,"0")}, 0 0 60px ${color}${Math.round(i*0.4*255).toString(16).padStart(2,"0")}`;
@@ -480,7 +525,7 @@ function PerfIntervalsBlocks({ trends, C, glow }) {
 
       <div style={card}>
         <div style={{ fontFamily: C.ff, fontSize: 16, color: C.cyan, letterSpacing: 2, marginBottom: 8 }}>HRV TREND</div>
-        <div style={{ display: "flex", flexWrap: "wrap", gap: 12, marginBottom: 8, fontFamily: "monospace", fontSize: 10, color: C.text }}>
+        <div style={{ display: "flex", flexWrap: "wrap", gap: 12, marginBottom: 8, fontFamily: C.ff, fontSize: 10, color: C.text }}>
           <span>
             NOW <span style={{ color: C.cyan }}>{hrvCur != null ? `${(Math.round(hrvCur * 10) / 10).toFixed(1)}ms` : "—"}</span>
           </span>
@@ -536,7 +581,7 @@ function PerfIntervalsBlocks({ trends, C, glow }) {
 
       <div style={card}>
         <div style={{ fontFamily: C.ff, fontSize: 16, color: C.cyan, letterSpacing: 2, marginBottom: 8 }}>READINESS</div>
-        <div style={{ display: "flex", flexWrap: "wrap", gap: 14, marginBottom: 6, fontFamily: "monospace", fontSize: 10, color: C.text }}>
+        <div style={{ display: "flex", flexWrap: "wrap", gap: 14, marginBottom: 6, fontFamily: C.ff, fontSize: 10, color: C.text }}>
           <span>
             NOW <span style={{ color: C.cyan }}>{readCur != null ? `${Math.round(readCur)}` : "—"}</span>
           </span>
@@ -551,15 +596,15 @@ function PerfIntervalsBlocks({ trends, C, glow }) {
             return (
               <>
                 <rect x={PERF_PAD} y={PERF_PAD} width={iw} height={ih * 0.3} fill="rgba(0,212,160,0.1)" />
-                <text x={PERF_PAD + 6} y={PERF_PAD + 14} fill={C.green} fontFamily="monospace" fontSize={8} letterSpacing={1}>
+                <text x={PERF_PAD + 6} y={PERF_PAD + 14} fill={C.green} fontFamily="DM Sans, sans-serif" fontSize={8} letterSpacing={1}>
                   READY
                 </text>
                 <rect x={PERF_PAD} y={PERF_PAD + ih * 0.3} width={iw} height={ih * 0.3} fill="rgba(255,214,0,0.1)" />
-                <text x={PERF_PAD + 6} y={PERF_PAD + ih * 0.3 + 14} fill={C.yellow} fontFamily="monospace" fontSize={8} letterSpacing={1}>
+                <text x={PERF_PAD + 6} y={PERF_PAD + ih * 0.3 + 14} fill={C.yellow} fontFamily="DM Sans, sans-serif" fontSize={8} letterSpacing={1}>
                   CAUTION
                 </text>
                 <rect x={PERF_PAD} y={PERF_PAD + ih * 0.6} width={iw} height={ih * 0.4} fill="rgba(255,59,48,0.09)" />
-                <text x={PERF_PAD + 6} y={PERF_PAD + ih * 0.6 + 14} fill={C.red} fontFamily="monospace" fontSize={8} letterSpacing={1}>
+                <text x={PERF_PAD + 6} y={PERF_PAD + ih * 0.6 + 14} fill={C.red} fontFamily="DM Sans, sans-serif" fontSize={8} letterSpacing={1}>
                   REST
                 </text>
               </>
@@ -590,7 +635,7 @@ function PerfIntervalsBlocks({ trends, C, glow }) {
 
       <div style={card}>
         <div style={{ fontFamily: C.ff, fontSize: 16, color: C.cyan, letterSpacing: 2, marginBottom: 8 }}>SLEEP</div>
-        <div style={{ display: "flex", flexWrap: "wrap", gap: 14, marginBottom: 8, fontFamily: "monospace", fontSize: 10, color: C.text }}>
+        <div style={{ display: "flex", flexWrap: "wrap", gap: 14, marginBottom: 8, fontFamily: C.ff, fontSize: 10, color: C.text }}>
           <span>
             WK AVG HRS <span style={{ color: C.cyan }}>{sleepWeekH != null ? (Math.round(sleepWeekH * 10) / 10).toFixed(1) : "—"}</span>
           </span>
@@ -604,7 +649,7 @@ function PerfIntervalsBlocks({ trends, C, glow }) {
             const iw = PERF_CHART_W - PERF_PAD * 2;
             const y8 = PERF_PAD + ih - (8 / maxSleepH) * ih;
             return (
-              <line x1={PERF_PAD} y1={y8} x2={PERF_PAD + iw} y2={y8} stroke="rgba(0,243,255,0.35)" strokeDasharray="4 3" />
+              <line x1={PERF_PAD} y1={y8} x2={PERF_PAD + iw} y2={y8} stroke="rgba(201,168,117,0.35)" strokeDasharray="4 3" />
             );
           })()}
           {sleep14Valid.map((d, i) => {
@@ -615,7 +660,7 @@ function PerfIntervalsBlocks({ trends, C, glow }) {
             const bh = (hRaw / maxSleepH) * ih;
             const y = PERF_PAD + ih - bh;
             const sc = Number(d.sleep_score);
-            const barColor = Number.isFinite(sc) ? (sc >= 75 ? C.green : sc >= 50 ? C.yellow : C.red) : `${C.cyan}66`;
+            const barColor = Number.isFinite(sc) ? (sc >= 75 ? C.green : sc >= 50 ? C.yellow : C.red) : "rgba(201,168,117,0.45)";
             return (
               <g key={d.date}>
                 <rect x={x} y={y} width={barW} height={Math.max(bh, 1)} rx={2} fill={barColor} opacity={0.85} />
@@ -630,7 +675,7 @@ function PerfIntervalsBlocks({ trends, C, glow }) {
 
       <div style={card}>
         <div style={{ fontFamily: C.ff, fontSize: 16, color: C.cyan, letterSpacing: 2, marginBottom: 8 }}>RESTING HR</div>
-        <div style={{ display: "flex", flexWrap: "wrap", gap: 12, marginBottom: 6, fontFamily: "monospace", fontSize: 10, color: C.text }}>
+        <div style={{ display: "flex", flexWrap: "wrap", gap: 12, marginBottom: 6, fontFamily: C.ff, fontSize: 10, color: C.text }}>
           <span>
             NOW <span style={{ color: "#e07b3a" }}>{rhrCur != null ? `${Math.round(Number(rhrCur))}bpm` : "—"}</span>
           </span>
@@ -1182,7 +1227,7 @@ const Ring = ({ score, size=120, stroke=10, color, label, sublabel, glowEffect, 
   return (
     <div style={{ position:"relative", width:size, height:size, flexShrink:0, filter: glowEffect ? `drop-shadow(0 0 12px ${color}66)` : "none" }}>
       <svg width={size} height={size} style={{ transform:"rotate(-90deg)" }}>
-        <circle cx={size/2} cy={size/2} r={r} fill="none" stroke="rgba(255,255,255,0.04)" strokeWidth={stroke} />
+        <circle cx={size/2} cy={size/2} r={r} fill="none" stroke="rgba(255,255,255,0.12)" strokeWidth={stroke} />
         <circle cx={size/2} cy={size/2} r={r} fill="none" stroke={color} strokeWidth={stroke}
           strokeDasharray={circ} strokeDashoffset={offset} strokeLinecap="round"
           style={{ transition:"stroke-dashoffset 0.8s cubic-bezier(.4,0,.2,1)" }} />
@@ -1306,7 +1351,7 @@ const renderMarkdown = (text) => {
 
 const PERSONAS = [
   { id:"grinder",   label:"THE GRINDER",   sub:"Push through · Motivational", color:"#FF3B30" },
-  { id:"scientist", label:"THE SCIENTIST", sub:"Data-driven · Clinical", color:"#00F3FF" },
+  { id:"scientist", label:"THE SCIENTIST", sub:"Data-driven · Clinical", color:"#C9A875" },
   { id:"sage",      label:"THE SAGE",      sub:"Mindful · RPE-based", color:"#00D4A0" },
 ];
 
@@ -1516,22 +1561,43 @@ const AIChat = ({ whoopData, currentWeek, recentActivities, onPlanChange, userNa
 
   if (!expanded) {
     return (
-      <div style={{ position:"fixed", bottom:80, left:"50%", transform:"translateX(-50%)", width:"calc(100% - 40px)", maxWidth:440, zIndex:150 }}>
-        <button onClick={() => { startFreshSession(); setExpanded(true); }}
-          style={{ width:"100%", padding:"14px 20px", background:C.card, border:`1px solid ${C.border}`, borderRadius:C.radius, display:"flex", alignItems:"center", gap:12, cursor:"pointer", boxShadow:"0 4px 20px rgba(0,0,0,0.5)", ...C.glass }}>
-          <div style={{ position:"relative", width:32, height:32, borderRadius:"50%", background:`${C.cyan}15`, border:`1px solid ${C.cyan}33`, display:"flex", alignItems:"center", justifyContent:"center", flexShrink:0 }}>
-            <span style={{ fontSize:14, color:C.cyan }}>✦</span>
-            {proactiveBadge > 0 && (
-              <div style={{ position:"absolute", top:-4, right:-4, width:16, height:16, borderRadius:"50%", background:C.red, display:"flex", alignItems:"center", justifyContent:"center" }}>
-                <span style={{ fontFamily:C.fm, fontSize:8, color:"#fff", fontWeight:700 }}>{proactiveBadge}</span>
-              </div>
-            )}
+      <div style={{ position:"fixed", bottom:88, left:"50%", transform:"translateX(-50%)", width:"calc(100% - 32px)", maxWidth:440, zIndex:150 }}>
+        <button
+          type="button"
+          onClick={() => { startFreshSession(); setExpanded(true); }}
+          style={{
+            position:"relative",
+            width:"100%",
+            padding:"13px 18px",
+            background:"rgba(255,255,255,0.042)",
+            backdropFilter:"blur(24px)",
+            WebkitBackdropFilter:"blur(24px)",
+            borderRadius:16,
+            border:"1px solid rgba(255,255,255,0.1)",
+            overflow:"hidden",
+            margin:"4px 0 0",
+            display:"flex",
+            alignItems:"center",
+            justifyContent:"space-between",
+            cursor:"pointer",
+          }}
+        >
+          <div style={{ position:"absolute", top:0, left:"10%", right:"10%", height:1, background:"linear-gradient(90deg,transparent,rgba(255,255,255,0.25) 50%,transparent)", pointerEvents:"none" }} />
+          <div style={{ display:"flex", alignItems:"center", gap:12, textAlign:"left", position:"relative", zIndex:1 }}>
+            <div style={{ position:"relative", width:32, height:32, borderRadius:"50%", background:"rgba(201,168,117,0.12)", border:"1px solid rgba(201,168,117,0.2)", display:"flex", alignItems:"center", justifyContent:"center", flexShrink:0 }}>
+              <span style={{ fontSize:14, color:DS.gold }}>✦</span>
+              {proactiveBadge > 0 && (
+                <div style={{ position:"absolute", top:-4, right:-4, width:16, height:16, borderRadius:"50%", background:C.red, display:"flex", alignItems:"center", justifyContent:"center" }}>
+                  <span style={{ fontFamily:C.fs, fontSize:8, color:"#fff", fontWeight:700 }}>{proactiveBadge}</span>
+                </div>
+              )}
+            </div>
+            <div>
+              <div style={{ fontSize:9, fontWeight:600, color:"rgba(255,255,255,0.18)", letterSpacing:"2.5px", textTransform:"uppercase", marginBottom:3, fontFamily:C.fs }}>AI Coach</div>
+              <div style={{ fontSize:13, color:"rgba(255,255,255,0.35)", fontFamily:C.fs }}>Ask about today&apos;s session…</div>
+            </div>
           </div>
-          <div style={{ flex:1, textAlign:"left" }}>
-            <div style={{ fontFamily:C.ff, fontSize:13, color:C.text, letterSpacing:1 }}>ASK YOUR COACH</div>
-            <div style={{ fontFamily:C.fm, fontSize:7, color:C.muted, letterSpacing:2, marginTop:2 }}>Claude · Powered by Anthropic</div>
-          </div>
-          <div style={{ fontFamily:C.fm, fontSize:7, color:C.cyan, letterSpacing:2 }}>OPEN ↑</div>
+          <div style={{ width:32, height:32, background:"rgba(201,168,117,0.12)", border:"1px solid rgba(201,168,117,0.2)", borderRadius:"50%", display:"flex", alignItems:"center", justifyContent:"center", color:DS.gold, fontSize:14, position:"relative", zIndex:1 }}>↗</div>
         </button>
       </div>
     );
@@ -2947,7 +3013,7 @@ export default function App() {
           {new Date().toLocaleDateString("en-US", { weekday: "long", month: "long", day: "numeric" })}
         </div>
         <div style={{ fontFamily: C.ff, fontWeight: 800, fontSize: 28, letterSpacing: 4, marginTop: 4 }}>TRIAD</div>
-        <div style={{ height: 1, background: EMBER.divider, marginTop: 12, marginBottom: 16 }} />
+        <div style={{ height: 1, background: DS.divider, marginTop: 12, marginBottom: 16 }} />
         <div style={{ display: "grid", gap: 16 }}>
           {[0, 1, 2].map((i) => (
             <div key={i} style={{ borderRadius: C.radius, padding: "18px 20px", background: C.card, border: `1px solid ${C.border}`, ...C.glass }}>
@@ -3117,7 +3183,7 @@ export default function App() {
             onClick={openPlanBuilder}
             style={{
               padding: "12px 14px",
-              background: EMBER.accent,
+              background: DS.gold,
               color: "#1a0f06",
               border: "none",
               borderRadius: C.radius,
@@ -3176,8 +3242,8 @@ export default function App() {
     <div style={{ minHeight:"100vh", background:C.bg, color:C.text, fontFamily:C.fs, maxWidth:480, margin:"0 auto", paddingBottom:88 }}>
       {showEntrance && (
         <div style={{ position:"fixed", inset:0, zIndex:9999, background:"rgba(15,8,0,0.94)", display:"flex", flexDirection:"column", alignItems:"center", justifyContent:"center", animation:"entrance-fade 2.8s ease forwards", backdropFilter:"blur(8px)" }}>
-          <div style={{ fontSize:64, color:EMBER.accent, animation:"entrance-scale 1s cubic-bezier(.175,.885,.32,1.275) forwards", transform:"scale(0)" }}>△</div>
-          <div style={{ fontFamily:C.fm, fontSize:10, color:EMBER.accent, letterSpacing:6, marginTop:20, opacity:0, animation:"entrance-text 0.8s ease 0.6s forwards" }}>HYBRID PERFORMANCE OS</div>
+          <div style={{ fontSize:64, color:DS.gold, animation:"entrance-scale 1s cubic-bezier(.175,.885,.32,1.275) forwards", transform:"scale(0)" }}>△</div>
+          <div style={{ fontFamily:C.fm, fontSize:10, color:DS.gold, letterSpacing:6, marginTop:20, opacity:0, animation:"entrance-text 0.8s ease 0.6s forwards" }}>HYBRID PERFORMANCE OS</div>
           <style>{`
             @keyframes entrance-scale { 0%{transform:scale(0);opacity:0} 60%{transform:scale(1.1);opacity:1} 100%{transform:scale(1);opacity:1} }
             @keyframes entrance-text { 0%{opacity:0;transform:translateY(8px)} 100%{opacity:1;transform:translateY(0)} }
@@ -3189,13 +3255,6 @@ export default function App() {
       {nav === "today" && showNoPlanState && <NoPlanState />}
 
       {nav === "today" && (() => {
-        const cardGlass = {
-          background: C.card,
-          border: `1px solid ${C.border}`,
-          borderRadius: C.radius,
-          padding: "18px 20px",
-          ...C.glass,
-        };
         const perfHdr = derivePerfPlanHeader(planBlocks);
         const z2TotalMinutes = Math.max(0, Number(stravaZ2Data?.totalMinutes || 0));
         const z2TargetMinutes = Math.max(1, Number(stravaZ2Data?.targetMinutes || 240));
@@ -3208,7 +3267,6 @@ export default function App() {
           return `${hours}h ${String(minutes).padStart(2, "0")}min`;
         };
         const headerDateShort = new Date().toLocaleDateString("en-US", { month: "short", day: "numeric" }).toUpperCase();
-        const athleteName = (profile?.name || "Athlete").toUpperCase();
         const todayDateIso = getDeviceLocalTodayYmd();
         const PLAN_YEAR = parseInt(String(todayDateIso || "").slice(0, 4), 10) || 2026;
         const allPlanEntries = planBlocks
@@ -3320,10 +3378,10 @@ export default function App() {
         const gateRule = todayCardData?.note || "Execute as programmed.";
         const recoveryBadge =
           gateUpper === "GREEN"
-            ? { bg: "rgba(93,255,160,0.12)", border: "1px solid rgba(93,255,160,0.2)", fg: EMBER.green }
+            ? { bg: "rgba(93,255,160,0.12)", border: "1px solid rgba(93,255,160,0.2)", fg: DS.green }
             : gateUpper === "YELLOW"
-              ? { bg: "rgba(255,209,102,0.14)", border: "1px solid rgba(255,209,102,0.28)", fg: EMBER.yellow }
-              : { bg: "rgba(255,107,107,0.12)", border: "1px solid rgba(255,107,107,0.22)", fg: EMBER.red };
+              ? { bg: "rgba(255,209,102,0.14)", border: "1px solid rgba(255,209,102,0.28)", fg: DS.yellow }
+              : { bg: "rgba(255,107,107,0.12)", border: "1px solid rgba(255,107,107,0.22)", fg: DS.red };
         const hrvDisp =
           Number.isFinite(hrv) && hrv > 0 ? `${Math.round(hrv)}ms` : "—";
         const rhrDisp =
@@ -3352,276 +3410,140 @@ export default function App() {
             .filter(Boolean)
             .join(" · ")
           || String(tomorrowDuration || "—");
-        const phaseLine = `${(perfHdr?.currentPhase || "TRAINING").toUpperCase()} · WEEK ${perfHdr?.currentWeekNum ?? 1} OF ${PERF_BLOCK_WEEKS_TOTAL}`;
         const gateWord = gateUpper.charAt(0) + gateUpper.slice(1).toLowerCase();
+        const firstName = (profile?.name || "Athlete").split(/\s+/)[0] || "Athlete";
+        const dayLabel = new Date().toLocaleDateString("en-US", { weekday: "long" });
+        const jd = new Date().getDay();
+        const todayIndex = jd === 0 ? 6 : jd - 1;
+        const weekNumHdr = perfHdr?.currentWeekNum ?? 1;
+        const phaseNameHdr = perfHdr?.currentPhase || "Training";
+        const daysCompletedTicks = Math.min(56, Math.max(0, completedForWeek * 8));
+        const z2TickLit = Math.min(80, Math.round((z2TotalMinutes / z2TargetMinutes) * 80));
+        const z2DoneFmt = formatMinutesLabel(z2TotalMinutes);
+        const z2TargetFmt = formatMinutesLabel(z2TargetMinutes);
+        const raceDateStr = raceDate
+          ? new Date(`${raceDate}T12:00:00`).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })
+          : "";
+        const raceTypeLabel = String(raceName || "").toLowerCase().includes("double")
+          ? "Doubles"
+          : String(raceName || "").toLowerCase().includes("solo")
+            ? "Solo"
+            : "Race";
 
         return (
-          <div style={{ padding: "12px 16px 20px", display: "flex", flexDirection: "column", gap: 16, overflowX: "hidden" }}>
-            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12 }}>
-              <div style={{ fontFamily: C.ff, fontWeight: 800, fontSize: 13, color: C.text, letterSpacing: 5 }}>
-                TRIAD
+          <div style={{ padding: "12px 16px 20px", display: "flex", flexDirection: "column", gap: 14, overflowX: "hidden" }}>
+            <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", gap: 8 }}>
+              <div style={{ fontSize: 10, fontWeight: 500, color: "rgba(255,255,255,0.22)", letterSpacing: "3px", textTransform: "uppercase", marginBottom: 2, fontFamily: C.fs }}>
+                {dayLabel} · Week {weekNumHdr} · {phaseNameHdr}
               </div>
-              <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-                <div style={{ fontFamily: C.fm, fontSize: 10, color: C.muted, letterSpacing: 3, textTransform: "uppercase" }}>
-                  {headerDateShort}
-                </div>
-                <a
-                  href="/api/auth/login"
-                  style={{
-                    fontFamily: C.fm,
-                    fontSize: 8,
-                    color: C.muted,
-                    letterSpacing: 2,
-                    textDecoration: "none",
-                    textTransform: "uppercase",
-                  }}
-                >
-                  ↺ WHOOP
-                </a>
+              <div style={{ display: "flex", alignItems: "center", gap: 8, flexShrink: 0 }}>
+                <span style={{ fontFamily: C.fs, fontSize: 8, color: C.muted, letterSpacing: 2 }}>{headerDateShort}</span>
+                <a href="/api/auth/login" style={{ fontFamily: C.fs, fontSize: 8, color: C.muted, letterSpacing: 2, textDecoration: "none", textTransform: "uppercase" }}>WHOOP</a>
                 <button
                   type="button"
-                  title={
-                    intervalsSyncSummary?.date_range
-                      ? `${intervalsSyncSummary.date_range} · wellness ${intervalsSyncSummary.wellness_synced} · activities ${intervalsSyncSummary.activities_synced}`
-                      : undefined
-                  }
+                  title={intervalsSyncSummary?.date_range ? `${intervalsSyncSummary.date_range} · wellness ${intervalsSyncSummary.wellness_synced}` : undefined}
                   disabled={intervalsSyncing || !session?.access_token}
                   onClick={() => fetchIntervalsSync()}
-                  style={{
-                    fontFamily: C.fm,
-                    fontSize: 8,
-                    color: C.muted,
-                    letterSpacing: 2,
-                    background: "none",
-                    border: "none",
-                    cursor: intervalsSyncing || !session?.access_token ? "default" : "pointer",
-                    opacity: intervalsSyncing || !session?.access_token ? 0.45 : 1,
-                    textTransform: "uppercase",
-                  }}
+                  style={{ fontFamily: C.fs, fontSize: 8, color: C.muted, letterSpacing: 2, background: "none", border: "none", cursor: intervalsSyncing || !session?.access_token ? "default" : "pointer", opacity: intervalsSyncing || !session?.access_token ? 0.45 : 1, textTransform: "uppercase" }}
                 >
-                  ↺ SYNC
+                  SYNC
                 </button>
               </div>
             </div>
 
-            <div>
-              <div style={{ fontFamily: C.ff, fontWeight: 800, fontSize: 36, color: C.text, lineHeight: 1.05, letterSpacing: 0.5 }}>
-                {athleteName}
-              </div>
-              <div style={{ fontFamily: C.fm, fontSize: 9, color: C.muted, letterSpacing: 3, textTransform: "uppercase", marginTop: 6 }}>
-                {phaseLine}
-              </div>
+            <div style={{ display: "flex", gap: "2.5px", alignItems: "center", marginBottom: 8, flexWrap: "wrap" }}>
+              {Array.from({ length: 56 }).map((_, i) => (
+                <span
+                  key={i}
+                  style={{
+                    width: 1,
+                    height: i === todayIndex ? 5 : 8,
+                    borderRadius: "0.5px",
+                    flexShrink: 0,
+                    background: i < daysCompletedTicks ? DS.gold : i === todayIndex ? "rgba(201,168,117,0.35)" : DS.goldDim,
+                  }}
+                />
+              ))}
+            </div>
+
+            <div style={{ fontSize: 46, fontWeight: 600, color: "#fff", lineHeight: 1.05, letterSpacing: "-1.5px", marginBottom: 8, fontFamily: C.fs }}>
+              Make <em style={{ fontFamily: C.serif, fontStyle: "italic", fontWeight: 400, letterSpacing: "-1.2px" }}>today</em>
+              <br />
+              count, {firstName}.
             </div>
 
             {whoopDisconnected && (
-              <div
-                style={{
-                  ...cardGlass,
-                  background: "rgba(255,107,107,0.08)",
-                  border: "1px solid rgba(255,107,107,0.25)",
-                  display: "flex",
-                  justifyContent: "space-between",
-                  alignItems: "center",
-                }}
-              >
+              <div style={{ ...glassCard, padding: "14px 18px", background: "rgba(255,80,80,0.07)", border: "1px solid rgba(255,100,100,0.28)", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
                 <div>
-                  <div style={{ fontFamily: C.fm, fontSize: 10, color: EMBER.red, letterSpacing: 3 }}>WHOOP DISCONNECTED</div>
-                  <div style={{ fontFamily: C.fm, fontSize: 9, color: C.light, marginTop: 2, letterSpacing: 1 }}>Tap to reconnect</div>
+                  <div style={{ fontFamily: C.fs, fontSize: 10, color: DS.red, letterSpacing: 3, fontWeight: 600 }}>WHOOP DISCONNECTED</div>
+                  <div style={{ fontFamily: C.fs, fontSize: 9, color: C.light, marginTop: 2 }}>Tap to reconnect</div>
                 </div>
-                <a
-                  href="/api/auth/login"
-                  style={{
-                    background: EMBER.red,
-                    color: "#1a0a06",
-                    border: "none",
-                    borderRadius: 10,
-                    padding: "8px 14px",
-                    fontFamily: C.fm,
-                    fontSize: 9,
-                    letterSpacing: 2,
-                    textDecoration: "none",
-                    cursor: "pointer",
-                  }}
-                >
-                  RECONNECT
-                </a>
+                <a href="/api/auth/login" style={{ background: DS.red, color: "#fff", border: "none", borderRadius: 10, padding: "8px 14px", fontFamily: C.fs, fontSize: 9, letterSpacing: 2, textDecoration: "none" }}>RECONNECT</a>
               </div>
             )}
 
-            <div style={cardGlass}>
-              <div style={{ fontFamily: C.fm, fontSize: 9, color: C.muted, letterSpacing: 3, textTransform: "uppercase", marginBottom: 4 }}>
-                RECOVERY
-              </div>
-              <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", gap: 12 }}>
-                <div style={{ fontFamily: C.ff, fontWeight: 800, fontSize: 64, color: C.text, lineHeight: 0.95, letterSpacing: -1 }}>
-                  {recDisp}
+            <div style={creamCard}>
+              <div style={{ position: "absolute", top: 0, left: "5%", right: "5%", height: 1, background: "linear-gradient(90deg,transparent,rgba(255,255,255,0.9) 50%,transparent)", pointerEvents: "none" }} />
+              <div style={{ position: "absolute", top: -30, right: -30, width: 160, height: 130, background: "radial-gradient(ellipse at top right, rgba(255,255,255,0.4) 0%, transparent 65%)", pointerEvents: "none" }} />
+              <div style={{ padding: "22px 22px 18px", position: "relative", zIndex: 1 }}>
+                <div style={{ fontSize: 9, fontWeight: 600, color: "rgba(13,14,16,0.3)", letterSpacing: "2.5px", textTransform: "uppercase", marginBottom: 12, fontFamily: C.fs }}>Recovery</div>
+                <div style={{ display: "flex", alignItems: "flex-end", justifyContent: "space-between", marginBottom: 16 }}>
+                  <div style={{ fontFamily: C.serif, fontSize: 76, color: DS.base, lineHeight: 1, letterSpacing: "-3px", fontWeight: 400 }}>{recDisp}</div>
+                  <div style={{ textAlign: "right", paddingBottom: 10 }}>
+                    <div style={{ fontSize: 12, fontWeight: 600, color: recoveryBadge.fg, marginBottom: 4, fontFamily: C.fs }}>{gateWord}</div>
+                    <div style={{ fontSize: 10, color: "rgba(13,14,16,0.38)", fontFamily: C.fs }}>Execute as programmed</div>
+                  </div>
                 </div>
-                <div
-                  style={{
-                    background: recoveryBadge.bg,
-                    border: recoveryBadge.border,
-                    borderRadius: 20,
-                    padding: "3px 12px",
-                    fontSize: 10,
-                    color: recoveryBadge.fg,
-                    fontFamily: C.fm,
-                    letterSpacing: 1,
-                    flexShrink: 0,
-                    marginTop: 8,
-                  }}
-                >
-                  ● {gateWord}
-                </div>
-              </div>
-              <div style={{ fontFamily: C.ff, fontSize: 12, color: EMBER.accent, marginTop: 10, lineHeight: 1.35 }}>
-                ● {gateWord} — {gateRule}
-              </div>
-              <div style={{ height: 1, background: EMBER.divider, margin: "14px 0 12px" }} />
-              <div style={{ display: "flex", justifyContent: "space-between", gap: 8, flexWrap: "wrap" }}>
-                {[
-                  ["HRV", hrvDisp],
-                  ["RHR", rhrDisp],
-                  ["SLEEP", sleepDisp],
-                ].map(([k, v]) => (
-                  <div key={k} style={{ fontFamily: C.fm, fontSize: 9, letterSpacing: 2, textTransform: "uppercase" }}>
-                    <span style={{ color: C.muted }}>{k} </span>
-                    <span style={{ color: C.text }}>{v}</span>
-                  </div>
-                ))}
-              </div>
-            </div>
-
-            <div style={cardGlass}>
-              <div style={{ fontFamily: C.fm, fontSize: 8, color: C.muted, letterSpacing: 3, textTransform: "uppercase", marginBottom: 10 }}>
-                Z2 THIS WEEK
-              </div>
-              {stravaZ2Loading ? (
-                <div style={{ fontFamily: C.fm, fontSize: 10, color: C.muted, letterSpacing: 2 }}>
-                  LOADING Z2 DATA...
-                </div>
-              ) : !stravaConnected ? (
-                <a
-                  href={session?.user?.id ? `/api/strava/login?uid=${encodeURIComponent(session.user.id)}` : "/api/strava/login"}
-                  style={{
-                    display: "inline-block",
-                    background: EMBER.accent,
-                    color: "#1a0f06",
-                    border: "none",
-                    borderRadius: 10,
-                    padding: "10px 14px",
-                    fontFamily: C.fm,
-                    fontSize: 10,
-                    letterSpacing: 2,
-                    textDecoration: "none",
-                    textTransform: "uppercase",
-                  }}
-                >
-                  CONNECT STRAVA
-                </a>
-              ) : stravaZ2Error ? (
-                <div>
-                  <div style={{ fontFamily: C.fm, fontSize: 10, color: C.red, letterSpacing: 1.2 }}>{stravaZ2Error}</div>
-                  <button
-                    onClick={fetchStravaWeeklyZ2}
-                    style={{
-                      marginTop: 10,
-                      background: "transparent",
-                      border: `1px solid ${C.border}`,
-                      borderRadius: 10,
-                      padding: "8px 12px",
-                      color: C.text,
-                      fontFamily: C.fm,
-                      fontSize: 9,
-                      letterSpacing: 1.5,
-                      cursor: "pointer",
-                    }}
-                  >
-                    RETRY
-                  </button>
-                </div>
-              ) : (
-                <>
-                  <div style={{ width: "100%", height: 8, borderRadius: 999, background: "rgba(255,140,50,0.12)", overflow: "hidden", marginBottom: 10 }}>
-                    <div style={{ width: `${z2Progress}%`, height: "100%", background: EMBER.accent, borderRadius: 999, transition: "width 0.4s ease" }} />
-                  </div>
-                  <div style={{ fontFamily: C.ff, fontWeight: 700, fontSize: 18, color: C.text, marginBottom: 10 }}>
-                    {formatMinutesLabel(z2TotalMinutes)} / {formatMinutesLabel(z2TargetMinutes)}
-                  </div>
-                  <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
-                    {z2Activities.length === 0 ? (
-                      <div style={{ fontFamily: C.fm, fontSize: 9, color: C.muted, letterSpacing: 1.2 }}>
-                        No Zone 2 minutes logged yet this week.
-                      </div>
-                    ) : (
-                      z2Activities.map((activity, idx) => (
-                        <div
-                          key={`${activity?.name || "activity"}-${activity?.date || idx}`}
-                          style={{
-                            display: "flex",
-                            justifyContent: "space-between",
-                            alignItems: "center",
-                            gap: 8,
-                            padding: "8px 10px",
-                            borderRadius: 12,
-                            background: EMBER.glassHover,
-                            border: `1px solid ${EMBER.accentBorder}`,
-                          }}
-                        >
-                          <div style={{ minWidth: 0 }}>
-                            <div style={{ fontFamily: C.fs, fontSize: 12, color: C.text, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
-                              {activity?.name || "Activity"}
-                            </div>
-                            <div style={{ fontFamily: C.fm, fontSize: 8, color: C.muted, letterSpacing: 1.5, marginTop: 2 }}>
-                              {activity?.type || "Workout"} · {activity?.date || "This week"}
-                            </div>
-                          </div>
-                          <div style={{ fontFamily: C.fm, fontSize: 9, color: EMBER.accent, letterSpacing: 1.5, whiteSpace: "nowrap" }}>
-                            {Math.max(0, Number(activity?.z2Minutes || 0))} MIN
-                          </div>
-                        </div>
-                      ))
-                    )}
-                  </div>
-                </>
-              )}
-            </div>
-
-            <div style={cardGlass}>
-              <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 8, flexWrap: "wrap" }}>
-                <span style={{ fontFamily: C.fm, fontSize: 8, color: C.muted, letterSpacing: 3, textTransform: "uppercase" }}>
-                  TODAY ·
-                </span>
-                <div
-                  style={{
-                    background: "rgba(255,120,30,0.12)",
-                    border: "1px solid rgba(255,140,50,0.2)",
-                    borderRadius: 20,
-                    padding: "2px 10px",
-                    fontSize: 9,
-                    color: EMBER.accent,
-                    fontFamily: C.fm,
-                    letterSpacing: 2,
-                    textTransform: "uppercase",
-                  }}
-                >
-                  ⬡ {todayMeta.tag}
-                </div>
-              </div>
-              {hasTodaySession ? (
-                <>
-                  <div style={{ fontFamily: C.ff, fontWeight: 700, fontSize: 17, color: C.text, lineHeight: 1.15 }}>
-                    {todaySessionLabel}
-                  </div>
-                  <div style={{ fontFamily: C.fm, fontSize: 9, color: C.muted, letterSpacing: 2, marginTop: 6, lineHeight: 1.4 }}>
-                    {sessionStructure}
-                  </div>
-                  {todayCoachingNote && (
-                    <div style={{ fontFamily: C.fs, fontSize: 12, color: C.light, lineHeight: 1.55, marginTop: 8 }}>
-                      {todayCoachingNote}
+                <div style={{ display: "flex", borderTop: "1px solid rgba(13,14,16,0.08)", paddingTop: 14 }}>
+                  {[
+                    ["HRV", hrvDisp],
+                    ["RHR", rhrDisp],
+                    ["Sleep", sleepDisp],
+                  ].map(([lbl, val]) => (
+                    <div key={lbl} style={{ flex: 1, textAlign: "center", borderRight: lbl !== "Sleep" ? "1px solid rgba(13,14,16,0.08)" : "none" }}>
+                      <div style={{ fontSize: 20, fontWeight: 600, color: DS.base, letterSpacing: "-0.5px", lineHeight: 1, marginBottom: 3, fontFamily: C.fs }}>{val}</div>
+                      <div style={{ fontSize: 8, fontWeight: 600, color: "rgba(13,14,16,0.3)", letterSpacing: "1.5px", textTransform: "uppercase", fontFamily: C.fs }}>{lbl}</div>
                     </div>
-                  )}
+                  ))}
+                </div>
+              </div>
+            </div>
+
+            <div style={glassCard}>
+              <div style={specularTop()} />
+              <div style={{ position: "absolute", top: -20, right: -20, width: 120, height: 120, background: "radial-gradient(circle,rgba(210,190,155,0.10) 0%,transparent 70%)", pointerEvents: "none" }} />
+              <div style={{ padding: "20px 22px", position: "relative", zIndex: 1 }}>
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 10 }}>
+                  <div style={{ fontSize: 9, fontWeight: 600, color: "rgba(255,255,255,0.25)", letterSpacing: "2.5px", textTransform: "uppercase", fontFamily: C.fs }}>
+                    Today · {todayMeta.tag}
+                  </div>
+                  <div style={{ width: 7, height: 7, borderRadius: "50%", background: DS.green, boxShadow: "0 0 8px rgba(93,255,160,0.5)", marginTop: 2 }} />
+                </div>
+                <div style={{ fontSize: 21, fontWeight: 600, color: "#fff", letterSpacing: "-0.5px", lineHeight: 1.1, marginBottom: 5, fontFamily: C.fs }}>
+                  {hasTodaySession ? todaySessionLabel : "Rest"}
+                </div>
+                <div style={{ fontSize: 11, color: "rgba(255,255,255,0.3)", lineHeight: 1.5, fontFamily: C.fs }}>
+                  {sessionStructure || (hasTodaySession ? "" : "Recovery is the work.")}
+                </div>
+                {todayCoachingNote ? (
+                  <div style={{ fontSize: 11, color: "rgba(255,255,255,0.35)", lineHeight: 1.45, marginTop: 6, fontFamily: C.fs }}>{todayCoachingNote}</div>
+                ) : null}
+                <div style={{ height: 1, background: "rgba(255,255,255,0.07)", margin: "14px 0" }} />
+                <div style={{ display: "flex", gap: 18, flexWrap: "wrap" }}>
+                  <div style={{ fontSize: 10, color: "rgba(255,255,255,0.22)", fontFamily: C.fs }}>
+                    Duration <strong style={{ color: "rgba(255,255,255,0.55)", fontWeight: 500 }}>{todayDuration}</strong>
+                  </div>
+                  <div style={{ fontSize: 10, color: "rgba(255,255,255,0.22)", fontFamily: C.fs }}>
+                    Zone <strong style={{ color: "rgba(255,255,255,0.55)", fontWeight: 500 }}>{todayZone.zone}</strong>
+                  </div>
+                  <div style={{ fontSize: 10, color: "rgba(255,255,255,0.22)", fontFamily: C.fs }}>
+                    Phase <strong style={{ color: "rgba(255,255,255,0.55)", fontWeight: 500 }}>{phaseNameHdr}</strong>
+                  </div>
+                </div>
+                {hasTodaySession ? (
                   <div style={{ display: "flex", justifyContent: "flex-end", marginTop: 12 }}>
                     <button
+                      type="button"
                       onClick={() => {
                         if (!todayCardData) return;
                         setNav("plan");
@@ -3630,58 +3552,119 @@ export default function App() {
                         setSelDay(todayCardData.day);
                         setSess("am");
                       }}
-                      style={{ background: "transparent", border: "none", color: EMBER.accent, fontFamily: C.ff, fontSize: 13, fontWeight: 700, letterSpacing: 2, cursor: "pointer" }}
+                      style={{ background: "transparent", border: "none", color: DS.gold, fontFamily: C.fs, fontSize: 12, fontWeight: 600, letterSpacing: 2, cursor: "pointer" }}
                     >
                       VIEW WORKOUT →
                     </button>
                   </div>
-                </>
-              ) : (
-                <div style={{ fontFamily: C.ff, fontWeight: 700, fontSize: 20, color: C.text, lineHeight: 1.15 }}>
-                  REST DAY<span style={{ color: C.muted }}> — Recovery is the work</span>
-                </div>
-              )}
+                ) : null}
+              </div>
             </div>
 
-            <div style={{ ...cardGlass, opacity: 0.45 }}>
-              <div style={{ fontFamily: C.fm, fontSize: 8, color: C.muted, letterSpacing: 3, textTransform: "uppercase", marginBottom: 8 }}>
-                TOMORROW
+            <div style={glassCard}>
+              <div style={specularTop()} />
+              <div style={{ padding: "16px 20px 18px", position: "relative", zIndex: 1 }}>
+                <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 12 }}>
+                  <div style={{ fontSize: 9, fontWeight: 600, color: "rgba(255,255,255,0.22)", letterSpacing: "2.5px", textTransform: "uppercase", fontFamily: C.fs }}>Weekly Z2 Time</div>
+                  <div style={{ fontSize: 12, fontWeight: 600, color: DS.gold, fontFamily: C.fs }}>{Math.round(z2TotalMinutes)} / {Math.round(z2TargetMinutes)} min</div>
+                </div>
+                {stravaZ2Loading ? (
+                  <div style={{ fontFamily: C.fs, fontSize: 10, color: C.muted }}>Loading Z2 data…</div>
+                ) : !stravaConnected ? (
+                  <a
+                    href={session?.user?.id ? `/api/strava/login?uid=${encodeURIComponent(session.user.id)}` : "/api/strava/login"}
+                    style={{ display: "inline-block", background: DS.gold, color: DS.base, borderRadius: 10, padding: "10px 14px", fontFamily: C.fs, fontSize: 10, fontWeight: 600, letterSpacing: 2, textDecoration: "none", textTransform: "uppercase" }}
+                  >
+                    Connect Strava
+                  </a>
+                ) : stravaZ2Error ? (
+                  <div>
+                    <div style={{ fontFamily: C.fs, fontSize: 10, color: C.red }}>{stravaZ2Error}</div>
+                    <button type="button" onClick={fetchStravaWeeklyZ2} style={{ marginTop: 10, background: "transparent", border: `1px solid ${C.border}`, borderRadius: 10, padding: "8px 12px", color: C.text, fontFamily: C.fs, fontSize: 9, cursor: "pointer" }}>Retry</button>
+                  </div>
+                ) : (
+                  <>
+                    <div style={{ display: "flex", gap: "1.8px", alignItems: "flex-end", marginBottom: 5, flexWrap: "wrap" }}>
+                      {Array.from({ length: 80 }).map((_, i) => {
+                        const isHour = [19, 39, 59, 79].includes(i);
+                        const isLit = i < z2TickLit;
+                        return (
+                          <span
+                            key={i}
+                            style={{
+                              width: 1,
+                              height: isHour ? 11 : 6,
+                              borderRadius: "0.5px",
+                              flexShrink: 0,
+                              background: isLit ? DS.gold : "rgba(58,53,48,0.9)",
+                            }}
+                          />
+                        );
+                      })}
+                    </div>
+                    <div style={{ position: "relative", height: 13, marginBottom: 6 }}>
+                      {["1h", "2h", "3h", "4h"].map((lbl, i) => (
+                        <span key={lbl} style={{ position: "absolute", left: `${(i + 1) * 25}%`, transform: "translateX(-50%)", fontSize: 8, fontWeight: 500, color: "rgba(255,255,255,0.18)", letterSpacing: "0.5px", fontFamily: C.fs }}>
+                          {lbl}
+                        </span>
+                      ))}
+                    </div>
+                    <div style={{ fontSize: 10, color: "rgba(255,255,255,0.2)", fontFamily: C.fs }}>
+                      This week <span style={{ color: "rgba(255,255,255,0.5)" }}>{z2DoneFmt}</span> · Target <span style={{ color: "rgba(255,255,255,0.5)" }}>{z2TargetFmt}</span>
+                    </div>
+                    {z2Activities.length > 0 ? (
+                      <div style={{ display: "flex", flexDirection: "column", gap: 6, marginTop: 10 }}>
+                        {z2Activities.map((activity, idx) => (
+                          <div
+                            key={`${activity?.name || "a"}-${activity?.date || idx}`}
+                            style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 8, padding: "8px 10px", borderRadius: 12, background: "rgba(255,255,255,0.06)", border: "1px solid rgba(201,168,117,0.25)" }}
+                          >
+                            <div style={{ minWidth: 0 }}>
+                              <div style={{ fontFamily: C.fs, fontSize: 12, color: C.text, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{activity?.name || "Activity"}</div>
+                              <div style={{ fontFamily: C.fs, fontSize: 8, color: C.muted, marginTop: 2 }}>{activity?.type || "Workout"} · {activity?.date || "This week"}</div>
+                            </div>
+                            <div style={{ fontFamily: C.fs, fontSize: 9, color: DS.gold, whiteSpace: "nowrap" }}>{Math.max(0, Number(activity?.z2Minutes || 0))} min</div>
+                          </div>
+                        ))}
+                      </div>
+                    ) : null}
+                  </>
+                )}
               </div>
-              <div style={{ fontFamily: C.ff, fontWeight: 700, fontSize: 17, color: C.text, lineHeight: 1.15 }}>
-                {tomorrowSessionLabel}
-              </div>
-              <div style={{ fontFamily: C.fm, fontSize: 9, color: C.muted, letterSpacing: 2, marginTop: 4 }}>
-                {tomorrowStructure}
-              </div>
+            </div>
+
+            <div style={{ ...ghostCard, padding: "16px 18px" }}>
+              <div style={{ fontSize: 8, fontWeight: 600, color: "rgba(255,255,255,0.22)", letterSpacing: "3px", textTransform: "uppercase", marginBottom: 8, fontFamily: C.fs }}>Tomorrow</div>
+              <div style={{ fontSize: 17, fontWeight: 600, color: "#fff", lineHeight: 1.15, fontFamily: C.fs }}>{tomorrowSessionLabel}</div>
+              <div style={{ fontSize: 9, color: "rgba(255,255,255,0.28)", marginTop: 4, fontFamily: C.fs, lineHeight: 1.4 }}>{tomorrowStructure}</div>
             </div>
 
             {hasRaceCountdown && (
-              <div style={cardGlass}>
-                <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", gap: 12 }}>
+              <div style={creamCard}>
+                <div style={{ position: "absolute", top: 0, left: "5%", right: "5%", height: 1, background: "linear-gradient(90deg,transparent,rgba(255,255,255,0.85) 50%,transparent)", pointerEvents: "none" }} />
+                <div style={{ position: "absolute", top: -30, right: -30, width: 160, height: 130, background: "radial-gradient(ellipse at top right,rgba(255,255,255,0.35) 0%,transparent 65%)", pointerEvents: "none" }} />
+                <div style={{ padding: "18px 22px", position: "relative", zIndex: 1, display: "flex", justifyContent: "space-between", alignItems: "center", gap: 12 }}>
                   <div style={{ flex: 1, minWidth: 0 }}>
-                    <div style={{ fontFamily: C.fm, fontSize: 8, color: C.muted, letterSpacing: 3, textTransform: "uppercase" }}>
-                      NEXT RACE
-                    </div>
-                    <div style={{ fontFamily: C.ff, fontWeight: 700, fontSize: 15, color: C.text, lineHeight: 1.2, marginTop: 6 }}>
-                      {raceName}
-                    </div>
-                  </div>
-                  <div style={{ textAlign: "right", flexShrink: 0 }}>
-                    <div style={{ fontFamily: C.ff, fontWeight: 800, fontSize: 32, color: C.text, lineHeight: 1 }}>
-                      {daysAway}
-                    </div>
-                    <div style={{ fontFamily: C.fm, fontSize: 8, color: C.muted, letterSpacing: 3, textTransform: "uppercase", marginTop: 2 }}>
-                      DAYS
+                    <div style={{ fontSize: 9, fontWeight: 600, color: "rgba(13,14,16,0.3)", letterSpacing: "2.5px", textTransform: "uppercase", marginBottom: 5, fontFamily: C.fs }}>Next Race</div>
+                    <div style={{ fontSize: 14, fontWeight: 600, color: DS.base, letterSpacing: "-0.3px", marginBottom: 2, fontFamily: C.fs, lineHeight: 1.2 }}>{raceName}</div>
+                    <div style={{ fontSize: 10, color: "rgba(13,14,16,0.38)", fontFamily: C.fs }}>
+                      {raceTypeLabel} · {raceDateStr}
                     </div>
                   </div>
+                  <div style={{ textAlign: "right" }}>
+                    <div style={{ fontFamily: C.serif, fontSize: 48, color: DS.base, lineHeight: 1, letterSpacing: "-2px" }}>{daysAway}</div>
+                    <div style={{ fontSize: 9, fontWeight: 600, color: "rgba(13,14,16,0.3)", letterSpacing: "2px", textTransform: "uppercase", fontFamily: C.fs }}>Days</div>
+                  </div>
                 </div>
-                <div style={{ height: 1, background: EMBER.divider, margin: "14px 0 10px" }} />
-                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 6 }}>
-                  <span style={{ fontFamily: C.fm, fontSize: 8, color: C.muted, letterSpacing: 3, textTransform: "uppercase" }}>RACE READINESS</span>
-                  <span style={{ fontFamily: C.ff, fontWeight: 700, fontSize: 15, color: readinessColor }}>{readinessScore}%</span>
-                </div>
-                <div style={{ width: "100%", height: 6, borderRadius: 999, background: "rgba(255,140,50,0.12)", overflow: "hidden" }}>
-                  <div style={{ width: `${readinessScore}%`, height: "100%", background: readinessColor, borderRadius: 999, transition: "width 0.4s ease" }} />
+                <div style={{ padding: "0 22px 16px", position: "relative", zIndex: 1 }}>
+                  <div style={{ height: 1, background: "rgba(13,14,16,0.08)", marginBottom: 10 }} />
+                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 6 }}>
+                    <span style={{ fontFamily: C.fs, fontSize: 8, color: "rgba(13,14,16,0.35)", letterSpacing: 3, textTransform: "uppercase", fontWeight: 600 }}>Race readiness</span>
+                    <span style={{ fontFamily: C.fs, fontWeight: 700, fontSize: 15, color: readinessColor }}>{readinessScore}%</span>
+                  </div>
+                  <div style={{ width: "100%", height: 6, borderRadius: 999, background: "rgba(13,14,16,0.08)", overflow: "hidden" }}>
+                    <div style={{ width: `${readinessScore}%`, height: "100%", background: readinessColor, borderRadius: 999, transition: "width 0.4s ease" }} />
+                  </div>
                 </div>
               </div>
             )}
@@ -3700,7 +3683,7 @@ export default function App() {
           <div style={{ fontFamily: C.fm, color: C.muted, letterSpacing: 3, fontSize: 10, marginBottom: 16, textTransform: "uppercase" }}>NO TRAINING PLAN FOUND</div>
           <button
             onClick={() => setPlanBuilderOpen(true)}
-            style={{ background: EMBER.accent, color: "#1a0f06", border: "none", borderRadius: C.radius, padding: "16px 32px", fontFamily: C.ff, fontSize: 14, fontWeight: 700, letterSpacing: 2, cursor: "pointer" }}
+            style={{ background: DS.gold, color: "#1a0f06", border: "none", borderRadius: C.radius, padding: "16px 32px", fontFamily: C.ff, fontSize: 14, fontWeight: 700, letterSpacing: 2, cursor: "pointer" }}
           >
             BUILD MY PLAN
           </button>
@@ -3724,6 +3707,7 @@ export default function App() {
                 return (
                   <button
                     key={b.id}
+                    type="button"
                     onClick={() => {
                       setBlockId(b.id);
                       setWeekId(b.weeks[0].id);
@@ -3732,16 +3716,18 @@ export default function App() {
                     style={{
                       flexShrink:0,
                       padding:"8px 14px",
-                      background: active ? EMBER.glassHover : C.card,
-                      color: active ? EMBER.accent : C.muted,
-                      border: active ? `1px solid ${EMBER.accentBorder}` : `1px solid ${C.border}`,
-                      borderRadius:20,
                       cursor:"pointer",
                       fontFamily:C.fm,
                       fontSize:9,
                       letterSpacing:3,
                       textTransform:"uppercase",
-                      ...C.glass,
+                      color: active ? DS.gold : C.muted,
+                      borderRadius:18,
+                      border: active ? "1px solid rgba(245,240,232,0.42)" : "1px solid rgba(255,255,255,0.07)",
+                      background: active ? "rgba(255,255,255,0.08)" : "rgba(255,255,255,0.022)",
+                      backdropFilter:"blur(20px)",
+                      WebkitBackdropFilter:"blur(20px)",
+                      opacity: active ? 1 : 0.6,
                     }}
                   >
                     {b.label}
@@ -3757,6 +3743,7 @@ export default function App() {
               return (
                 <button
                   key={w.id}
+                  type="button"
                   onClick={() => {
                     setWeekId(w.id);
                     setSelDay(null);
@@ -3764,14 +3751,16 @@ export default function App() {
                   style={{
                     flexShrink:0,
                     padding:"8px 12px",
-                    background: active ? EMBER.glassHover : C.card,
-                    color: active ? EMBER.accent : C.muted,
-                    border: active ? `1px solid ${EMBER.accentBorder}` : `1px solid ${C.border}`,
-                    borderRadius:20,
                     cursor:"pointer",
                     textAlign:"left",
                     minWidth:76,
-                    ...C.glass,
+                    borderRadius:18,
+                    color: active ? DS.gold : C.muted,
+                    border: active ? "1px solid rgba(245,240,232,0.42)" : "1px solid rgba(255,255,255,0.07)",
+                    background: active ? "rgba(255,255,255,0.08)" : "rgba(255,255,255,0.022)",
+                    backdropFilter:"blur(20px)",
+                    WebkitBackdropFilter:"blur(20px)",
+                    opacity: active ? 1 : 0.6,
                   }}
                 >
                   <div style={{ fontFamily:C.fm, fontSize:9, letterSpacing:3, textTransform:"uppercase" }}>{w.label.includes("·") ? w.label.split("·")[1]?.trim() : w.label}</div>
@@ -3802,6 +3791,7 @@ export default function App() {
               return (
                 <button
                   key={d.day}
+                  type="button"
                   onClick={() => {
                     if (isSelected) {
                       setSelDay(null);
@@ -3811,10 +3801,16 @@ export default function App() {
                     setSess("am");
                   }}
                   style={{
+                    ...glassCard,
                     minHeight:140,
-                    background: isSelected ? EMBER.glassHover : C.card,
-                    border: isSelected ? `1.5px solid ${EMBER.accent}` : isToday ? `1px solid ${EMBER.accentBorder}` : `1px solid ${C.border}`,
-                    boxShadow: isToday ? "0 0 18px rgba(255,170,68,0.35)" : "none",
+                    marginBottom:0,
+                    background:"rgba(255,255,255,0.055)",
+                    border: isSelected
+                      ? "1px solid rgba(245,240,232,0.45)"
+                      : isToday
+                        ? "1px solid rgba(201,168,117,0.4)"
+                        : "1px solid rgba(255,255,255,0.13)",
+                    boxShadow: isToday && !isSelected ? "0 0 22px rgba(201,168,117,0.35)" : isSelected ? "0 0 18px rgba(245,240,232,0.12)" : "none",
                     borderRadius:C.radius,
                     padding:"8px 6px",
                     display:"flex",
@@ -3825,9 +3821,9 @@ export default function App() {
                     opacity: completed ? 0.6 : 1,
                     position:"relative",
                     overflow:"hidden",
-                    ...C.glass,
                   }}
                 >
+                  <div style={specularTop()} />
                   <div style={{ width:"100%", display:"flex", justifyContent:"space-between", alignItems:"center" }}>
                     <span style={{ fontFamily:C.fm, fontSize:9, color:C.muted, letterSpacing:3, textTransform:"uppercase" }}>{d.day}</span>
                     <span style={{ fontFamily:C.fm, fontSize:10, color:C.text }}>{dateLabel}</span>
@@ -3856,25 +3852,24 @@ export default function App() {
           {dayData && (
             <div
               style={{
+                ...glassCard,
                 marginTop: 16,
-                background: C.card,
-                border: `1px solid ${C.border}`,
-                borderRadius: C.radius,
+                marginBottom: 0,
                 overflow: "hidden",
                 maxHeight: dayData ? 520 : 0,
                 opacity: dayData ? 1 : 0,
                 transform: dayData ? "translateY(0)" : "translateY(-6px)",
                 transition: "max-height 200ms ease, opacity 200ms ease, transform 200ms ease",
-                ...C.glass,
               }}
             >
+              <div style={specularTop()} />
               {dayData.pm && (
-                <div style={{ display:"flex", borderBottom:`1px solid ${C.border}` }}>
+                <div style={{ display:"flex", borderBottom:`1px solid ${C.border}`, position:"relative", zIndex:1 }}>
                   {[["am","AM"],["pm","PM"]].map(([s,l]) => (
                     <button
                       key={s}
                       onClick={() => setSess(s)}
-                      style={{ flex:1, padding:"10px 12px", background:"transparent", border:"none", borderBottom: sess===s ? `1.5px solid ${EMBER.accent}` : "1.5px solid transparent", color: sess===s ? C.text : C.muted, cursor:"pointer", fontFamily:C.fm, fontSize:9, letterSpacing:3, textTransform:"uppercase" }}
+                      style={{ flex:1, padding:"10px 12px", background:"transparent", border:"none", borderBottom: sess===s ? `1.5px solid ${DS.gold}` : "1.5px solid transparent", color: sess===s ? C.text : C.muted, cursor:"pointer", fontFamily:C.fm, fontSize:9, letterSpacing:3, textTransform:"uppercase" }}
                     >
                       {l}
                     </button>
@@ -3882,7 +3877,7 @@ export default function App() {
                 </div>
               )}
 
-              <div style={{ padding:"14px 14px 16px", display:"flex", flexDirection:"column", gap:12 }}>
+              <div style={{ padding:"14px 14px 16px", display:"flex", flexDirection:"column", gap:12, position:"relative", zIndex:1 }}>
                 <div style={{ display:"flex", alignItems:"center", gap:10 }}>
                   <span style={{ fontFamily:C.fm, fontSize:8, color:selectedMeta.color, letterSpacing:2, textTransform:"uppercase", background:`${selectedMeta.color}22`, border:`1px solid ${selectedMeta.color}55`, borderRadius:4, padding:"2px 8px" }}>{selectedMeta.tag}</span>
                   {dayData?.ai_modified && <span style={{ fontFamily:C.fm, fontSize:8, color:"#9b59b6", letterSpacing:2, textTransform:"uppercase" }}>✦ AI MODIFIED</span>}
@@ -3927,13 +3922,14 @@ export default function App() {
             </div>
           )}
 
-          <div style={{ marginTop:16, background:C.card, border:`1px solid ${C.border}`, borderRadius:16, overflow:"hidden", ...C.glass }}>
-            <button onClick={() => setShowRecoveryGates((v) => !v)} style={{ width:"100%", display:"flex", justifyContent:"space-between", alignItems:"center", background:"transparent", border:"none", padding:"12px 14px", cursor:"pointer" }}>
+          <div style={{ ...glassCard, marginTop:16, borderRadius:16 }}>
+            <div style={specularTop()} />
+            <button type="button" onClick={() => setShowRecoveryGates((v) => !v)} style={{ width:"100%", display:"flex", justifyContent:"space-between", alignItems:"center", background:"transparent", border:"none", padding:"12px 14px", cursor:"pointer", position:"relative", zIndex:1 }}>
               <span style={{ fontFamily:C.fm, fontSize:10, color:C.cyan, letterSpacing:3, textTransform:"uppercase" }}>Recovery Gates</span>
               <span style={{ color:C.cyan, fontSize:12 }}>{showRecoveryGates ? "⌄" : "›"}</span>
             </button>
             {showRecoveryGates && (
-              <div style={{ padding:"0 14px 12px", display:"flex", flexDirection:"column", gap:8 }}>
+              <div style={{ padding:"0 14px 12px", display:"flex", flexDirection:"column", gap:8, position:"relative", zIndex:1 }}>
                 {[["GREEN",">66%",C.green,"Execute session as written."],["YELLOW","34–66%","#FFD600","Reduce intensity and shorten quality segments."],["RED","<34%",C.red,"Shift to recovery or mobility only."]].map(([gate, range, color, note]) => {
                   const active = whoopLabel(rec) === gate;
                   return (
@@ -3952,19 +3948,22 @@ export default function App() {
 
           <div style={{ marginTop:16 }}>
             <div style={{ fontFamily:C.fm, fontSize:10, color:C.cyan, letterSpacing:3, textTransform:"uppercase", marginBottom:8 }}>Weekly Structure</div>
-            <div style={{ background:C.card, border:`1px solid ${C.border}`, borderRadius:16, overflow:"hidden", ...C.glass }}>
-              {(week?.days || []).map((d, idx) => {
-                const sessionName = getSessionNameForDay(d, "am");
-                const iconMeta = getSessionIcon(d?.am, d?.am_session_custom);
-                const rowColor = iconMeta?.color || deriveSessionMeta(sessionName, d).color;
-                return (
-                  <div key={`${d.day}_${idx}`} style={{ display:"flex", alignItems:"center", gap:10, padding:"10px 12px", borderBottom: idx === (week?.days || []).length - 1 ? "none" : "1px solid #88888833" }}>
-                    <span style={{ width:6, height:6, borderRadius:"50%", background:rowColor, flexShrink:0 }} />
-                    <span style={{ fontFamily:C.fm, fontSize:9, color:C.text, letterSpacing:2, textTransform:"uppercase", minWidth:38 }}>{d.day}</span>
-                    <span style={{ fontFamily:C.fs, fontSize:11, color:"#ccc", lineHeight:1.4, display:"-webkit-box", WebkitLineClamp:2, WebkitBoxOrient:"vertical", overflow:"hidden", flex:1 }}>{getStructureLabel(d)}</span>
-                  </div>
-                );
-              })}
+            <div style={{ ...glassCard, borderRadius:16, marginBottom:0 }}>
+              <div style={specularTop()} />
+              <div style={{ position:"relative", zIndex:1 }}>
+                {(week?.days || []).map((d, idx) => {
+                  const sessionName = getSessionNameForDay(d, "am");
+                  const iconMeta = getSessionIcon(d?.am, d?.am_session_custom);
+                  const rowColor = iconMeta?.color || deriveSessionMeta(sessionName, d).color;
+                  return (
+                    <div key={`${d.day}_${idx}`} style={{ display:"flex", alignItems:"center", gap:10, padding:"10px 12px", borderBottom: idx === (week?.days || []).length - 1 ? "none" : "1px solid #88888833" }}>
+                      <span style={{ width:6, height:6, borderRadius:"50%", background:rowColor, flexShrink:0 }} />
+                      <span style={{ fontFamily:C.fm, fontSize:9, color:C.text, letterSpacing:2, textTransform:"uppercase", minWidth:38 }}>{d.day}</span>
+                      <span style={{ fontFamily:C.fs, fontSize:11, color:"#ccc", lineHeight:1.4, display:"-webkit-box", WebkitLineClamp:2, WebkitBoxOrient:"vertical", overflow:"hidden", flex:1 }}>{getStructureLabel(d)}</span>
+                    </div>
+                  );
+                })}
+              </div>
             </div>
           </div>
 
@@ -3996,30 +3995,30 @@ export default function App() {
                 const H = 200 + totalItems * 50 + groupKeys.length * 40 + 80;
                 canvas.width = W; canvas.height = H;
                 const ctx = canvas.getContext("2d");
-                ctx.fillStyle = "#0A0A0A"; ctx.fillRect(0, 0, W, H);
-                ctx.fillStyle = "#00F3FF"; ctx.font = "bold 32px 'Arial Black', sans-serif";
+                ctx.fillStyle = "#0D0E10"; ctx.fillRect(0, 0, W, H);
+                ctx.fillStyle = "#C9A875"; ctx.font = "bold 32px 'Arial Black', sans-serif";
                 ctx.fillText("MY SUPPLEMENT STACK", pad, 60);
-                ctx.fillStyle = "#888"; ctx.font = "12px monospace";
+                ctx.fillStyle = "#888"; ctx.font = "12px 'DM Sans', sans-serif";
                 ctx.fillText((profile?.name || "ATHLETE").toUpperCase() + " · DAILY PROTOCOL", pad, 85);
                 let y = 120;
                 const gcols = { MORNING:"#FFD600", AFTERNOON:"#FF3B30", NIGHT:"#0088FF", "DAILY TARGETS":"#888" };
                 groupKeys.forEach(g => {
-                  ctx.fillStyle = gcols[g] || "#888"; ctx.font = "bold 14px monospace"; ctx.fillText(g, pad, y); y += 28;
+                  ctx.fillStyle = gcols[g] || "#888"; ctx.font = "bold 14px 'DM Sans', sans-serif"; ctx.fillText(g, pad, y); y += 28;
                   groups[g].forEach(s => {
-                    ctx.fillStyle = "rgba(255,255,255,0.06)";
+                    ctx.fillStyle = "rgba(255,255,255,0.055)";
                     ctx.beginPath(); ctx.roundRect(pad, y - 16, W - pad * 2, 40, 8); ctx.fill();
-                    ctx.fillStyle = "#fff"; ctx.font = "16px sans-serif"; ctx.fillText(s.name, pad + 12, y + 6);
-                    ctx.fillStyle = "#888"; ctx.font = "12px monospace"; ctx.fillText(s.dose, W - pad - ctx.measureText(s.dose).width - 12, y + 6);
+                    ctx.fillStyle = "#fff"; ctx.font = "16px 'DM Sans', sans-serif"; ctx.fillText(s.name, pad + 12, y + 6);
+                    ctx.fillStyle = "#888"; ctx.font = "12px 'DM Sans', sans-serif"; ctx.fillText(s.dose, W - pad - ctx.measureText(s.dose).width - 12, y + 6);
                     y += 50;
                   });
                   y += 10;
                 });
                 const optBio = biomarkers.filter(b => b.flag === "OPTIMAL" || b.flag === "GOOD").slice(0, 3);
                 if (optBio.length > 0) {
-                  y += 10; ctx.fillStyle = "#00D4A0"; ctx.font = "bold 14px monospace"; ctx.fillText("OPTIMAL BIOMARKERS", pad, y); y += 28;
-                  optBio.forEach(b => { ctx.fillStyle = "#00D4A0"; ctx.font = "14px sans-serif"; ctx.fillText(`✓ ${b.label}: ${b.value}${b.unit?" "+b.unit:""}`, pad + 12, y); y += 24; });
+                  y += 10; ctx.fillStyle = "#00D4A0"; ctx.font = "bold 14px 'DM Sans', sans-serif"; ctx.fillText("OPTIMAL BIOMARKERS", pad, y); y += 28;
+                  optBio.forEach(b => { ctx.fillStyle = "#00D4A0"; ctx.font = "14px 'DM Sans', sans-serif"; ctx.fillText(`✓ ${b.label}: ${b.value}${b.unit?" "+b.unit:""}`, pad + 12, y); y += 24; });
                 }
-                y = H - 30; ctx.fillStyle = "#444"; ctx.font = "10px monospace"; ctx.fillText("△ HYBRID PERFORMANCE OS", pad, y);
+                y = H - 30; ctx.fillStyle = "#444"; ctx.font = "10px 'DM Sans', sans-serif"; ctx.fillText("△ HYBRID PERFORMANCE OS", pad, y);
                 const link = document.createElement("a");
                 link.download = "my-stack.png"; link.href = canvas.toDataURL("image/png"); link.click();
               }}
@@ -4049,13 +4048,16 @@ export default function App() {
                     <div style={{ flex:1, height:1, background:C.divider }} />
                   </div>
                   {items.map((item) => (
-                    <div key={item.id} style={{ background:C.card, borderRadius:C.radius, padding:"14px 16px", marginBottom:8, borderLeft:`3px solid ${color}44`, border:`1px solid ${C.border}`, ...C.glass }}>
-                      <div style={{ display:"flex", justifyContent:"space-between", alignItems:"flex-start", marginBottom:6 }}>
-                        <div style={{ fontFamily:C.ff, fontSize:16, letterSpacing:0.5, color:C.text }}>{item.name}</div>
-                        <div style={{ background:`${color}22`, border:`1px solid ${color}44`, borderRadius:20, padding:"3px 10px", fontFamily:C.fm, fontSize:8, color, letterSpacing:1, flexShrink:0, marginLeft:8 }}>{item.dose}</div>
+                    <div key={item.id} style={{ ...glassCard, padding:"14px 16px", marginBottom:8, borderLeft:`3px solid ${color}44` }}>
+                      <div style={specularTop()} />
+                      <div style={{ position:"relative", zIndex:1 }}>
+                        <div style={{ display:"flex", justifyContent:"space-between", alignItems:"flex-start", marginBottom:6 }}>
+                          <div style={{ fontFamily:C.ff, fontSize:16, letterSpacing:0.5, color:C.text }}>{item.name}</div>
+                          <div style={{ background:`${color}22`, border:`1px solid ${color}44`, borderRadius:20, padding:"3px 10px", fontFamily:C.fm, fontSize:8, color, letterSpacing:1, flexShrink:0, marginLeft:8 }}>{item.dose}</div>
+                        </div>
+                        <div style={{ fontFamily:C.fs, fontSize:12, color:C.muted, lineHeight:1.6, marginBottom:6 }}>{item.note}</div>
+                        <div style={{ fontFamily:C.fm, fontSize:7, color:C.light, letterSpacing:2 }}>TIMING: {item.timing}</div>
                       </div>
-                      <div style={{ fontFamily:C.fs, fontSize:12, color:C.muted, lineHeight:1.6, marginBottom:6 }}>{item.note}</div>
-                      <div style={{ fontFamily:C.fm, fontSize:7, color:C.light, letterSpacing:2 }}>TIMING: {item.timing}</div>
                     </div>
                   ))}
                 </div>
@@ -4096,19 +4098,19 @@ export default function App() {
 
         return (
           <div style={{ padding:"20px" }}>
-            <div style={{ fontFamily:C.ff, fontSize:28, letterSpacing:2, marginBottom:4 }}>PERFORMANCE<span style={{ color:EMBER.accent }}>.</span></div>
+            <div style={{ fontFamily:C.ff, fontSize:28, letterSpacing:2, marginBottom:4 }}>PERFORMANCE<span style={{ color:DS.gold }}>.</span></div>
             <div style={{ fontFamily:C.fm, fontSize:7, color:C.muted, letterSpacing:3, marginBottom:16, textTransform:"uppercase" }}>TRAINING ANALYTICS</div>
 
             {perfPlanHeader ? (
-              <div style={{ background:EMBER.glass, border:`1px solid ${EMBER.accentBorder}`, borderRadius:C.radius, padding:"18px 20px", marginBottom:16, ...C.glass }}>
-                <div style={{ fontFamily:C.fm, fontSize:9, color:EMBER.accent, letterSpacing:3, textTransform:"uppercase" }}>
+              <div style={{ background:"rgba(255,255,255,0.055)", border:`1px solid ${"rgba(201,168,117,0.4)"}`, borderRadius:C.radius, padding:"18px 20px", marginBottom:16, ...C.glass }}>
+                <div style={{ fontFamily:C.fm, fontSize:9, color:DS.gold, letterSpacing:3, textTransform:"uppercase" }}>
                   {perfPlanHeader.currentPhase} — WEEK {perfPlanHeader.currentWeekNum} OF {PERF_BLOCK_WEEKS_TOTAL}
                 </div>
                 <div style={{ fontFamily:C.fm, fontSize:10, color:C.light, marginTop:4, letterSpacing:1 }}>
                   {perfPlanHeader.weekDateRange} · {perfPlanHeader.weekType} WEEK
                 </div>
                 <div style={{ marginTop:10, height:4, background:"rgba(255,140,50,0.12)", borderRadius:2 }}>
-                  <div style={{ width:`${perfBarPct}%`, height:"100%", background:EMBER.accent, borderRadius:2 }} />
+                  <div style={{ width:`${perfBarPct}%`, height:"100%", background:DS.gold, borderRadius:2 }} />
                 </div>
                 <div style={{ fontFamily:C.fm, fontSize:9, color:C.muted, marginTop:4, letterSpacing:2, textTransform:"uppercase" }}>
                   {perfBlockPct}% OF BLOCK COMPLETE
@@ -4314,12 +4316,23 @@ export default function App() {
         </div>
       )}
 
-      <div style={{ position:"fixed", bottom:0, left:"50%", transform:"translateX(-50%)", width:"100%", maxWidth:480, background:"rgba(255,120,30,0.06)", borderTop:"1px solid rgba(255,140,50,0.1)", display:"flex", zIndex:100, backdropFilter:"blur(28px)", WebkitBackdropFilter:"blur(28px)" }}>
-        {[["today","⚡","TODAY"],["plan","📅","PLAN"],["perf","🏆","PERF"],["supps","💊","SUPPS"],["stats","📊","STATS"]].map(([id,icon,label]) => (
-          <button key={id} onClick={() => setNav(id)} style={{ flex:1, padding:"10px 4px 22px", background:"transparent", border:"none", cursor:"pointer", display:"flex", flexDirection:"column", alignItems:"center", gap:3 }}>
-            <div style={{ fontSize:18 }}>{icon}</div>
-            <div style={{ fontFamily:C.fm, fontSize:7, letterSpacing:2, color: nav===id ? EMBER.accent : "rgba(255,140,50,0.3)", fontWeight: nav===id ? 700 : 400, textTransform:"uppercase" }}>{label}</div>
-            {nav===id && <div style={{ width:4, height:4, borderRadius:"50%", background:EMBER.accent, marginTop:1 }} />}
+      <div style={{ position:"fixed", bottom:0, left:0, right:0, maxWidth:480, margin:"0 auto", background:"rgba(255,255,255,0.032)", backdropFilter:"blur(24px)", WebkitBackdropFilter:"blur(24px)", borderTop:"1px solid rgba(255,255,255,0.09)", display:"flex", justifyContent:"space-around", padding:"12px 16px 28px", zIndex:100 }}>
+        <div style={{ position:"absolute", top:0, left:"5%", right:"5%", height:1, background:"linear-gradient(90deg,transparent,rgba(255,255,255,0.2) 40%,rgba(255,255,255,0.2) 60%,transparent)", pointerEvents:"none" }} />
+        {[
+          { icon: "◎", label: "TODAY", key: "today" },
+          { icon: "▦", label: "PLAN", key: "plan" },
+          { icon: "◈", label: "SUPPS", key: "supps" },
+          { icon: "◉", label: "STATS", key: "stats" },
+          { icon: "▲", label: "PERF", key: "perf" },
+        ].map((tab) => (
+          <button
+            key={tab.key}
+            type="button"
+            onClick={() => setNav(tab.key)}
+            style={{ flex:1, display:"flex", flexDirection:"column", alignItems:"center", gap:4, cursor:"pointer", background:"transparent", border:"none", padding:0 }}
+          >
+            <div style={{ fontSize:17, color:nav===tab.key ? DS.gold : "rgba(255,255,255,0.18)", filter:nav===tab.key ? "drop-shadow(0 0 4px rgba(201,168,117,0.4))":"none" }}>{tab.icon}</div>
+            <div style={{ fontSize:8, fontWeight:600, letterSpacing:"1.5px", color:nav===tab.key ? DS.gold : "rgba(255,255,255,0.18)", fontFamily:C.fs, textTransform:"uppercase" }}>{tab.label}</div>
           </button>
         ))}
       </div>

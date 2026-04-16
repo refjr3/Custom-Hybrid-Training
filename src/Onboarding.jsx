@@ -13,9 +13,9 @@ const C = {
   yellow: "#ffd166",
   blue: "#7eb8ff",
   accent: "#ffaa44",
-  ff: "'Syne',sans-serif",
-  fm: "'Space Mono',monospace",
-  fs: "'Syne',sans-serif",
+  ff: "'DM Sans',sans-serif",
+  fm: "'DM Sans',sans-serif",
+  fs: "'DM Sans',sans-serif",
   glass: { backdropFilter: "blur(24px)", WebkitBackdropFilter: "blur(24px)" },
 };
 
