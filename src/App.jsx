@@ -46,7 +46,7 @@ const glassCard = {
   borderRadius: 22,
   border: "1px solid rgba(255,255,255,0.13)",
   overflow: "hidden",
-  marginBottom: 10,
+  marginBottom: 12,
 };
 
 const creamCard = {
@@ -57,7 +57,7 @@ const creamCard = {
   borderRadius: 22,
   border: "1px solid rgba(255,255,255,0.25)",
   overflow: "hidden",
-  marginBottom: 10,
+  marginBottom: 12,
 };
 
 const ghostCard = {
@@ -68,7 +68,7 @@ const ghostCard = {
   borderRadius: 18,
   border: "1px solid rgba(255,255,255,0.07)",
   overflow: "hidden",
-  marginBottom: 10,
+  marginBottom: 12,
   opacity: 0.6,
 };
 
@@ -81,6 +81,26 @@ const specularTop = (left = "8%", right = "8%") => ({
   background: "linear-gradient(90deg, transparent, rgba(255,255,255,0.35) 30%, rgba(255,255,255,0.5) 50%, rgba(255,255,255,0.35) 70%, transparent)",
   pointerEvents: "none",
 });
+
+const lbl = {
+  fontSize: 9,
+  fontWeight: 600,
+  color: "rgba(255,255,255,0.22)",
+  letterSpacing: "2.5px",
+  textTransform: "uppercase",
+  marginBottom: 14,
+  fontFamily: "'DM Sans',sans-serif",
+};
+
+const lblDark = {
+  fontSize: 9,
+  fontWeight: 600,
+  color: "rgba(13,14,16,0.32)",
+  letterSpacing: "2.5px",
+  textTransform: "uppercase",
+  marginBottom: 14,
+  fontFamily: "'DM Sans',sans-serif",
+};
 
 const C = {
   bg: DS.bg,
@@ -309,6 +329,83 @@ function meanFinite(arr) {
 function formatLocalYmd(date) {
   if (!(date instanceof Date) || Number.isNaN(date.getTime())) return null;
   return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(date.getDate()).padStart(2, "0")}`;
+}
+
+function addCalendarDaysToYmd(ymd, delta) {
+  const parts = String(ymd || "").split("-").map(Number);
+  const d = new Date(parts[0], parts[1] - 1, parts[2]);
+  if (Number.isNaN(d.getTime())) return ymd;
+  d.setDate(d.getDate() + delta);
+  return formatLocalYmd(d);
+}
+
+function mondayIsoContainingYmd(isoYmd) {
+  const d = new Date(`${isoYmd}T12:00:00`);
+  if (Number.isNaN(d.getTime())) return isoYmd;
+  const day = d.getDay();
+  const diff = day === 0 ? -6 : 1 - day;
+  d.setDate(d.getDate() + diff);
+  return formatLocalYmd(d);
+}
+
+function buildLast4WeeksComplianceGrid({ planBlocks, garminActivities, unifiedMetrics, todayIso }) {
+  const todayIsoSafe = todayIso || getDeviceLocalTodayYmd();
+  const PLAN_YEAR = parseInt(String(todayIsoSafe || "").slice(0, 4), 10) || 2026;
+  const planByIso = new Map();
+  if (Array.isArray(planBlocks)) {
+    for (const b of planBlocks) {
+      for (const w of b?.weeks || []) {
+        for (const day of w?.days || []) {
+          const label = day?.date || day?.date_label;
+          if (!label) continue;
+          const parsed = new Date(`${String(label).trim()} ${PLAN_YEAR}`);
+          if (Number.isNaN(parsed.getTime())) continue;
+          const iso = formatLocalYmd(parsed);
+          if (iso) planByIso.set(iso, day);
+        }
+      }
+    }
+  }
+  const monThis = mondayIsoContainingYmd(todayIsoSafe);
+  const startIso = addCalendarDaysToYmd(monThis, -21);
+  const last4WeeksCompliance = [];
+  let sessionsPlanned = 0;
+  let sessionsCompleted = 0;
+  for (let i = 0; i < 28; i++) {
+    const iso = addCalendarDaysToYmd(startIso, i);
+    const row = planByIso.get(iso);
+    const plannedTrain = row && (row.am_session || row.pm_session || row.am_session_custom || row.pm_session_custom || row.am || row.pm);
+    if (!plannedTrain) {
+      last4WeeksCompliance.push(0);
+      continue;
+    }
+    if (iso > todayIsoSafe) {
+      last4WeeksCompliance.push(0);
+      continue;
+    }
+    const hasGarmin = Array.isArray(garminActivities) && garminActivities.some(
+      (a) => String(a?.start_time || "").slice(0, 10) === iso && Number(a?.duration_seconds || 0) >= 60
+    );
+    const hasIntervals = Array.isArray(unifiedMetrics) && unifiedMetrics.some(
+      (m) =>
+        m?.source === "intervals"
+        && String(m?.date || "").slice(0, 10) === iso
+        && Number(m?.training_load ?? m?.strain ?? m?.active_calories ?? m?.steps ?? 0) > 0
+    );
+    const manual = row && (row.completed === true || row.done === true || row.manual_complete === true);
+    const done = hasGarmin || hasIntervals || manual;
+    sessionsPlanned += 1;
+    if (done) {
+      last4WeeksCompliance.push(1);
+      sessionsCompleted += 1;
+    } else if (iso < todayIsoSafe) {
+      last4WeeksCompliance.push(-1);
+    } else {
+      last4WeeksCompliance.push(0);
+    }
+  }
+  const compliancePct = sessionsPlanned > 0 ? Math.round((sessionsCompleted / sessionsPlanned) * 100) : 0;
+  return { last4WeeksCompliance, sessionsPlanned, sessionsCompleted, compliancePct };
 }
 
 function getDeviceLocalTodayYmd() {
@@ -918,6 +1015,45 @@ const SUPP_GROUP_COLORS = {
   NIGHT: C.blue,
   "DAILY TARGETS": "#aaa",
 };
+
+const HYROX_BESTS = [
+  { name: "SkiErg", icon: "◈", time: "4:09", race: "Miami", pct: 82 },
+  { name: "Sled Push", icon: "▶", time: "2:34", race: "Americas", pct: 95 },
+  { name: "Sled Pull", icon: "◀", time: "3:48", race: "Miami", pct: 78 },
+  { name: "Burpee Broad Jump", icon: "◉", time: "4:23", race: "Americas", pct: 70 },
+  { name: "Row Erg", icon: "▷", time: "4:19", race: "Americas", pct: 75 },
+  { name: "Farmers Carry", icon: "▲", time: "1:37", race: "Americas", pct: 98 },
+  { name: "Sandbag Lunges", icon: "◆", time: "3:59", race: "Miami", pct: 72 },
+  { name: "Wall Balls", icon: "○", time: "5:02", race: "Miami", pct: 62 },
+];
+
+const BLOOD_PANEL = [
+  { label: "Vitamin D", value: "26 ng/mL", status: "low", ref: "≥30 — insufficient" },
+  { label: "LDL", value: "111 mg/dL", status: "watch", ref: "ref <100" },
+  { label: "Creatinine", value: "1.30 mg/dL", status: "watch", ref: "ref ≤1.26" },
+  { label: "Testosterone", value: "883 ng/dL", status: "optimal", ref: "optimal range" },
+  { label: "HbA1c", value: "5.3%", status: "optimal", ref: "optimal" },
+  { label: "hs-CRP", value: "0.4 mg/L", status: "optimal", ref: "optimal" },
+  { label: "IGF-1", value: "151 ng/mL", status: "optimal", ref: "Z-score 0.0" },
+  { label: "Glucose", value: "82 mg/dL", status: "optimal", ref: "fasting optimal" },
+];
+
+const statusDot = { low: "#e74c3c", watch: "#C9A875", optimal: "#2a5c38" };
+
+const DEXA = [
+  { label: "Body Fat", value: "15.4", unit: "%", status: "watch", note: "target <14%" },
+  { label: "Lean Mass", value: "179", unit: "lb", status: "optimal", note: "optimal" },
+  { label: "VAT Area", value: "66", unit: "cm²", status: "optimal", note: "healthy range" },
+  { label: "Bone T-Score", value: "+2.2", unit: "SD", status: "optimal", note: "excellent" },
+];
+
+const HORMONES = [
+  { label: "Testosterone", value: 883, min: 300, max: 1000, unit: "ng/dL" },
+  { label: "Free T", value: 117, min: 50, max: 150, unit: "pg/mL" },
+  { label: "Cortisol", value: 12.6, min: 6, max: 23, unit: "mcg/dL" },
+  { label: "IGF-1", value: 151, min: 100, max: 300, unit: "ng/mL" },
+  { label: "DHEA-S", value: 164, min: 100, max: 500, unit: "mcg/dL" },
+];
 
 const WL = {
   "FOR TIME — Ultimate HYROX": { type:"FOR TIME", duration:"~55 min", tag:"HYROX SIM", accent:C.red, steps:["1km Run","1km Ski Erg","50m Sled Push","1km Run","1km Row Erg","80m Burpee Broad Jump","1km Run","2km Bike Erg","100m Sandbag Lunges","100 Wall Balls","1km Run — FINISH"], note:"Full send. Lap button each station. Track splits — this is your benchmark." },
@@ -3563,6 +3699,28 @@ export default function App() {
           || String(tomorrowDuration || "—");
         const gateWord = gateUpper.charAt(0) + gateUpper.slice(1).toLowerCase();
         const phaseNameHdr = perfHdr?.currentPhase || "Training";
+        const dayName = new Date().toLocaleDateString("en-US", { weekday: "long" });
+        const currentWeekNum = perfHdr?.currentWeekNum ?? 1;
+        const currentPhaseName = perfHdr?.currentPhase || "Training";
+        const currentWeekDaysStrip = todayEntry?.week?.days || [];
+        const isWeekDayDoneStrip = (d) => {
+          const iso = dayLabelToIso(d?.date || d?.date_label);
+          if (!iso) return false;
+          if (d?.completed === true || d?.done === true || d?.manual_complete === true) return true;
+          if (Array.isArray(garminActivities) && garminActivities.some((a) => String(a?.start_time || "").slice(0, 10) === iso)) return true;
+          return unifiedMetrics.some(
+            (m) =>
+              m?.source === "intervals"
+              && m?.date === iso
+              && Number(m?.training_load ?? m?.strain ?? m?.active_calories ?? m?.steps ?? 0) > 0
+          );
+        };
+        const daysCompletedThisWeek = currentWeekDaysStrip.filter(isWeekDayDoneStrip).length;
+        const jdStrip = new Date().getDay();
+        const todayWeekdayIndexStrip = jdStrip === 0 ? 6 : jdStrip - 1;
+        const litTicksStrip = Math.min(56, Math.max(0, daysCompletedThisWeek * 8));
+        const todayStripStart = todayWeekdayIndexStrip * 8;
+        const todayStripHighlight = Math.min(55, todayStripStart + 3);
         const raceDateStr = raceDate
           ? new Date(`${raceDate}T12:00:00`).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })
           : "";
@@ -3574,6 +3732,38 @@ export default function App() {
 
         return (
           <div style={{ padding: "12px 16px 20px", display: "flex", flexDirection: "column", gap: 14, overflowX: "hidden" }}>
+            <div style={{ fontSize: 10, fontWeight: 500, color: "rgba(255,255,255,0.22)", letterSpacing: "3px", textTransform: "uppercase", marginBottom: 10, fontFamily: C.fs }}>
+              {dayName} · Week {currentWeekNum} · {currentPhaseName}
+            </div>
+            <div style={{ display: "flex", gap: "2.5px", alignItems: "center", marginBottom: 24 }}>
+              {Array.from({ length: 56 }).map((_, i) => {
+                const inTodayBand = i >= todayStripStart && i < todayStripStart + 8;
+                const isHighlightTick = i === todayStripHighlight;
+                const gold = i < litTicksStrip;
+                const h = isHighlightTick ? 5 : 8;
+                let bg = "#3A3530";
+                if (gold) bg = "#C9A875";
+                else if (inTodayBand) bg = "rgba(201,168,117,0.35)";
+                return (
+                  <span
+                    key={i}
+                    style={{
+                      width: 1,
+                      flexShrink: 0,
+                      borderRadius: "0.5px",
+                      height: h,
+                      background: bg,
+                    }}
+                  />
+                );
+              })}
+            </div>
+            <div style={{ fontSize: 42, fontWeight: 600, color: "#fff", lineHeight: 1.05, letterSpacing: "-1.5px", marginBottom: 24, fontFamily: "'DM Sans',sans-serif" }}>
+              Make{" "}
+              <em style={{ fontFamily: "'DM Serif Display',serif", fontStyle: "italic", fontWeight: 400, letterSpacing: "-1.2px" }}>today</em>
+              <br />
+              count, {profile?.name?.split(" ")[0] || "Rafael"}.
+            </div>
             <div style={creamCard}>
               <div style={{ position: "absolute", top: 0, left: "5%", right: "5%", height: 1, background: "linear-gradient(90deg,transparent,rgba(255,255,255,0.9) 50%,transparent)", pointerEvents: "none" }} />
               <div style={{ position: "absolute", top: -30, right: -30, width: 160, height: 130, background: "radial-gradient(ellipse at top right, rgba(255,255,255,0.4) 0%, transparent 65%)", pointerEvents: "none" }} />
@@ -4207,253 +4397,331 @@ export default function App() {
       )}
 
       {nav === "perf" && (() => {
-        const last7 = garminActivities.filter(a => {
-          if (!a.start_time) return false;
-          const d = new Date(a.start_time);
-          return (Date.now() - d.getTime()) < 7 * 86400000;
-        });
-
         const complianceWeek = perfTrends?.complianceWeek;
-        const compliancePct = complianceWeek?.percent;
-        const complianceDays = Array.isArray(complianceWeek?.days) ? complianceWeek.days : [];
-        const prRows = Array.isArray(perfTrends?.personalRecordRows) ? perfTrends.personalRecordRows : [];
-        const perfPlanHeader = derivePerfPlanHeader(planBlocks);
-        const perfWeekNum = perfPlanHeader?.currentWeekNum ?? 0;
-        const perfBarPct = perfWeekNum > 0 ? Math.min((perfWeekNum / PERF_BLOCK_WEEKS_TOTAL) * 100, 100) : 0;
-        const perfBlockPct = perfWeekNum > 0 ? Math.round(perfBarPct) : 0;
-
-        const zoneColors = ["#555", C.blue, C.yellow, "#FF7700", C.red];
-        const zoneData = [0,0,0,0,0];
-        let totalZoneTime = 0;
-        last7.forEach(a => {
-          if (a.avg_hr) {
-            const hr = a.avg_hr;
-            const dur = a.duration_seconds || 0;
-            const zone = hr >= 163 ? 4 : hr >= 150 ? 3 : hr >= 147 ? 2 : hr >= 132 ? 1 : 0;
-            zoneData[zone] += dur;
-            totalZoneTime += dur;
-          }
+        const summary = perfTrends?.summary;
+        const atl = summary?.atl != null && Number.isFinite(Number(summary.atl)) ? String(summary.atl) : null;
+        const ctl = summary?.ctl != null && Number.isFinite(Number(summary.ctl)) ? String(summary.ctl) : null;
+        const tsbRaw = summary?.tsb;
+        const tsb = tsbRaw != null && Number.isFinite(Number(tsbRaw)) ? Number(tsbRaw) : null;
+        const todayIsoTrends = getLocalToday() || getDeviceLocalTodayYmd();
+        const heat = buildLast4WeeksComplianceGrid({
+          planBlocks,
+          garminActivities,
+          unifiedMetrics,
+          todayIso: todayIsoTrends,
         });
+        let compliancePct = heat.sessionsPlanned > 0 ? heat.compliancePct : (complianceWeek?.percent ?? 0);
+        if (heat.sessionsPlanned === 0 && complianceWeek?.percent != null) {
+          compliancePct = complianceWeek.percent;
+        }
+        const { last4WeeksCompliance, sessionsPlanned, sessionsCompleted } = heat.sessionsPlanned > 0
+          ? heat
+          : {
+            last4WeeksCompliance: Array.from({ length: 28 }, (_, i) => {
+              const d = Array.isArray(complianceWeek?.days) ? complianceWeek.days[i % 7] : null;
+              if (!d) return 0;
+              if (d.status === "completed") return 1;
+              if (d.status === "missed") return -1;
+              return 0;
+            }),
+            sessionsPlanned: (complianceWeek?.days || []).filter((d) => d.status !== "rest" && d.status !== "future").length || 0,
+            sessionsCompleted: (complianceWeek?.days || []).filter((d) => d.status === "completed").length || 0,
+          };
+
+        const hrv30Arr = Array.isArray(perfTrends?.hrv30) ? perfTrends.hrv30 : [];
+        const validH = hrv30Arr.filter(
+          (d) => d?.date && d.date <= (getLocalToday() || "") && d?.hrv != null && Number.isFinite(Number(d.hrv))
+        );
+        const currentHrv = perfTrends?.current?.hrv != null && Number.isFinite(Number(perfTrends.current.hrv))
+          ? Math.round(Number(perfTrends.current.hrv))
+          : (validH.length ? Math.round(Number(validH[validH.length - 1].hrv)) : Math.round(Number(whoopData?.recovery?.hrv_rmssd_milli ?? whoopData?.recovery?.hrv ?? 0)));
+        const last7h = validH.slice(-7).map((d) => Number(d.hrv));
+        const prev7h = validH.slice(-14, -7).map((d) => Number(d.hrv));
+        const hrvTrend = meanFinite(last7h) != null && meanFinite(prev7h) != null
+          ? Math.round(meanFinite(last7h) - meanFinite(prev7h))
+          : 0;
+        const hrvStartLabel = validH.length
+          ? new Date(`${validH[0].date}T12:00:00`).toLocaleDateString("en-US", { month: "short", day: "numeric" })
+          : "";
+        const hrvEndLabel = validH.length
+          ? new Date(`${validH[validH.length - 1].date}T12:00:00`).toLocaleDateString("en-US", { month: "short", day: "numeric" })
+          : "";
 
         return (
-          <div style={{ padding:"20px" }}>
-            <div style={{ fontFamily:C.ff, fontSize:28, letterSpacing:2, marginBottom:4 }}>PERFORMANCE<span style={{ color:DS.gold }}>.</span></div>
-            <div style={{ fontFamily:C.fm, fontSize:7, color:C.muted, letterSpacing:3, marginBottom:16, textTransform:"uppercase" }}>TRAINING ANALYTICS</div>
-
-            {perfPlanHeader ? (
-              <div style={{ background:"rgba(255,255,255,0.055)", border:`1px solid ${"rgba(201,168,117,0.4)"}`, borderRadius:C.radius, padding:"18px 20px", marginBottom:16, ...C.glass }}>
-                <div style={{ fontFamily:C.fm, fontSize:9, color:DS.gold, letterSpacing:3, textTransform:"uppercase" }}>
-                  {perfPlanHeader.currentPhase} — WEEK {perfPlanHeader.currentWeekNum} OF {PERF_BLOCK_WEEKS_TOTAL}
-                </div>
-                <div style={{ fontFamily:C.fm, fontSize:10, color:C.light, marginTop:4, letterSpacing:1 }}>
-                  {perfPlanHeader.weekDateRange} · {perfPlanHeader.weekType} WEEK
-                </div>
-                <div style={{ marginTop:10, height:4, background:"rgba(255,140,50,0.12)", borderRadius:2 }}>
-                  <div style={{ width:`${perfBarPct}%`, height:"100%", background:DS.gold, borderRadius:2 }} />
-                </div>
-                <div style={{ fontFamily:C.fm, fontSize:9, color:C.muted, marginTop:4, letterSpacing:2, textTransform:"uppercase" }}>
-                  {perfBlockPct}% OF BLOCK COMPLETE
-                </div>
-              </div>
-            ) : (
-              <div style={{ fontFamily:C.fm, fontSize:9, color:C.muted, letterSpacing:1, marginBottom:16, lineHeight:1.5, padding:"18px 20px", borderRadius:C.radius, border:`1px solid ${C.border}`, background:C.card, ...C.glass }}>
-                No plan loaded — phase and week context appear once your training block is on the Plan tab.
-              </div>
+          <div style={{ padding: "20px" }}>
+            {perfTrendsLoading && (
+              <div style={{ fontFamily: C.fm, fontSize: 10, color: C.muted, letterSpacing: 2, marginBottom: 12 }}>LOADING METRICS…</div>
             )}
 
-            {/* WEEKLY COMPLIANCE — insight-driven, above deep metrics */}
-            <div style={{ marginBottom:24 }}>
-              <div style={{ display:"flex", alignItems:"center", gap:10, marginBottom:12, flexWrap:"wrap" }}>
-                <div style={{ fontFamily:C.ff, fontSize:18, color:C.cyan, letterSpacing:2 }}>WEEKLY COMPLIANCE</div>
-                <div
-                  style={{
-                    fontFamily:C.ff,
-                    fontSize:24,
-                    color: compliancePct == null ? C.muted : compliancePct >= 80 ? C.green : compliancePct >= 50 ? C.yellow : C.red,
-                    fontWeight:700,
-                  }}
-                >
-                  {compliancePct != null ? `${compliancePct}%` : "—"}
-                </div>
-              </div>
-              <div style={{ fontFamily:C.fm, fontSize:11, color:C.muted, letterSpacing:0.3, marginBottom:12, lineHeight:1.5 }}>
-                {complianceWeek?.insight ?? complianceInsightFallback(compliancePct)}
-              </div>
-              {!perfTrendsLoading && perfTrends && complianceDays.length === 0 && (
-                <div style={{ fontFamily:C.fm, fontSize:9, color:C.muted, letterSpacing:1, marginBottom:10 }}>
-                  No training week matched today in your plan, or no plan days loaded.
-                </div>
-              )}
-              <div style={{ display:"flex", gap:4, marginBottom:4 }}>
-                {complianceDays.map((d, i) => {
-                  let icon = "—";
-                  let bg = C.card;
-                  if (d.status === "completed") {
-                    icon = "✅";
-                    bg = `${C.green}33`;
-                  } else if (d.status === "missed") {
-                    icon = "❌";
-                    bg = `${C.red}44`;
-                  } else if (d.status === "pending") {
-                    icon = "○";
-                    bg = `${C.cyan}22`;
-                  } else if (d.status === "future" || d.status === "rest") {
-                    icon = "—";
-                    bg = C.card;
-                  }
+            <div style={glassCard}>
+              <div style={specularTop()} />
+              <div style={{ position: "absolute", top: -20, right: -20, width: 120, height: 120, background: "radial-gradient(circle,rgba(210,190,155,0.1) 0%,transparent 70%)", pointerEvents: "none" }} />
+              <div style={{ padding: "20px 22px", position: "relative", zIndex: 1 }}>
+                <div style={lbl}>Station Bests</div>
+                {HYROX_BESTS.map((s, i) => {
+                  const barColor = s.pct >= 90 ? "#C9A875" : s.pct >= 75 ? "rgba(201,168,117,0.7)" : "rgba(201,168,117,0.45)";
                   return (
-                    <div key={`${d.day}_${i}`} style={{ flex:1, background:bg, borderRadius:8, padding:"8px 2px", textAlign:"center", border:`1px solid ${C.border}` }}>
-                      <div style={{ fontFamily:C.fm, fontSize:7, color:C.muted, letterSpacing:1, marginBottom:4 }}>{d.day}</div>
-                      <div style={{ fontSize:14, color: d.status === "pending" ? C.cyan : C.text, lineHeight:1 }}>{icon}</div>
+                    <div
+                      key={s.name}
+                      style={{
+                        display: "flex",
+                        alignItems: "center",
+                        gap: 12,
+                        padding: "9px 0",
+                        borderBottom: i < HYROX_BESTS.length - 1 ? "1px solid rgba(255,255,255,0.06)" : "none",
+                      }}
+                    >
+                      <div style={{ width: 28, height: 28, borderRadius: 8, background: "rgba(255,255,255,0.05)", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 12, color: barColor, flexShrink: 0 }}>{s.icon}</div>
+                      <div style={{ flex: 1, minWidth: 0 }}>
+                        <div style={{ fontSize: 12, fontWeight: 500, color: "rgba(255,255,255,0.7)", letterSpacing: "-0.2px", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{s.name}</div>
+                        <div style={{ fontSize: 9, color: "rgba(255,255,255,0.2)", marginTop: 1 }}>{s.race}</div>
+                      </div>
+                      <div style={{ width: 56, height: 3, background: "rgba(255,255,255,0.07)", borderRadius: 2, overflow: "hidden", flexShrink: 0 }}>
+                        <div style={{ height: "100%", width: `${s.pct}%`, background: barColor, borderRadius: 2 }} />
+                      </div>
+                      <div style={{ fontFamily: "'DM Serif Display',serif", fontSize: 16, color: "rgba(255,255,255,0.65)", width: 38, textAlign: "right", flexShrink: 0, letterSpacing: "-0.5px" }}>{s.time}</div>
                     </div>
                   );
                 })}
               </div>
             </div>
 
-            {perfTrendsLoading && (
-              <div style={{ fontFamily:C.fm, fontSize:10, color:C.muted, letterSpacing:2, marginBottom:20 }}>LOADING METRICS…</div>
-            )}
-            {!perfTrendsLoading && perfTrends && (
-              <PerfIntervalsBlocks trends={perfTrends} C={C} glow={glow} />
-            )}
-            {!perfTrendsLoading && !perfTrends && session?.access_token && (
-              <div style={{ fontFamily:C.fm, fontSize:9, color:C.muted, letterSpacing:1, marginBottom:20, lineHeight:1.5 }}>
-                No trend data yet. Sync from the Today tab, then return here.
-              </div>
-            )}
-
-            {/* ZONE DISTRIBUTION */}
-            <div style={{ marginBottom:24 }}>
-              <div style={{ fontFamily:C.ff, fontSize:18, color:C.cyan, letterSpacing:2, marginBottom:12 }}>ZONE DISTRIBUTION</div>
-              {totalZoneTime > 0 ? (
-                <div style={{ display:"flex", gap:6, height:120, alignItems:"flex-end" }}>
-                  {zoneData.map((t,i) => {
-                    const pct = totalZoneTime > 0 ? (t / totalZoneTime) * 100 : 0;
-                    return (
-                      <div key={i} style={{ flex:1, display:"flex", flexDirection:"column", alignItems:"center", gap:4 }}>
-                        <div style={{ fontFamily:C.fm, fontSize:8, color:zoneColors[i], fontWeight:700 }}>{Math.round(pct)}%</div>
-                        <div style={{ width:"100%", height:Math.max(pct * 0.8, 4), background:zoneColors[i], borderRadius:4, transition:"height 0.3s" }} />
-                        <div style={{ fontFamily:C.fm, fontSize:8, color:C.muted, letterSpacing:1 }}>Z{i+1}</div>
-                      </div>
-                    );
-                  })}
+            <div style={glassCard}>
+              <div style={specularTop()} />
+              <div style={{ position: "absolute", top: -20, right: -20, width: 120, height: 120, background: "radial-gradient(circle,rgba(210,190,155,0.1) 0%,transparent 70%)", pointerEvents: "none" }} />
+              <div style={{ padding: "20px 22px 14px", position: "relative", zIndex: 1 }}>
+                <div style={lbl}>Fitness vs Fatigue · 8 Weeks</div>
+                <div style={{ display: "flex", gap: 20, marginBottom: 16 }}>
+                  <div>
+                    <div style={{ fontFamily: "'DM Serif Display',serif", fontSize: 36, color: "#fff", letterSpacing: "-1.5px", lineHeight: 1 }}>{atl || "—"}</div>
+                    <div style={{ fontSize: 9, color: "rgba(255,255,255,0.3)", letterSpacing: "1.5px", textTransform: "uppercase", marginTop: 2 }}>ATL · Fatigue</div>
+                  </div>
+                  <div>
+                    <div style={{ fontFamily: "'DM Serif Display',serif", fontSize: 36, color: "rgba(255,255,255,0.45)", letterSpacing: "-1.5px", lineHeight: 1 }}>{ctl || "—"}</div>
+                    <div style={{ fontSize: 9, color: "rgba(255,255,255,0.2)", letterSpacing: "1.5px", textTransform: "uppercase", marginTop: 2 }}>CTL · Fitness</div>
+                  </div>
+                  {tsb !== null && (
+                    <div style={{ marginLeft: "auto", display: "flex", alignItems: "center" }}>
+                      <div style={{ background: `rgba(${tsb >= 0 ? "93,255,160" : "255,59,48"},0.1)`, border: `1px solid rgba(${tsb >= 0 ? "93,255,160" : "255,59,48"},0.2)`, borderRadius: 20, padding: "4px 12px", fontSize: 10, fontWeight: 600, color: tsb >= 0 ? "#5dffa0" : "#ff6b6b" }}>{tsb >= 0 ? "+" : ""}{tsb} TSB</div>
+                    </div>
+                  )}
                 </div>
-              ) : (
-                <div style={{ fontFamily:C.fm, fontSize:9, color:C.muted, letterSpacing:2, textAlign:"center", padding:20 }}>No HR zone data this week</div>
-              )}
+                <svg width="100%" height="80" viewBox="0 0 320 80" preserveAspectRatio="none">
+                  <defs>
+                    <linearGradient id="ctlG" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stopColor="rgba(201,168,117,0.3)" /><stop offset="100%" stopColor="rgba(201,168,117,0)" /></linearGradient>
+                    <linearGradient id="atlG" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stopColor="rgba(255,255,255,0.1)" /><stop offset="100%" stopColor="rgba(255,255,255,0)" /></linearGradient>
+                  </defs>
+                  <path d="M0 70 C40 65 80 58 120 52 S200 44 240 40 S290 38 320 36 L320 80 L0 80 Z" fill="url(#ctlG)" />
+                  <path d="M0 70 C40 65 80 58 120 52 S200 44 240 40 S290 38 320 36" fill="none" stroke="#C9A875" strokeWidth="1.5" strokeLinecap="round" />
+                  <path d="M0 74 C40 67 80 54 120 48 S190 34 230 30 S290 27 320 24 L320 80 L0 80 Z" fill="url(#atlG)" />
+                  <path d="M0 74 C40 67 80 54 120 48 S190 34 230 30 S290 27 320 24" fill="none" stroke="rgba(255,255,255,0.3)" strokeWidth="1.5" strokeLinecap="round" />
+                </svg>
+                <div style={{ display: "flex", gap: 16, marginTop: 10 }}>
+                  <div style={{ display: "flex", alignItems: "center", gap: 5 }}><span style={{ width: 16, height: 1.5, background: "#C9A875", display: "inline-block" }} /><span style={{ fontSize: 9, color: "rgba(255,255,255,0.3)" }}>CTL Fitness</span></div>
+                  <div style={{ display: "flex", alignItems: "center", gap: 5 }}><span style={{ width: 16, height: 1.5, background: "rgba(255,255,255,0.3)", display: "inline-block" }} /><span style={{ fontSize: 9, color: "rgba(255,255,255,0.3)" }}>ATL Fatigue</span></div>
+                </div>
+              </div>
             </div>
 
-            {/* PERSONAL RECORDS (from trends: garmin_activities + unified_metrics) */}
-            <div style={{ marginBottom:24 }}>
-              <div style={{ fontFamily:C.ff, fontSize:18, color:C.cyan, letterSpacing:2, marginBottom:12 }}>PERSONAL RECORDS</div>
-              {!perfTrendsLoading && perfTrends && prRows.length > 0 ? (
-                <div style={{ background:C.card, borderRadius:C.radius, border:`1px solid ${C.border}`, padding:"12px 14px", ...C.glass }}>
-                  {prRows.map((row, ri) => (
-                    <div
-                      key={row.key}
-                      style={{
-                        display:"grid",
-                        gridTemplateColumns:"minmax(100px,1fr) auto auto",
-                        gap:10,
-                        alignItems:"baseline",
-                        padding:"8px 0",
-                        borderBottom: ri === prRows.length - 1 ? "none" : `1px solid ${C.border}`,
-                        fontFamily:C.fm,
-                        fontSize:10,
-                        letterSpacing:1,
-                      }}
-                    >
-                      <span style={{ color:C.muted }}>{row.label}</span>
-                      <span style={{ color:C.cyan, textAlign:"right", minWidth:72 }}>{row.displayValue}</span>
-                      <span style={{ color:C.muted, textAlign:"right", fontSize:9, minWidth:64 }}>{row.displaySub}</span>
-                    </div>
+            <div style={glassCard}>
+              <div style={specularTop()} />
+              <div style={{ position: "absolute", top: -20, right: -20, width: 120, height: 120, background: "radial-gradient(circle,rgba(210,190,155,0.1) 0%,transparent 70%)", pointerEvents: "none" }} />
+              <div style={{ padding: "20px 22px", position: "relative", zIndex: 1 }}>
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 16 }}>
+                  <div style={lbl}>Compliance · Last 4 Weeks</div>
+                  <div style={{ fontFamily: "'DM Serif Display',serif", fontSize: 28, color: "#C9A875", letterSpacing: "-1px", lineHeight: 1 }}>{compliancePct}<span style={{ fontSize: 14, fontFamily: "'DM Sans',sans-serif", color: "rgba(201,168,117,0.6)" }}>%</span></div>
+                </div>
+                <div style={{ display: "grid", gridTemplateColumns: "repeat(7,1fr)", gap: 4, marginBottom: 4 }}>
+                  {["M", "T", "W", "T", "F", "S", "S"].map((d, i) => (
+                    <div key={i} style={{ textAlign: "center", fontSize: 8, fontWeight: 600, color: "rgba(255,255,255,0.2)", letterSpacing: "1px" }}>{d}</div>
                   ))}
                 </div>
-              ) : !perfTrendsLoading && perfTrends ? (
-                <div style={{ fontFamily:C.fm, fontSize:9, color:C.muted, letterSpacing:2, textAlign:"center", padding:16 }}>
-                  No PR data yet — sync more activities.
+                <div style={{ display: "grid", gridTemplateColumns: "repeat(7,1fr)", gap: 4 }}>
+                  {last4WeeksCompliance.map((v, i) => (
+                    <div
+                      key={i}
+                      style={{
+                        aspectRatio: "1",
+                        borderRadius: 5,
+                        background:
+                          v === 1
+                            ? `rgba(201,168,117,${0.52 + ((i * 7) % 5) * 0.07})`
+                            : v === -1
+                              ? "rgba(255,59,48,0.15)"
+                              : "rgba(255,255,255,0.04)",
+                        border: v === -1 ? "1px solid rgba(255,59,48,0.2)" : "none",
+                      }}
+                    />
+                  ))}
                 </div>
-              ) : null}
+                <div style={{ display: "flex", justifyContent: "space-between", marginTop: 14, alignItems: "center" }}>
+                  <div style={{ display: "flex", gap: 10, alignItems: "center" }}>
+                    <span style={{ display: "inline-flex", alignItems: "center", gap: 4, fontSize: 9, color: "rgba(255,255,255,0.3)" }}><span style={{ width: 8, height: 8, borderRadius: 2, background: "#C9A875", display: "inline-block" }} /> Done</span>
+                    <span style={{ display: "inline-flex", alignItems: "center", gap: 4, fontSize: 9, color: "rgba(255,255,255,0.3)" }}><span style={{ width: 8, height: 8, borderRadius: 2, background: "rgba(255,59,48,0.2)", border: "1px solid rgba(255,59,48,0.3)", display: "inline-block" }} /> Missed</span>
+                  </div>
+                  <div style={{ fontSize: 9, color: "rgba(255,255,255,0.2)" }}>{sessionsCompleted} of {sessionsPlanned} sessions</div>
+                </div>
+              </div>
             </div>
 
-            {/* RACE PREDICTIONS — deferred until VO2 from Garmin is wired */}
-            <div style={{ marginBottom:24 }}>
-              <div style={{ fontFamily:C.ff, fontSize:18, color:C.cyan, letterSpacing:2, marginBottom:8 }}>RACE PREDICTIONS</div>
-              <div style={{ fontFamily:C.fm, fontSize:9, color:C.muted, letterSpacing:1, lineHeight:1.6, padding:"10px 12px", background:C.card, borderRadius:C.radius, border:`1px solid ${C.border}`, ...C.glass }}>
-                Race predictions will use VO2 max from Garmin when that feed is available. Until then, use the VO2 trend above from your synced metrics.
+            <div style={glassCard}>
+              <div style={specularTop()} />
+              <div style={{ position: "absolute", top: -20, right: -20, width: 120, height: 120, background: "radial-gradient(circle,rgba(210,190,155,0.1) 0%,transparent 70%)", pointerEvents: "none" }} />
+              <div style={{ padding: "20px 22px 14px", position: "relative", zIndex: 1 }}>
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 16 }}>
+                  <div>
+                    <div style={lbl}>HRV · 30 Days</div>
+                    <div style={{ fontFamily: "'DM Serif Display',serif", fontSize: 48, color: "#fff", letterSpacing: "-2px", lineHeight: 1 }}>
+                      {currentHrv}<span style={{ fontSize: 18, color: "rgba(255,255,255,0.3)", fontFamily: "'DM Sans',sans-serif", marginLeft: 2 }}>ms</span>
+                    </div>
+                  </div>
+                  <div style={{ textAlign: "right", paddingTop: 20 }}>
+                    <div style={{ fontSize: 11, fontWeight: 600, color: hrvTrend >= 0 ? "#5dffa0" : "#ff6b6b" }}>{hrvTrend >= 0 ? "↑" : "↓"} {Math.abs(hrvTrend)}ms</div>
+                    <div style={{ fontSize: 9, color: "rgba(255,255,255,0.25)", marginTop: 2 }}>vs last week</div>
+                  </div>
+                </div>
+                <svg width="100%" height="60" viewBox="0 0 320 60" preserveAspectRatio="none">
+                  <defs>
+                    <linearGradient id="hrvG" x1="0" y1="0" x2="0" y2="1">
+                      <stop offset="0%" stopColor="rgba(201,168,117,0.25)" />
+                      <stop offset="100%" stopColor="rgba(201,168,117,0)" />
+                    </linearGradient>
+                  </defs>
+                  <path d="M0 40 C20 38 35 35 50 32 S75 28 90 30 S110 36 130 34 S155 25 175 22 S200 20 220 18 S250 15 270 17 S295 20 320 18 L320 60 L0 60 Z" fill="url(#hrvG)" />
+                  <path d="M0 40 C20 38 35 35 50 32 S75 28 90 30 S110 36 130 34 S155 25 175 22 S200 20 220 18 S250 15 270 17 S295 20 320 18" fill="none" stroke="#C9A875" strokeWidth="1.5" strokeLinecap="round" />
+                  <circle cx="320" cy="18" r="3" fill="#C9A875" />
+                  <circle cx="320" cy="18" r="6" fill="rgba(201,168,117,0.2)" />
+                </svg>
+                <div style={{ display: "flex", justifyContent: "space-between", marginTop: 6 }}>
+                  <span style={{ fontSize: 8, color: "rgba(255,255,255,0.18)" }}>{hrvStartLabel || "—"}</span>
+                  <span style={{ fontSize: 8, color: "rgba(255,255,255,0.18)" }}>{hrvEndLabel || "—"}</span>
+                </div>
               </div>
             </div>
           </div>
         );
       })()}
 
-      {nav === "stats" && (
-        <div style={{ padding:"20px" }}>
-          <div style={{ display:"flex", justifyContent:"space-between", alignItems:"flex-start", marginBottom:20 }}>
-            <div>
-              <div style={{ fontFamily:C.ff, fontSize:28, letterSpacing:2, marginBottom:4 }}>MY STATS<span style={{ color:C.green }}>.</span></div>
-              <div style={{ fontFamily:C.fm, fontSize:8, color:C.muted, letterSpacing:3 }}>BODY COMPOSITION + BLOOD PANEL</div>
-            </div>
-            <div>
-              <input ref={bloodworkInputRef} type="file" accept="image/*,.pdf" style={{ display:"none" }} onChange={e => { if (e.target.files?.[0]) handleBloodworkUpload(e.target.files[0]); }} />
-              <button onClick={() => bloodworkInputRef.current?.click()} disabled={bloodworkUploading}
-                style={{ padding:"10px 16px", background: bloodworkUploading ? C.card2 : C.green, color: bloodworkUploading ? C.muted : "#000", border:"none", borderRadius:10, cursor: bloodworkUploading ? "default" : "pointer", fontFamily:C.ff, fontSize:12, letterSpacing:2 }}>
-                {bloodworkUploading ? "ANALYZING..." : "UPLOAD LABS"}
-              </button>
-            </div>
-          </div>
-          {bloodworkResult && (
-            <div style={{ background: bloodworkResult.inserted ? `${C.green}15` : `${C.red}15`, border:`1px solid ${bloodworkResult.inserted ? C.green+"33" : C.red+"33"}`, borderRadius:10, padding:"12px 14px", marginBottom:16 }}>
-              <div style={{ fontFamily:C.fm, fontSize:8, color: bloodworkResult.inserted ? C.green : C.red, letterSpacing:2 }}>
-                {bloodworkResult.inserted ? `✓ ${bloodworkResult.count} MARKERS EXTRACTED` : bloodworkResult.error || "NO MARKERS FOUND"}
+      {nav === "stats" && (() => {
+        const sleepH = Number(whoopData?.sleep?.hours || 0);
+        const eff = Number(whoopData?.sleep?.efficiency || 0);
+        const awakeP = Math.max(0.03, Math.min(0.12, (100 - Math.min(100, Math.max(0, eff))) / 520 + 0.035));
+        const remP = 0.22;
+        const deepP = 0.17 + Math.min(0.12, eff / 750);
+        const lightP = Math.max(0.38, 1 - awakeP - remP - deepP);
+        const parts = [awakeP, remP, lightP, deepP];
+        const pSum = parts.reduce((a, b) => a + b, 0);
+        const [awakePct, remPct, lightPct, deepPct] = parts.map((p) => (p / pSum) * 100);
+        const sleepHm =
+          sleepH > 0
+            ? `${Math.floor(sleepH)}h ${String(Math.round((sleepH % 1) * 60)).padStart(2, "0")}m`
+            : "—";
+        const dexaStatusColor = (st) => (st === "watch" ? statusDot.watch : st === "low" ? statusDot.low : statusDot.optimal);
+        return (
+          <div style={{ padding: "20px" }}>
+            <div style={creamCard}>
+              <div style={{ position: "absolute", top: 0, left: "5%", right: "5%", height: 1, background: "linear-gradient(90deg,transparent,rgba(255,255,255,0.9) 50%,transparent)", pointerEvents: "none" }} />
+              <div style={{ position: "absolute", top: -30, right: -30, width: 160, height: 130, background: "radial-gradient(ellipse at top right,rgba(255,255,255,0.38) 0%,transparent 65%)", pointerEvents: "none" }} />
+              <div style={{ padding: "20px 22px", position: "relative", zIndex: 1 }}>
+                <div style={lblDark}>Blood Panel Flags</div>
+                {BLOOD_PANEL.map((row, i) => (
+                  <div
+                    key={row.label}
+                    style={{
+                      display: "flex",
+                      alignItems: "flex-start",
+                      justifyContent: "space-between",
+                      gap: 12,
+                      padding: "10px 0",
+                      borderBottom: i < BLOOD_PANEL.length - 1 ? "1px solid rgba(13,14,16,0.08)" : "none",
+                    }}
+                  >
+                    <div style={{ flex: 1, minWidth: 0 }}>
+                      <div style={{ fontFamily: C.fs, fontSize: 12, fontWeight: 600, color: DS.base, letterSpacing: "-0.2px" }}>{row.label}</div>
+                      <div style={{ fontFamily: C.fm, fontSize: 9, color: "rgba(13,14,16,0.38)", marginTop: 2 }}>{row.ref}</div>
+                    </div>
+                    <div style={{ textAlign: "right", flexShrink: 0 }}>
+                      <div style={{ display: "flex", alignItems: "center", justifyContent: "flex-end", gap: 6 }}>
+                        <span style={{ width: 7, height: 7, borderRadius: "50%", background: statusDot[row.status] || statusDot.watch, flexShrink: 0 }} />
+                        <span style={{ fontFamily: "'DM Serif Display',serif", fontSize: 17, color: "rgba(13,14,16,0.82)", letterSpacing: "-0.3px" }}>{row.value}</span>
+                      </div>
+                    </div>
+                  </div>
+                ))}
               </div>
             </div>
-          )}
-          {["DXA","BLOOD"].map(cat => {
-            const items = biomarkers.filter(b => b.category === cat);
-            if (!items.length) return null;
-            const latestDate = items[0]?.date_collected;
-            const dateStr = latestDate
-              ? new Date(latestDate).toLocaleDateString("en-US", { month:"short", day:"numeric", year:"numeric" }).toUpperCase()
-              : null;
-            const catLabel = cat === "DXA" ? "DXA SCAN" : "BLOOD PANEL";
-            return (
-              <div key={cat} style={{ marginBottom:20 }}>
-                <div style={{ display:"flex", alignItems:"center", gap:10, marginBottom:12 }}>
-                  <div style={{ fontFamily:C.ff, fontSize:20, color:C.cyan, letterSpacing:2 }}>{catLabel}</div>
-                  {dateStr && <div style={{ fontFamily:C.fm, fontSize:7, color:C.muted, letterSpacing:2 }}>{dateStr}</div>}
-                </div>
-                <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:8 }}>
-                  {items.map((b,i) => (
-                    <div key={i} style={{ background:C.card, borderRadius:C.radius, padding:"14px", border:`1px solid ${C.border}`, borderLeft: b.flag==="HIGH"||b.flag==="LOW" ? `3px solid ${C.red}` : b.flag==="OPTIMAL"||b.flag==="GOOD" ? `3px solid ${C.green}` : `1px solid ${C.border}`, boxShadow: b.flag==="HIGH"||b.flag==="LOW" ? `0 0 16px ${C.red}10` : "none", ...C.glass }}>
-                      <div style={{ fontFamily:C.fm, fontSize:7, color:C.muted, letterSpacing:3, marginBottom:6, textTransform:"uppercase" }}>{b.label}</div>
-                      <div style={{ fontFamily:C.ff, fontSize:22, color: b.flag==="HIGH"||b.flag==="LOW" ? C.red : b.flag==="OPTIMAL"||b.flag==="GOOD" ? C.green : C.text, fontWeight:700 }}>{b.value}{b.unit ? ` ${b.unit}` : ""}</div>
-                      {b.flag && <div style={{ fontFamily:C.fm, fontSize:7, color: b.flag==="HIGH"||b.flag==="LOW" ? C.red : b.flag==="OPTIMAL"||b.flag==="GOOD" ? C.green : C.muted, marginTop:4, letterSpacing:2 }}>● {b.flag}</div>}
+
+            <div style={creamCard}>
+              <div style={{ position: "absolute", top: 0, left: "5%", right: "5%", height: 1, background: "linear-gradient(90deg,transparent,rgba(255,255,255,0.9) 50%,transparent)", pointerEvents: "none" }} />
+              <div style={{ position: "absolute", top: -30, right: -30, width: 160, height: 130, background: "radial-gradient(ellipse at top right,rgba(255,255,255,0.38) 0%,transparent 65%)", pointerEvents: "none" }} />
+              <div style={{ padding: "20px 22px", position: "relative", zIndex: 1 }}>
+                <div style={lblDark}>DEXA Results</div>
+                <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
+                  {DEXA.map((row) => (
+                    <div key={row.label} style={{ borderRadius: 14, border: "1px solid rgba(13,14,16,0.08)", padding: "12px 12px 14px", background: "rgba(255,255,255,0.35)" }}>
+                      <div style={{ fontFamily: "'DM Serif Display',serif", fontSize: 30, color: DS.base, letterSpacing: "-1px", lineHeight: 1 }}>
+                        {row.value}
+                        <span style={{ fontSize: 12, fontFamily: C.fs, color: "rgba(13,14,16,0.45)", marginLeft: 2 }}>{row.unit}</span>
+                      </div>
+                      <div style={{ fontFamily: C.fs, fontSize: 10, fontWeight: 600, color: "rgba(13,14,16,0.55)", marginTop: 6 }}>{row.label}</div>
+                      <div style={{ fontFamily: C.fm, fontSize: 8, color: dexaStatusColor(row.status), marginTop: 4, letterSpacing: 0.5 }}>{row.note}</div>
                     </div>
                   ))}
                 </div>
               </div>
-            );
-          })}
-          <div>
-            <div style={{ display:"flex", alignItems:"center", gap:10, marginBottom:12 }}>
-              <div style={{ fontFamily:C.ff, fontSize:20, color:C.cyan, letterSpacing:2 }}>HR ZONES</div>
-              <div style={{ fontFamily:C.fm, fontSize:7, color:C.muted, letterSpacing:2 }}>LTHR 165–170 BPM</div>
             </div>
-            {HR_ZONES.map((z, i) => (
-              <div key={i} style={{ display:"flex", alignItems:"center", gap:12, padding:"12px 14px", background:C.card, borderRadius:12, marginBottom:6, borderLeft:`3px solid ${z.color}`, border:`1px solid ${C.border}`, ...C.glass }}>
-                <div style={{ fontFamily:C.ff, fontSize:16, color:z.color, minWidth:32 }}>{z.zone}</div>
-                <div style={{ flex:1 }}>
-                  <div style={{ fontFamily:C.ff, fontSize:14, color:C.text }}>{z.name}</div>
-                  <div style={{ fontFamily:C.fm, fontSize:7, color:C.muted, marginTop:2 }}>{z.pct} LTHR</div>
-                </div>
-                <div style={{ fontFamily:C.fm, fontSize:11, color:z.color, fontWeight:700 }}>{z.bpm}</div>
+
+            <div style={glassCard}>
+              <div style={specularTop()} />
+              <div style={{ position: "absolute", top: -20, right: -20, width: 120, height: 120, background: "radial-gradient(circle,rgba(210,190,155,0.1) 0%,transparent 70%)", pointerEvents: "none" }} />
+              <div style={{ padding: "20px 22px", position: "relative", zIndex: 1 }}>
+                <div style={lbl}>Hormone Ranges</div>
+                {HORMONES.map((h) => {
+                  const span = Math.max(1e-6, h.max - h.min);
+                  const pct = Math.min(100, Math.max(0, ((h.value - h.min) / span) * 100));
+                  return (
+                    <div key={h.label} style={{ marginBottom: 14 }}>
+                      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", marginBottom: 6 }}>
+                        <span style={{ fontSize: 11, fontWeight: 500, color: "rgba(255,255,255,0.72)" }}>{h.label}</span>
+                        <span style={{ fontFamily: "'DM Serif Display',serif", fontSize: 15, color: "rgba(255,255,255,0.65)" }}>{h.value} <span style={{ fontFamily: C.fs, fontSize: 9, color: "rgba(255,255,255,0.35)" }}>{h.unit}</span></span>
+                      </div>
+                      <div style={{ height: 5, borderRadius: 3, background: "linear-gradient(90deg,rgba(255,255,255,0.06),rgba(201,168,117,0.35),rgba(255,255,255,0.06))", overflow: "hidden" }}>
+                        <div style={{ height: "100%", width: `${pct}%`, background: "linear-gradient(90deg,#8a7349,#C9A875)", borderRadius: 3 }} />
+                      </div>
+                    </div>
+                  );
+                })}
               </div>
-            ))}
+            </div>
+
+            <div style={glassCard}>
+              <div style={specularTop()} />
+              <div style={{ position: "absolute", top: -20, right: -20, width: 120, height: 120, background: "radial-gradient(circle,rgba(210,190,155,0.1) 0%,transparent 70%)", pointerEvents: "none" }} />
+              <div style={{ padding: "20px 22px 16px", position: "relative", zIndex: 1 }}>
+                <div style={lbl}>Sleep Architecture</div>
+                <div style={{ fontFamily: "'DM Serif Display',serif", fontSize: 44, color: "#fff", letterSpacing: "-2px", lineHeight: 1, marginBottom: 14 }}>{sleepHm}</div>
+                <div style={{ display: "flex", height: 10, borderRadius: 6, overflow: "hidden", marginBottom: 12 }}>
+                  <div style={{ width: `${awakePct}%`, background: "rgba(255,255,255,0.85)" }} />
+                  <div style={{ width: `${remPct}%`, background: "#C9A875" }} />
+                  <div style={{ width: `${lightPct}%`, background: "rgba(201,168,117,0.4)" }} />
+                  <div style={{ width: `${deepPct}%`, background: "rgba(201,168,117,0.72)" }} />
+                </div>
+                <div style={{ display: "flex", flexWrap: "wrap", gap: 12, fontSize: 9, color: "rgba(255,255,255,0.32)" }}>
+                  <span><span style={{ display: "inline-block", width: 8, height: 8, borderRadius: 2, background: "rgba(255,255,255,0.85)", marginRight: 6, verticalAlign: "middle" }} />Awake ~{Math.round(awakePct)}%</span>
+                  <span><span style={{ display: "inline-block", width: 8, height: 8, borderRadius: 2, background: "#C9A875", marginRight: 6, verticalAlign: "middle" }} />REM ~{Math.round(remPct)}%</span>
+                  <span><span style={{ display: "inline-block", width: 8, height: 8, borderRadius: 2, background: "rgba(201,168,117,0.4)", marginRight: 6, verticalAlign: "middle" }} />Light ~{Math.round(lightPct)}%</span>
+                  <span><span style={{ display: "inline-block", width: 8, height: 8, borderRadius: 2, background: "rgba(201,168,117,0.72)", marginRight: 6, verticalAlign: "middle" }} />Deep ~{Math.round(deepPct)}%</span>
+                </div>
+                {whoopData?.sleep?.efficiency != null ? (
+                  <div style={{ fontSize: 9, color: "rgba(255,255,255,0.22)", marginTop: 10, fontFamily: C.fm }}>
+                    Sleep score {whoopData.sleep.score ?? "—"}% · efficiency {eff}%
+                  </div>
+                ) : null}
+              </div>
+            </div>
           </div>
-        </div>
-      )}
+        );
+      })()}
 
       <div style={{ position:"fixed", bottom:0, left:0, right:0, maxWidth:480, margin:"0 auto", background:"rgba(255,255,255,0.032)", backdropFilter:"blur(24px)", WebkitBackdropFilter:"blur(24px)", borderTop:"1px solid rgba(255,255,255,0.09)", display:"flex", justifyContent:"space-around", padding:"12px 16px 28px", zIndex:100 }}>
         <div style={{ position:"absolute", top:0, left:"5%", right:"5%", height:1, background:"linear-gradient(90deg,transparent,rgba(255,255,255,0.2) 40%,rgba(255,255,255,0.2) 60%,transparent)", pointerEvents:"none" }} />
