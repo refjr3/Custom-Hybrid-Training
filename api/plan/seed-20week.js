@@ -14,22 +14,25 @@ const PHASES = [
   { label: "Accumulation", short: "ACCUM", weeks: [5, 6, 7, 8] },
   { label: "Intensification", short: "INTENS", weeks: [9, 10, 11, 12] },
   { label: "Peak", short: "PEAK", weeks: [13, 14, 15, 16] },
-  { label: "Sharpen", short: "SHARP", weeks: [17, 18] },
-  { label: "Taper", short: "TAPER", weeks: [19] },
-  { label: "Race Week", short: "RACE", weeks: [20] },
+  { label: "Sharpen", short: "SHARP", weeks: [17, 18, 19] },
+  { label: "Taper", short: "TAPER", weeks: [20] },
+  { label: "Race Week", short: "RACE", weeks: [21] },
+  { label: "Recovery", short: "RECOV", weeks: [22] },
 ];
 
 const DELOAD_WEEKS = [4, 8, 12, 16];
-const RACE_WEEK = 20;
+const RACE_WEEK = 21;
+const RECOVERY_WEEK = 22;
 
 const getPhase = (w) => {
   if (w <= 4) return "base";
   if (w <= 8) return "accum";
   if (w <= 12) return "intens";
   if (w <= 16) return "peak";
-  if (w <= 18) return "sharpen";
-  if (w === 19) return "taper";
-  return "race";
+  if (w <= 19) return "sharpen";
+  if (w === 20) return "taper";
+  if (w === 21) return "race";
+  return "recovery";
 };
 
 const BLOCK_ID_BY_LABEL = {
@@ -40,6 +43,7 @@ const BLOCK_ID_BY_LABEL = {
   Sharpen: "sharpen_block",
   Taper: "taper_block",
   "Race Week": "race_week",
+  Recovery: "recovery_block",
 };
 
 const HYROX_MON = {
@@ -163,6 +167,14 @@ Sled Push 50m → Wall Balls 20 → Sandbag Lunge 20m → SkiErg 500m
 Stay fast. Do not fatigue. Legs need to be fresh.`,
   },
 
+  sharpen_w19: {
+    label: "HYROX",
+    note: `HYROX — Final Sharpen (70% Effort)
+3 stations only at 70% effort. Keep the feel.
+Sled Push 30m → Wall Balls 15 → SkiErg 250m
+Protect the legs. Race is 2 weeks away.`,
+  },
+
   taper: {
     label: "HYROX",
     note: `HYROX — Taper (Minimum Dose)
@@ -177,6 +189,16 @@ Minimum effective dose. Keep the feel. Nothing more.`,
 Visualize race execution — especially first 1km strategy.
 Mental prep begins today.`,
   },
+};
+
+const RECOVERY_SESSIONS = {
+  mon: { label: "Active Recovery", note: "Post-race active recovery. Easy walk or light mobility only. Let the body absorb the race." },
+  tue: { label: "Rest", note: "Full rest. No training. Eat well, sleep, hydrate." },
+  wed: { label: "Active Recovery", note: "20min easy walk or gentle swim if available. No structured training." },
+  thu: { label: "Rest", note: "Full rest or light mobility only." },
+  fri: { label: "Active Recovery", note: "Easy 20min jog if legs feel ready. No pressure." },
+  sat: { label: "Z2 Erg/Echo + Mobility", note: "Return to training — 30min easy erg. HR well below ceiling. Welcome back." },
+  sun: { label: "Rest", note: "Full rest. Block complete. Reflect on 22 weeks of work." },
 };
 
 const WED_SESSIONS = {
@@ -534,10 +556,12 @@ const SAT_SESSIONS = {
   17: { label: "Threshold", note: "Sharpen — Threshold Run 20min. Stay sharp. Do not race it. Protect the legs." },
   18: { label: "Track", note: "Sharpen — Track 4×400m sharp. 90sec rest. Fast not fatiguing. Log vs W14." },
   19: { label: "Shakeout", note: "Taper — 15min easy with 4 strides. Just wake up the legs. Nothing more." },
-  20: {
+  20: { label: "Easy Run", note: "Taper — 20min very easy Z2. Protect the legs. Race is next week." },
+  21: {
     label: "RACE DAY — HYROX Solo",
-    note: "AMAZFIT HYROX WASHINGTON DC — Men's Solo Open. Trust the taper. Trust the 20 weeks. Run first 1km conservative. Log every split.",
+    note: "AMAZFIT HYROX WASHINGTON DC — Men's Solo Open. Sep 5. Trust the taper. Trust the 22 weeks. Run first 1km conservative. Log every split.",
   },
+  22: { label: "Recovery Run", note: "Post-race — easy 20-30min jog if legs allow. Otherwise full rest." },
 };
 
 const SUN_SESSIONS = {
@@ -565,6 +589,7 @@ WALL BALL FINISHER: 3×15 wall balls with wet hands immediately after. No rest b
 WALL BALL FINISHER: 4×20 wall balls with wet hands. Simulate race finish conditions.`,
     },
     sharpen: { label: "20/20/20 Brick", note: "20/20/20 Brick — Back to base duration. Echo Bike → Run → SkiErg. Sharpen not fatigue. All at 133-148bpm." },
+    taper: { label: "20/20/20 Brick", note: "Taper brick — 15/15/15 easy only. HR well below ceiling. Race week next." },
     deload: { label: "20/20/20 Brick", note: "Deload Brick — 15/15/15 easy only. Well below strain target. Flush fatigue." },
   },
 
@@ -605,6 +630,8 @@ const WL_MAP = {
   "RACE DAY — HYROX Doubles": "RACE SIMULATION — Full HYROX",
   "Travel + Shakeout": "RECOVERY — Active Reset",
   Rest: "RECOVERY — Active Reset",
+  "Active Recovery": "RECOVERY — Active Reset",
+  "Recovery Run": "ZONE 2 — Easy Aerobic",
 };
 
 const PLAN_BLOCKS = [
@@ -612,9 +639,10 @@ const PLAN_BLOCKS = [
   { label: "Accumulation", short: "ACCUM", week_start: 5, week_end: 8 },
   { label: "Intensification", short: "INTENS", week_start: 9, week_end: 12 },
   { label: "Peak", short: "PEAK", week_start: 13, week_end: 16 },
-  { label: "Sharpen", short: "SHARP", week_start: 17, week_end: 18 },
-  { label: "Taper", short: "TAPER", week_start: 19, week_end: 19 },
-  { label: "Race Week", short: "RACE", week_start: 20, week_end: 20 },
+  { label: "Sharpen", short: "SHARP", week_start: 17, week_end: 19 },
+  { label: "Taper", short: "TAPER", week_start: 20, week_end: 20 },
+  { label: "Race Week", short: "RACE", week_start: 21, week_end: 21 },
+  { label: "Recovery", short: "RECOV", week_start: 22, week_end: 22 },
 ];
 
 const getUtcDateForOffset = (weekNum, dayIndex = 0) => {
@@ -641,6 +669,8 @@ const fmtWeekRange = (weekNum) => {
 
 const mapWorkoutLibraryKey = (label) => WL_MAP[label] || "ZONE 2 — Easy Aerobic";
 
+const RECOVERY_DAY_KEYS = ["mon", "tue", "wed", "thu", "fri", "sat", "sun"];
+
 const sessionForDay = (weekNum, dayIndex) => {
   const isOdd = weekNum % 2 !== 0;
   const isDeload = DELOAD_WEEKS.includes(weekNum);
@@ -649,13 +679,18 @@ const sessionForDay = (weekNum, dayIndex) => {
 
   let session = { label: "Rest", note: "Rest day." };
 
+  if (weekNum === RECOVERY_WEEK) {
+    const key = RECOVERY_DAY_KEYS[dayIndex];
+    return RECOVERY_SESSIONS[key];
+  }
+
   if (isRaceWeek) {
     if (dayIndex === 0) session = HYROX_MON.race_mon;
     else if (dayIndex === 1) session = TUE_SESSIONS.race;
     else if (dayIndex === 2) session = WED_SESSIONS.race_wed;
     else if (dayIndex === 3) session = THU_SESSIONS.race_thu;
     else if (dayIndex === 4) session = FRI_SESSIONS.race_fri;
-    else if (dayIndex === 5) session = { label: SAT_SESSIONS[20].label, note: SAT_SESSIONS[20].note };
+    else if (dayIndex === 5) session = { label: SAT_SESSIONS[RACE_WEEK].label, note: SAT_SESSIONS[RACE_WEEK].note };
     else if (dayIndex === 6) session = SUN_SESSIONS.race_sun;
   } else if (isDeload) {
     if (dayIndex === 0) {
@@ -685,7 +720,9 @@ const sessionForDay = (weekNum, dayIndex) => {
         else if (weekNum === 14) session = HYROX_MON.peak_w14;
         else session = HYROX_MON.peak_w15;
       } else if (phase === "sharpen") {
-        session = weekNum === 17 ? HYROX_MON.sharpen_w17 : HYROX_MON.sharpen_w18;
+        if (weekNum === 17) session = HYROX_MON.sharpen_w17;
+        else if (weekNum === 18) session = HYROX_MON.sharpen_w18;
+        else session = HYROX_MON.sharpen_w19;
       } else if (phase === "taper") session = HYROX_MON.taper;
     } else if (dayIndex === 1) {
       session = isOdd ? TUE_SESSIONS.standard : TUE_SESSIONS.brick;
@@ -724,13 +761,13 @@ const buildPlanRows = () => {
   const weeks = [];
   const days = [];
 
-  for (let weekNum = 1; weekNum <= 20; weekNum++) {
+  for (let weekNum = 1; weekNum <= 22; weekNum++) {
     const phaseObj = PHASES.find((p) => p.weeks.includes(weekNum));
     const weekInPhase = phaseObj.weeks.indexOf(weekNum) + 1;
     const blockId = BLOCK_ID_BY_LABEL[phaseObj.label];
-    const weekId = `hyrox20_${blockId}_w${weekInPhase}`;
+    const weekId = `hyrox22_${blockId}_w${weekInPhase}`;
     const isOdd = weekNum % 2 !== 0;
-    const weekType = isOdd ? "STANDARD" : "BRICK";
+    const weekType = weekNum === RECOVERY_WEEK ? "RECOVERY" : isOdd ? "STANDARD" : "BRICK";
 
     weeks.push({
       user_id: USER_ID,
@@ -739,7 +776,7 @@ const buildPlanRows = () => {
       label: `${phaseObj.label.toUpperCase()} WK ${weekInPhase}`,
       dates: fmtWeekRange(weekNum),
       phase: phaseObj.label,
-      subtitle: `Week ${weekNum} of 20 · ${weekType}`,
+      subtitle: `Week ${weekNum} of 22 · ${weekType}`,
       week_order: weekNum,
     });
 
@@ -755,7 +792,7 @@ const buildPlanRows = () => {
       const dayName = dayNames[dayIndex];
       const mappedSession = mapWorkoutLibraryKey(session.label);
       const isRaceDay =
-        weekNum === RACE_WEEK && (dayIndex === 5 || dayIndex === 6) && session.label.startsWith("RACE DAY");
+        weekNum === RACE_WEEK && (dayIndex === 5 || dayIndex === 6) && String(session.label).startsWith("RACE DAY");
 
       days.push({
         user_id: USER_ID,
@@ -827,7 +864,8 @@ export default async function handler(req, res) {
       first_monday: fmtDateLabel(firstMon),
       first_monday_iso: fmtIsoDate(firstMon),
       week_1_range: fmtWeekRange(1),
-      week_20_range: fmtWeekRange(20),
+      week_21_range: fmtWeekRange(21),
+      week_22_range: fmtWeekRange(22),
       phase_week_counts: PLAN_BLOCKS.reduce((acc, b) => {
         acc[b.label] = b.week_end - b.week_start + 1;
         return acc;
