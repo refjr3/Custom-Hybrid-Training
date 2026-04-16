@@ -321,6 +321,66 @@ function getDeviceLocalTomorrowYmd() {
   return formatLocalYmd(d);
 }
 
+/** Local Mon 00:00 → next Mon 00:00 (Garmin activity times). */
+function startOfCalendarWeekLocalMs(d = new Date()) {
+  const day = d.getDay();
+  const diff = day === 0 ? -6 : 1 - day;
+  const s = new Date(d);
+  s.setDate(d.getDate() + diff);
+  s.setHours(0, 0, 0, 0);
+  return s.getTime();
+}
+
+function endOfCalendarWeekLocalMs() {
+  const s = new Date(startOfCalendarWeekLocalMs());
+  s.setDate(s.getDate() + 7);
+  return s.getTime();
+}
+
+/** Sum duration (min) for activities whose average HR is in Z2 band (Garmin). */
+function weeklyZ2MinutesFromGarminActivities(activities) {
+  if (!Array.isArray(activities)) return 0;
+  const lo = startOfCalendarWeekLocalMs();
+  const hi = endOfCalendarWeekLocalMs();
+  let mins = 0;
+  for (const a of activities) {
+    if (!a?.start_time || a.avg_hr == null || !a.duration_seconds) continue;
+    const t = new Date(a.start_time).getTime();
+    if (t < lo || t >= hi) continue;
+    const hr = Number(a.avg_hr);
+    if (Number.isFinite(hr) && hr >= 132 && hr <= 151) {
+      mins += Math.max(0, Number(a.duration_seconds) || 0) / 60;
+    }
+  }
+  return Math.round(mins);
+}
+
+function garminZ2ActivityRowsThisWeek(activities) {
+  if (!Array.isArray(activities)) return [];
+  const lo = startOfCalendarWeekLocalMs();
+  const hi = endOfCalendarWeekLocalMs();
+  const cand = [];
+  for (const a of activities) {
+    if (!a?.start_time || a.avg_hr == null || !a.duration_seconds) continue;
+    const t = new Date(a.start_time).getTime();
+    if (t < lo || t >= hi) continue;
+    const hr = Number(a.avg_hr);
+    if (!Number.isFinite(hr) || hr < 132 || hr > 151) continue;
+    cand.push(a);
+  }
+  cand.sort((a, b) => new Date(b.start_time).getTime() - new Date(a.start_time).getTime());
+  return cand.map((a) => {
+    const mins = Math.round(Math.max(0, Number(a.duration_seconds) || 0) / 60);
+    const d = new Date(a.start_time);
+    return {
+      name: a.activity_name || a.name || a.activity_type || "Activity",
+      type: a.activity_type || "Workout",
+      date: d.toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric" }),
+      z2Minutes: mins,
+    };
+  });
+}
+
 function PerfIntervalsBlocks({ trends, C, glow }) {
   const [loadFlipped, setLoadFlipped] = useState(false);
   if (!trends) return null;
@@ -3256,16 +3316,33 @@ export default function App() {
 
       {nav === "today" && (() => {
         const perfHdr = derivePerfPlanHeader(planBlocks);
-        const z2TotalMinutes = Math.max(0, Number(stravaZ2Data?.totalMinutes || 0));
-        const z2TargetMinutes = Math.max(1, Number(stravaZ2Data?.targetMinutes || 240));
-        const z2Progress = Math.max(0, Math.min(100, Math.round((z2TotalMinutes / z2TargetMinutes) * 100)));
-        const z2Activities = Array.isArray(stravaZ2Data?.activities) ? stravaZ2Data.activities : [];
+        const TARGET_Z2_MIN = 240;
         const formatMinutesLabel = (mins) => {
           const safe = Math.max(0, Number(mins || 0));
           const hours = Math.floor(safe / 60);
           const minutes = safe % 60;
           return `${hours}h ${String(minutes).padStart(2, "0")}min`;
         };
+        const weeklyZ2Minutes = (() => {
+          if (stravaConnected) {
+            if (stravaZ2Data != null) return Math.max(0, Number(stravaZ2Data.totalMinutes) || 0);
+            return 0;
+          }
+          if (garminConnected && Array.isArray(garminActivities)) {
+            return weeklyZ2MinutesFromGarminActivities(garminActivities);
+          }
+          return 0;
+        })();
+        const z2WearableConnected = stravaConnected || garminConnected;
+        const z2HeaderDone = !z2WearableConnected ? "—" : stravaConnected && stravaZ2Loading ? "…" : String(Math.round(weeklyZ2Minutes));
+        const z2ActivitiesList = (() => {
+          if (stravaConnected) {
+            if (stravaZ2Loading || stravaZ2Error) return [];
+            return Array.isArray(stravaZ2Data?.activities) ? stravaZ2Data.activities : [];
+          }
+          if (garminConnected) return garminZ2ActivityRowsThisWeek(garminActivities);
+          return [];
+        })();
         const headerDateShort = new Date().toLocaleDateString("en-US", { month: "short", day: "numeric" }).toUpperCase();
         const todayDateIso = getDeviceLocalTodayYmd();
         const PLAN_YEAR = parseInt(String(todayDateIso || "").slice(0, 4), 10) || 2026;
@@ -3418,9 +3495,6 @@ export default function App() {
         const weekNumHdr = perfHdr?.currentWeekNum ?? 1;
         const phaseNameHdr = perfHdr?.currentPhase || "Training";
         const daysCompletedTicks = Math.min(56, Math.max(0, completedForWeek * 8));
-        const z2TickLit = Math.min(80, Math.round((z2TotalMinutes / z2TargetMinutes) * 80));
-        const z2DoneFmt = formatMinutesLabel(z2TotalMinutes);
-        const z2TargetFmt = formatMinutesLabel(z2TargetMinutes);
         const raceDateStr = raceDate
           ? new Date(`${raceDate}T12:00:00`).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })
           : "";
@@ -3561,82 +3635,127 @@ export default function App() {
               </div>
             </div>
 
-            <div style={glassCard}>
-              <div style={specularTop()} />
-              <div style={{ padding: "16px 20px 18px", position: "relative", zIndex: 1 }}>
-                <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 12 }}>
-                  <div style={{ fontSize: 9, fontWeight: 600, color: "rgba(255,255,255,0.22)", letterSpacing: "2.5px", textTransform: "uppercase", fontFamily: C.fs }}>Weekly Z2 Time</div>
-                  <div style={{ fontSize: 12, fontWeight: 600, color: DS.gold, fontFamily: C.fs }}>{Math.round(z2TotalMinutes)} / {Math.round(z2TargetMinutes)} min</div>
-                </div>
-                {stravaZ2Loading ? (
-                  <div style={{ fontFamily: C.fs, fontSize: 10, color: C.muted }}>Loading Z2 data…</div>
-                ) : !stravaConnected ? (
-                  <a
-                    href={session?.user?.id ? `/api/strava/login?uid=${encodeURIComponent(session.user.id)}` : "/api/strava/login"}
-                    style={{ display: "inline-block", background: DS.gold, color: DS.base, borderRadius: 10, padding: "10px 14px", fontFamily: C.fs, fontSize: 10, fontWeight: 600, letterSpacing: 2, textDecoration: "none", textTransform: "uppercase" }}
-                  >
-                    Connect Strava
-                  </a>
-                ) : stravaZ2Error ? (
-                  <div>
-                    <div style={{ fontFamily: C.fs, fontSize: 10, color: C.red }}>{stravaZ2Error}</div>
-                    <button type="button" onClick={fetchStravaWeeklyZ2} style={{ marginTop: 10, background: "transparent", border: `1px solid ${C.border}`, borderRadius: 10, padding: "8px 12px", color: C.text, fontFamily: C.fs, fontSize: 9, cursor: "pointer" }}>Retry</button>
-                  </div>
-                ) : (
-                  <>
-                    <div style={{ display: "flex", gap: "1.8px", alignItems: "flex-end", marginBottom: 5, flexWrap: "wrap" }}>
-                      {Array.from({ length: 80 }).map((_, i) => {
-                        const isHour = [19, 39, 59, 79].includes(i);
-                        const isLit = i < z2TickLit;
-                        return (
-                          <span
-                            key={i}
-                            style={{
-                              width: 1,
-                              height: isHour ? 11 : 6,
-                              borderRadius: "0.5px",
-                              flexShrink: 0,
-                              background: isLit ? DS.gold : "rgba(58,53,48,0.9)",
-                            }}
-                          />
-                        );
-                      })}
-                    </div>
-                    <div style={{ position: "relative", height: 13, marginBottom: 6 }}>
-                      {["1h", "2h", "3h", "4h"].map((lbl, i) => (
-                        <span key={lbl} style={{ position: "absolute", left: `${(i + 1) * 25}%`, transform: "translateX(-50%)", fontSize: 8, fontWeight: 500, color: "rgba(255,255,255,0.18)", letterSpacing: "0.5px", fontFamily: C.fs }}>
-                          {lbl}
-                        </span>
-                      ))}
-                    </div>
-                    <div style={{ fontSize: 10, color: "rgba(255,255,255,0.2)", fontFamily: C.fs }}>
-                      This week <span style={{ color: "rgba(255,255,255,0.5)" }}>{z2DoneFmt}</span> · Target <span style={{ color: "rgba(255,255,255,0.5)" }}>{z2TargetFmt}</span>
-                    </div>
-                    {z2Activities.length > 0 ? (
-                      <div style={{ display: "flex", flexDirection: "column", gap: 6, marginTop: 10 }}>
-                        {z2Activities.map((activity, idx) => (
-                          <div
-                            key={`${activity?.name || "a"}-${activity?.date || idx}`}
-                            style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 8, padding: "8px 10px", borderRadius: 12, background: "rgba(255,255,255,0.06)", border: "1px solid rgba(201,168,117,0.25)" }}
-                          >
-                            <div style={{ minWidth: 0 }}>
-                              <div style={{ fontFamily: C.fs, fontSize: 12, color: C.text, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{activity?.name || "Activity"}</div>
-                              <div style={{ fontFamily: C.fs, fontSize: 8, color: C.muted, marginTop: 2 }}>{activity?.type || "Workout"} · {activity?.date || "This week"}</div>
-                            </div>
-                            <div style={{ fontFamily: C.fs, fontSize: 9, color: DS.gold, whiteSpace: "nowrap" }}>{Math.max(0, Number(activity?.z2Minutes || 0))} min</div>
-                          </div>
-                        ))}
-                      </div>
-                    ) : null}
-                  </>
-                )}
-              </div>
-            </div>
-
             <div style={{ ...ghostCard, padding: "16px 18px" }}>
               <div style={{ fontSize: 8, fontWeight: 600, color: "rgba(255,255,255,0.22)", letterSpacing: "3px", textTransform: "uppercase", marginBottom: 8, fontFamily: C.fs }}>Tomorrow</div>
               <div style={{ fontSize: 17, fontWeight: 600, color: "#fff", lineHeight: 1.15, fontFamily: C.fs }}>{tomorrowSessionLabel}</div>
               <div style={{ fontSize: 9, color: "rgba(255,255,255,0.28)", marginTop: 4, fontFamily: C.fs, lineHeight: 1.4 }}>{tomorrowStructure}</div>
+            </div>
+
+            {/* Z2 Weekly Progress */}
+            <div style={glassCard}>
+              <div style={specularTop()} />
+              <div style={{ position: "absolute", top: -20, right: -20, width: 120, height: 120, background: "radial-gradient(circle,rgba(210,190,155,0.10) 0%,transparent 70%)", pointerEvents: "none" }} />
+              <div style={{ padding: "16px 20px 18px", position: "relative", zIndex: 1 }}>
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 12, gap: 8 }}>
+                  <div style={{ fontSize: 9, fontWeight: 600, color: "rgba(255,255,255,0.22)", letterSpacing: "2.5px", textTransform: "uppercase", fontFamily: C.fs }}>Weekly Z2 Time</div>
+                  <div style={{ fontSize: 12, fontWeight: 600, color: DS.gold, fontFamily: C.fs, flexShrink: 0 }}>{z2HeaderDone} / {TARGET_Z2_MIN} min</div>
+                </div>
+                {stravaConnected && stravaZ2Loading ? (
+                  <div style={{ fontFamily: C.fs, fontSize: 10, color: C.muted, marginBottom: 10 }}>Loading Z2 data…</div>
+                ) : null}
+                {stravaConnected && stravaZ2Error ? (
+                  <div style={{ marginBottom: 10 }}>
+                    <div style={{ fontFamily: C.fs, fontSize: 10, color: C.red }}>{stravaZ2Error}</div>
+                    <button type="button" onClick={fetchStravaWeeklyZ2} style={{ marginTop: 10, background: "transparent", border: `1px solid ${C.border}`, borderRadius: 10, padding: "8px 12px", color: C.text, fontFamily: C.fs, fontSize: 9, cursor: "pointer" }}>Retry</button>
+                  </div>
+                ) : null}
+                {!z2WearableConnected ? (
+                  <div style={{ marginBottom: 10, display: "flex", flexWrap: "wrap", gap: 12, alignItems: "center" }}>
+                    <a
+                      href={session?.user?.id ? `/api/strava/login?uid=${encodeURIComponent(session.user.id)}` : "/api/strava/login"}
+                      style={{ fontSize: 10, fontWeight: 600, color: DS.gold, fontFamily: C.fs, textDecoration: "none" }}
+                    >
+                      Connect Strava
+                    </a>
+                    <a
+                      href={session?.user?.id ? `/api/auth/garmin-login?user_id=${encodeURIComponent(session.user.id)}` : "/api/auth/garmin-login"}
+                      style={{ fontSize: 10, fontWeight: 600, color: DS.gold, fontFamily: C.fs, textDecoration: "none" }}
+                    >
+                      Connect Garmin
+                    </a>
+                  </div>
+                ) : null}
+                <div style={{ overflowX: "auto", WebkitOverflowScrolling: "touch", marginBottom: 4 }}>
+                  {(() => {
+                    const TARGET_MIN = TARGET_Z2_MIN;
+                    const DONE_MIN = weeklyZ2Minutes || 0;
+                    const TOTAL_TICKS = 80;
+                    const LIT_TICKS = Math.min(Math.round((DONE_MIN / TARGET_MIN) * TOTAL_TICKS), TOTAL_TICKS);
+                    const TICK_WIDTH = 1;
+                    const TICK_GAP = 1.8;
+                    const TICK_STRIDE = TICK_WIDTH + TICK_GAP;
+                    const TOTAL_WIDTH = TOTAL_TICKS * TICK_STRIDE - TICK_GAP;
+                    const HOUR_TICKS = [20, 40, 60, 80];
+                    const HOUR_LABELS = ["1h", "2h", "3h", "4h"];
+                    return (
+                      <div style={{ position: "relative", width: TOTAL_WIDTH, maxWidth: "100%", minWidth: 0 }}>
+                        <div style={{ display: "flex", gap: `${TICK_GAP}px`, alignItems: "flex-end" }}>
+                          {Array.from({ length: TOTAL_TICKS }).map((_, i) => {
+                            const isHour = HOUR_TICKS.includes(i + 1);
+                            const isLit = i < LIT_TICKS;
+                            return (
+                              <span
+                                key={i}
+                                style={{
+                                  width: TICK_WIDTH,
+                                  height: isHour ? 11 : 6,
+                                  flexShrink: 0,
+                                  borderRadius: "0.5px",
+                                  background: isLit ? "#C9A875" : "rgba(58,53,48,0.9)",
+                                }}
+                              />
+                            );
+                          })}
+                        </div>
+                        <div style={{ position: "relative", height: 16, marginTop: 4 }}>
+                          {HOUR_TICKS.map((tickIdx, i) => {
+                            const leftPx = (tickIdx - 1) * TICK_STRIDE;
+                            return (
+                              <span
+                                key={tickIdx}
+                                style={{
+                                  position: "absolute",
+                                  left: leftPx,
+                                  transform: "translateX(-50%)",
+                                  fontSize: 8,
+                                  fontWeight: 500,
+                                  color: "rgba(255,255,255,0.18)",
+                                  letterSpacing: "0.5px",
+                                  whiteSpace: "nowrap",
+                                  fontFamily: C.fs,
+                                }}
+                              >
+                                {HOUR_LABELS[i]}
+                              </span>
+                            );
+                          })}
+                        </div>
+                      </div>
+                    );
+                  })()}
+                </div>
+                <div style={{ fontSize: 10, color: "rgba(255,255,255,0.2)", marginTop: 14, fontFamily: C.fs }}>
+                  This week <span style={{ color: "rgba(255,255,255,0.5)" }}>{z2WearableConnected ? formatMinutesLabel(weeklyZ2Minutes) : "—"}</span>
+                  {" · Target "}
+                  <span style={{ color: "rgba(255,255,255,0.5)" }}>{formatMinutesLabel(TARGET_Z2_MIN)}</span>
+                </div>
+                {z2ActivitiesList.length > 0 ? (
+                  <div style={{ display: "flex", flexDirection: "column", gap: 6, marginTop: 10 }}>
+                    {z2ActivitiesList.map((activity, idx) => (
+                      <div
+                        key={`${activity?.name || "a"}-${activity?.date || idx}`}
+                        style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 8, padding: "8px 10px", borderRadius: 12, background: "rgba(255,255,255,0.06)", border: "1px solid rgba(201,168,117,0.25)" }}
+                      >
+                        <div style={{ minWidth: 0 }}>
+                          <div style={{ fontFamily: C.fs, fontSize: 12, color: C.text, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{activity?.name || "Activity"}</div>
+                          <div style={{ fontFamily: C.fs, fontSize: 8, color: C.muted, marginTop: 2 }}>{activity?.type || "Workout"} · {activity?.date || "This week"}</div>
+                        </div>
+                        <div style={{ fontFamily: C.fs, fontSize: 9, color: DS.gold, whiteSpace: "nowrap" }}>{Math.max(0, Number(activity?.z2Minutes || 0))} min</div>
+                      </div>
+                    ))}
+                  </div>
+                ) : null}
+              </div>
             </div>
 
             {hasRaceCountdown && (
