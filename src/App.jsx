@@ -2882,7 +2882,10 @@ export default function App() {
     if (!session?.access_token) return;
     try {
       const res = await fetch("/api/strava/best-efforts", {
-        headers: { Authorization: `Bearer ${session.access_token}` },
+        headers: {
+          Authorization: `Bearer ${session.access_token}`,
+          ...(session.user?.id ? { "x-user-id": session.user.id } : {}),
+        },
         credentials: "include",
       });
       const data = await res.json().catch(() => ({}));
@@ -2908,7 +2911,10 @@ export default function App() {
     setStravaWeeklyZ2Error("");
     try {
       const res = await fetch("/api/strava/weekly-z2", {
-        headers: { Authorization: `Bearer ${session.access_token}` },
+        headers: {
+          Authorization: `Bearer ${session.access_token}`,
+          ...(session.user?.id ? { "x-user-id": session.user.id } : {}),
+        },
         credentials: "include",
       });
       const data = await res.json().catch(() => ({}));

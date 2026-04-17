@@ -42,6 +42,10 @@ export default async function handler(req, res) {
   const { data: authData, error: authErr } = await supabase.auth.getUser(token);
   if (authErr || !authData?.user) return res.status(401).json({ error: "Invalid token" });
   const appUserId = authData.user.id;
+  const headerUid = typeof req.headers["x-user-id"] === "string" ? req.headers["x-user-id"].trim() : "";
+  if (headerUid && headerUid !== appUserId) {
+    console.warn("[strava/best-efforts] x-user-id header does not match JWT user", { headerUid, appUserId });
+  }
 
   let profile = null;
   const primaryProfileRes = await supabase
@@ -63,7 +67,7 @@ export default async function handler(req, res) {
     return res.status(200).json({ error: "strava_not_connected" });
   }
 
-  const stravaSession = await ensureStravaTokensForRequest({ supabase, appUserId, profile, res });
+  const stravaSession = await ensureStravaTokensForRequest({ supabase, appUserId, profile, res, req });
   if (!stravaSession) {
     return res.status(200).json({ error: "strava_reconnect_required" });
   }

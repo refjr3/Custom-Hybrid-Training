@@ -113,6 +113,10 @@ export default async function handler(req, res) {
   if (authErr || !authData?.user) return res.status(401).json({ error: "Invalid token" });
 
   const appUserId = authData.user.id;
+  const headerUid = typeof req.headers["x-user-id"] === "string" ? req.headers["x-user-id"].trim() : "";
+  if (headerUid && headerUid !== appUserId) {
+    console.warn("[strava/weekly-z2] x-user-id header does not match JWT user", { headerUid, appUserId });
+  }
 
   let profile = null;
   let profileErr = null;
@@ -161,7 +165,7 @@ export default async function handler(req, res) {
     return res.status(401).json({ error: "strava_not_connected" });
   }
 
-  const stravaSession = await ensureStravaTokensForRequest({ supabase, appUserId, profile, res });
+  const stravaSession = await ensureStravaTokensForRequest({ supabase, appUserId, profile, res, req });
   if (!stravaSession) {
     console.warn("[strava/weekly-z2] token refresh failed", { appUserId, hasRefreshToken: Boolean(refreshProbe) });
     return res.status(401).json({ error: "strava_reconnect_required" });

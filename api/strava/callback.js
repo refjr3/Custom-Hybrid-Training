@@ -1,5 +1,6 @@
 import { createClient } from "@supabase/supabase-js";
 import { parseCookies, applyStravaTokenCookies } from "./stravaClient.js";
+import { STRAVA_APP_BASE_URL, STRAVA_OAUTH_REDIRECT_URI } from "./stravaOAuthConfig.js";
 
 const supabase = createClient(
   process.env.SUPABASE_URL,
@@ -7,24 +8,25 @@ const supabase = createClient(
 );
 
 const TARGET_USER_ID = "5285440e-a3dd-4f29-9b09-29715f0a04fc";
-const APP_BASE_URL = "https://custom-hybrid-training.vercel.app";
 
 export default async function handler(req, res) {
   const { code, state } = req.query;
   const clientId = process.env.STRAVA_CLIENT_ID;
   const clientSecret = process.env.STRAVA_CLIENT_SECRET;
-  const redirectUri = process.env.STRAVA_REDIRECT_URI;
+  const redirectUri = STRAVA_OAUTH_REDIRECT_URI;
 
-  if (!code) return res.redirect(302, `${APP_BASE_URL}/?error=strava_no_code`);
-  if (!clientId || !clientSecret || !redirectUri) {
-    return res.redirect(302, `${APP_BASE_URL}/?error=strava_missing_env`);
+  console.log("[strava/callback] redirect_uri used for token exchange:", redirectUri);
+
+  if (!code) return res.redirect(302, `${STRAVA_APP_BASE_URL}/?error=strava_no_code`);
+  if (!clientId || !clientSecret) {
+    return res.redirect(302, `${STRAVA_APP_BASE_URL}/?error=strava_missing_env`);
   }
 
   const cookies = parseCookies(req.headers.cookie || "");
   const expectedState = cookies.strava_state;
   const targetUserId = cookies.strava_uid || TARGET_USER_ID;
   if (!expectedState || !state || expectedState !== state) {
-    return res.redirect(302, `${APP_BASE_URL}/?error=strava_bad_state`);
+    return res.redirect(302, `${STRAVA_APP_BASE_URL}/?error=strava_bad_state`);
   }
 
   try {
@@ -36,6 +38,7 @@ export default async function handler(req, res) {
         client_secret: clientSecret,
         code,
         grant_type: "authorization_code",
+        redirect_uri: redirectUri,
       }),
     });
 
@@ -45,7 +48,7 @@ export default async function handler(req, res) {
         status: tokenRes.status,
         body: tokens,
       });
-      return res.redirect(302, `${APP_BASE_URL}/?error=strava_token_exchange_failed`);
+      return res.redirect(302, `${STRAVA_APP_BASE_URL}/?error=strava_token_exchange_failed`);
     }
 
     const expiresAt = Number(tokens.expires_at || 0);
@@ -62,11 +65,11 @@ export default async function handler(req, res) {
 
     if (existingProfileErr && existingProfileErr.code !== "PGRST116") {
       console.error("[strava/callback] profile lookup failed", existingProfileErr);
-      return res.redirect(302, `${APP_BASE_URL}/?error=strava_profile_read_failed`);
+      return res.redirect(302, `${STRAVA_APP_BASE_URL}/?error=strava_profile_read_failed`);
     }
     if (!existingProfile) {
       console.error("[strava/callback] profile row missing", { userId: targetUserId });
-      return res.redirect(302, `${APP_BASE_URL}/?error=strava_profile_missing`);
+      return res.redirect(302, `${STRAVA_APP_BASE_URL}/?error=strava_profile_missing`);
     }
 
     const existingWearables = existingProfile?.connected_wearables || {};
@@ -93,7 +96,7 @@ export default async function handler(req, res) {
 
     if (connectedErr || !connectedUpdate?.length) {
       console.error("[strava/callback] connected_wearables update failed", connectedErr || { userId: targetUserId });
-      return res.redirect(302, `${APP_BASE_URL}/?error=strava_profile_write_failed`);
+      return res.redirect(302, `${STRAVA_APP_BASE_URL}/?error=strava_profile_write_failed`);
     }
 
     // Best-effort mirror to dedicated columns if they exist.
@@ -125,9 +128,9 @@ export default async function handler(req, res) {
     res.appendHeader("Set-Cookie", "strava_state=; Path=/; HttpOnly; Secure; SameSite=Lax; Max-Age=0");
     res.appendHeader("Set-Cookie", "strava_uid=; Path=/; HttpOnly; Secure; SameSite=Lax; Max-Age=0");
 
-    return res.redirect(302, `${APP_BASE_URL}/?strava_connected=true`);
+    return res.redirect(302, `${STRAVA_APP_BASE_URL}/?strava_connected=true`);
   } catch (err) {
     console.error("[strava/callback] exception", err);
-    return res.redirect(302, `${APP_BASE_URL}/?error=strava_exception`);
+    return res.redirect(302, `${STRAVA_APP_BASE_URL}/?error=strava_exception`);
   }
 }

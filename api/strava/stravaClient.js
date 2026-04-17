@@ -79,15 +79,38 @@ export async function persistStravaTokensToProfile(supabase, appUserId, wearable
   );
 }
 
+/** Loads current wearables row then persists tokens (Supabase backup when cookies are unreliable). */
+export async function persistStravaTokensToSupabase(supabase, userId, tokens) {
+  const { data } = await supabase
+    .from("user_profiles")
+    .select("connected_wearables")
+    .eq("user_id", userId)
+    .maybeSingle();
+  await persistStravaTokensToProfile(supabase, userId, data?.connected_wearables || {}, tokens);
+}
+
 /**
  * Ensures a valid access token (pre-emptive refresh if &lt;5m left), returns a fetch()
  * that retries once on 401 with refresh + persist + Set-Cookie.
+ * Merges HttpOnly Strava cookies when the DB row is missing tokens (Vercel cookie churn).
  */
-export async function ensureStravaTokensForRequest({ supabase, appUserId, profile, res }) {
+export async function ensureStravaTokensForRequest({ supabase, appUserId, profile, res, req }) {
+  const jar = req ? parseCookies(req.headers?.cookie || "") : {};
   let wearables = { ...(profile?.connected_wearables || {}) };
-  let accessToken = profile?.strava_access_token || wearables.strava_access_token || null;
-  let refreshToken = profile?.strava_refresh_token || wearables.strava_refresh_token || null;
+  let accessToken =
+    profile?.strava_access_token
+    || wearables.strava_access_token
+    || jar.strava_access
+    || null;
+  let refreshToken =
+    profile?.strava_refresh_token
+    || wearables.strava_refresh_token
+    || jar.strava_refresh
+    || null;
   let expiresAt = toEpochSeconds(profile?.strava_token_expires_at || wearables.strava_token_expires_at);
+  if (!expiresAt && jar.strava_expires) {
+    expiresAt = Number(jar.strava_expires) || 0;
+  }
   const nowSec = Math.floor(Date.now() / 1000);
 
   if (!accessToken && !refreshToken) return null;
@@ -97,7 +120,7 @@ export async function ensureStravaTokensForRequest({ supabase, appUserId, profil
     refreshToken = t.refresh_token || refreshToken;
     expiresAt = Number(t.expires_at || nowSec + Number(t.expires_in || 21600));
     if (res) applyStravaTokenCookies(res, t);
-    await persistStravaTokensToProfile(supabase, appUserId, wearables, t);
+    await persistStravaTokensToSupabase(supabase, appUserId, t);
     wearables = {
       ...wearables,
       strava: true,
