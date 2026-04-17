@@ -1,41 +1,13 @@
 import { createClient } from "@supabase/supabase-js";
+import { ensureStravaTokensForRequest } from "./stravaClient.js";
 
 const supabase = createClient(
   process.env.SUPABASE_URL,
   process.env.SUPABASE_SERVICE_KEY
 );
 
-const STRAVA_TOKEN_URL = "https://www.strava.com/oauth/token";
 const STRAVA_ACTIVITIES = "https://www.strava.com/api/v3/athlete/activities";
 const STRAVA_ACTIVITY = (id) => `https://www.strava.com/api/v3/activities/${id}`;
-
-const toEpochSeconds = (value) => {
-  if (value === null || value === undefined || value === "") return 0;
-  if (typeof value === "number" && Number.isFinite(value)) return Math.floor(value);
-  const parsed = new Date(value);
-  if (Number.isFinite(parsed.getTime())) return Math.floor(parsed.getTime() / 1000);
-  return 0;
-};
-
-async function refreshStravaTokens(refreshToken) {
-  const clientId = process.env.STRAVA_CLIENT_ID;
-  const clientSecret = process.env.STRAVA_CLIENT_SECRET;
-  if (!clientId || !clientSecret || !refreshToken) return null;
-  const res = await fetch(STRAVA_TOKEN_URL, {
-    method: "POST",
-    headers: { "Content-Type": "application/x-www-form-urlencoded" },
-    body: new URLSearchParams({
-      client_id: String(clientId),
-      client_secret: String(clientSecret),
-      grant_type: "refresh_token",
-      refresh_token: String(refreshToken),
-    }).toString(),
-  });
-  if (!res.ok) return null;
-  const data = await res.json().catch(() => ({}));
-  if (!data?.access_token) return null;
-  return data;
-}
 
 function formatPrTime(seconds) {
   const s = Math.round(Number(seconds) || 0);
@@ -85,58 +57,21 @@ export default async function handler(req, res) {
   }
 
   const wearables = profile?.connected_wearables || {};
-  let accessToken = profile?.strava_access_token || wearables.strava_access_token || null;
-  let refreshToken = profile?.strava_refresh_token || wearables.strava_refresh_token || null;
-  let expiresAt = toEpochSeconds(profile?.strava_token_expires_at || wearables.strava_token_expires_at);
-  const nowEpoch = Math.floor(Date.now() / 1000);
-
-  if (!accessToken && !refreshToken) {
+  const accessProbe = profile?.strava_access_token || wearables.strava_access_token || null;
+  const refreshProbe = profile?.strava_refresh_token || wearables.strava_refresh_token || null;
+  if (!accessProbe && !refreshProbe) {
     return res.status(200).json({ error: "strava_not_connected" });
   }
 
-  const writeTokenCookies = (tokens) => {
-    const base = "Path=/; HttpOnly; Secure; SameSite=Lax";
-    res.setHeader("Set-Cookie", [
-      `strava_access=${tokens.access_token}; ${base}; Max-Age=86400`,
-      `strava_refresh=${tokens.refresh_token || refreshToken || ""}; ${base}; Max-Age=2592000`,
-    ]);
-  };
-
-  if (!accessToken || !expiresAt || nowEpoch >= expiresAt - 60) {
-    const refreshed = await refreshStravaTokens(refreshToken);
-    if (!refreshed?.access_token) {
-      return res.status(200).json({ error: "strava_reconnect_required" });
-    }
-    accessToken = refreshed.access_token;
-    refreshToken = refreshed.refresh_token || refreshToken;
-    expiresAt = Number(refreshed.expires_at || nowEpoch + Number(refreshed.expires_in || 21600));
-    const nextWearables = {
-      ...wearables,
-      strava: true,
-      strava_access_token: accessToken,
-      strava_refresh_token: refreshToken,
-      strava_token_expires_at: new Date(expiresAt * 1000).toISOString(),
-      strava_connected_at: wearables.strava_connected_at || new Date().toISOString(),
-    };
-    await supabase.from("user_profiles").upsert(
-      {
-        user_id: appUserId,
-        connected_wearables: nextWearables,
-        strava_access_token: accessToken,
-        strava_refresh_token: refreshToken,
-        strava_token_expires_at: new Date(expiresAt * 1000).toISOString(),
-      },
-      { onConflict: "user_id" }
-    );
-    writeTokenCookies(refreshed);
+  const stravaSession = await ensureStravaTokensForRequest({ supabase, appUserId, profile, res });
+  if (!stravaSession) {
+    return res.status(200).json({ error: "strava_reconnect_required" });
   }
 
   try {
-    const listRes = await fetch(`${STRAVA_ACTIVITIES}?per_page=200`, {
-      headers: { Authorization: `Bearer ${accessToken}` },
-    });
-    if (!listRes.ok) {
-      return res.status(200).json({ error: "strava_list_failed", status: listRes.status });
+    const listRes = await stravaSession.stravaFetch(`${STRAVA_ACTIVITIES}?per_page=200`);
+    if (!listRes) {
+      return res.status(200).json({ error: "strava_list_failed", bestEfforts: {} });
     }
     const activities = await listRes.json().catch(() => []);
     const runIds = (Array.isArray(activities) ? activities : [])
@@ -150,10 +85,8 @@ export default async function handler(req, res) {
       const slice = runIds.slice(i, i + chunk);
       const details = await Promise.all(
         slice.map(async (id) => {
-          const r = await fetch(STRAVA_ACTIVITY(id), {
-            headers: { Authorization: `Bearer ${accessToken}` },
-          });
-          if (!r.ok) return null;
+          const r = await stravaSession.stravaFetch(STRAVA_ACTIVITY(id));
+          if (!r) return null;
           return r.json().catch(() => null);
         })
       );
@@ -180,6 +113,6 @@ export default async function handler(req, res) {
     return res.status(200).json({ bestEfforts });
   } catch (err) {
     console.error("[strava best-efforts]", err.message);
-    return res.status(200).json({ error: "fetch_failed" });
+    return res.status(200).json({ error: "fetch_failed", bestEfforts: {} });
   }
 }

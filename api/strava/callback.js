@@ -1,4 +1,5 @@
 import { createClient } from "@supabase/supabase-js";
+import { parseCookies, applyStravaTokenCookies } from "./stravaClient.js";
 
 const supabase = createClient(
   process.env.SUPABASE_URL,
@@ -7,22 +8,6 @@ const supabase = createClient(
 
 const TARGET_USER_ID = "5285440e-a3dd-4f29-9b09-29715f0a04fc";
 const APP_BASE_URL = "https://custom-hybrid-training.vercel.app";
-
-function parseCookies(header) {
-  const out = {};
-  if (!header) return out;
-  for (const part of header.split(";")) {
-    const trimmed = part.trim();
-    if (!trimmed) continue;
-    const idx = trimmed.indexOf("=");
-    if (idx === -1) {
-      out[trimmed] = "";
-    } else {
-      out[trimmed.slice(0, idx)] = decodeURIComponent(trimmed.slice(idx + 1));
-    }
-  }
-  return out;
-}
 
 export default async function handler(req, res) {
   const { code, state } = req.query;
@@ -136,13 +121,9 @@ export default async function handler(req, res) {
       error: verifyErr?.message || null,
     });
 
-    const cookieOpts = "Path=/; HttpOnly; Secure; SameSite=Lax";
-    res.setHeader("Set-Cookie", [
-      `strava_access=${tokens.access_token}; ${cookieOpts}; Max-Age=21600`,
-      `strava_refresh=${tokens.refresh_token || ""}; ${cookieOpts}; Max-Age=2592000`,
-      "strava_state=; Path=/; HttpOnly; Secure; SameSite=Lax; Max-Age=0",
-      "strava_uid=; Path=/; HttpOnly; Secure; SameSite=Lax; Max-Age=0",
-    ]);
+    applyStravaTokenCookies(res, tokens);
+    res.appendHeader("Set-Cookie", "strava_state=; Path=/; HttpOnly; Secure; SameSite=Lax; Max-Age=0");
+    res.appendHeader("Set-Cookie", "strava_uid=; Path=/; HttpOnly; Secure; SameSite=Lax; Max-Age=0");
 
     return res.redirect(302, `${APP_BASE_URL}/?strava_connected=true`);
   } catch (err) {

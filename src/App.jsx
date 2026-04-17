@@ -513,16 +513,63 @@ function weeklyZ2MinutesFromGarminActivities(activities) {
   return Math.round(mins);
 }
 
+function estimateZ2SessionMinutesFromPlanDay(dayRow, planWeekId, sundayChoice) {
+  const getAm = (d) => {
+    if (d?.isSunday) {
+      const c = sundayChoice?.[planWeekId];
+      return c === "mobility"
+        ? "SUNDAY — Mobility Protocol"
+        : c === "plyo"
+          ? "SUNDAY — Plyo & Core"
+          : d?.am ?? d?.am_session ?? null;
+    }
+    return d?.am ?? d?.am_session ?? null;
+  };
+  const sn = getAm(dayRow) || "";
+  const custom = dayRow?.am_session_custom || "";
+  const blob = `${sn} ${custom}`;
+  const z2Hits = /Z2|ZONE\s*2|Long\s+Z2|Erg\/Echo|Brick|20\/20|25\/25|30\/30/i.test(blob);
+  if (!z2Hits) return 0;
+  if (/Long\s+Z2/i.test(blob)) return 60;
+  if (/brick/i.test(blob)) return 60;
+  if (/Z2\s+Run/i.test(blob)) return 45;
+  if (/Z2\s+Erg|Erg\/Echo/i.test(blob)) return 35;
+  return 40;
+}
+
+function weeklyZ2PlanMinutesEstimate({
+  weekDays,
+  dayLabelToIso,
+  garminActivities,
+  unifiedMetrics,
+  todayIso,
+  planWeekId,
+  sundayChoice,
+}) {
+  if (!Array.isArray(weekDays) || !dayLabelToIso || !todayIso) return 0;
+  let sum = 0;
+  for (const day of weekDays) {
+    const iso = dayLabelToIso(day?.date || day?.date_label);
+    if (!iso) continue;
+    const mins = estimateZ2SessionMinutesFromPlanDay(day, planWeekId, sundayChoice || {});
+    if (mins <= 0) continue;
+    const completed = dayHasCompletionSignal(iso, day, garminActivities, unifiedMetrics);
+    const isPast = iso < todayIso;
+    if (!(completed || isPast)) continue;
+    sum += mins;
+  }
+  return Math.round(sum);
+}
+
 /** Context for POST /api/synthesis/morning { mode: "brief" } (plan + wearable aggregates). */
 function buildMorningBriefApiContext({
   planBlocks,
   whoopData,
   profile,
-  stravaConnected,
-  stravaZ2Data,
   garminConnected,
   garminActivities,
   unifiedMetrics,
+  sundayChoice,
 }) {
   const perfHdr = derivePerfPlanHeader(planBlocks);
   const recovery = whoopData?.recovery?.score ?? null;
@@ -538,12 +585,11 @@ function buildMorningBriefApiContext({
   let tomorrowSession = null;
   let complianceThisWeek = 0;
   let weeklyZ2Minutes = 0;
-
-  if (stravaConnected && stravaZ2Data != null) {
-    weeklyZ2Minutes = Math.max(0, Number(stravaZ2Data.totalMinutes) || 0);
-  } else if (garminConnected && Array.isArray(garminActivities)) {
-    weeklyZ2Minutes = weeklyZ2MinutesFromGarminActivities(garminActivities);
-  }
+  const fromGarminBrief =
+    garminConnected && Array.isArray(garminActivities)
+      ? weeklyZ2MinutesFromGarminActivities(garminActivities)
+      : 0;
+  if (fromGarminBrief > 0) weeklyZ2Minutes = fromGarminBrief;
 
   if (!Array.isArray(planBlocks) || planBlocks.length === 0) {
     return {
@@ -587,6 +633,18 @@ function buildMorningBriefApiContext({
     if (!iso) return false;
     return dayHasCompletionSignal(iso, d, garminActivities, unifiedMetrics);
   }).length;
+
+  if (weeklyZ2Minutes <= 0) {
+    weeklyZ2Minutes = weeklyZ2PlanMinutesEstimate({
+      weekDays: currentWeekDays,
+      dayLabelToIso,
+      garminActivities,
+      unifiedMetrics,
+      todayIso: todayDateIso,
+      planWeekId: todayEntry?.week?.id || "",
+      sundayChoice,
+    });
+  }
 
   const racesList = Array.isArray(profile?.races) ? profile.races : [];
   const primaryRace = racesList.find((r) => r?.is_primary && r?.date) || racesList.find((r) => r?.date) || null;
@@ -2616,9 +2674,6 @@ export default function App() {
   const [whoopLoading, setWhoopLoading] = useState(true);
   const [whoopConnected, setWhoopConnected] = useState(false);
   const [stravaConnected, setStravaConnected] = useState(false);
-  const [stravaZ2Loading, setStravaZ2Loading] = useState(false);
-  const [stravaZ2Error, setStravaZ2Error] = useState("");
-  const [stravaZ2Data, setStravaZ2Data] = useState(null);
   const [stravaBestEfforts, setStravaBestEfforts] = useState(null);
   const [recentActivities, setRecentActivities] = useState([]);
   const [biomarkers, setBiomarkers] = useState([]);
@@ -2779,7 +2834,7 @@ export default function App() {
     fetchGarminActivities();
     fetchUnifiedMetrics();
     fetchIntervalsSync();
-    fetchStravaWeeklyZ2();
+    fetchStravaBestEfforts();
   }, [profile]);
 
   useEffect(() => {
@@ -2914,46 +2969,20 @@ export default function App() {
     }
   };
 
-  const fetchStravaWeeklyZ2 = async () => {
-    if (!session?.access_token) return;
-    setStravaZ2Loading(true);
-    setStravaZ2Error("");
-    try {
-      const res = await fetch("/api/strava/weekly-z2", {
-        headers: { Authorization: `Bearer ${session.access_token}` },
-      });
-      const data = await res.json().catch(() => ({}));
-      if (!res.ok) {
-        if (data.error === "strava_not_connected" || data.error === "strava_reconnect_required") {
-          setStravaConnected(false);
-          setStravaZ2Data(null);
-          setStravaBestEfforts(null);
-          setStravaZ2Error("");
-          return;
-        }
-        throw new Error(data.error || "Failed loading Strava Z2 progress");
-      }
-      setStravaConnected(true);
-      setStravaZ2Data(data);
-      fetchStravaBestEfforts();
-    } catch (e) {
-      setStravaZ2Error(e.message || "Failed loading Strava Z2 progress");
-    } finally {
-      setStravaZ2Loading(false);
-    }
-  };
-
   const fetchStravaBestEfforts = async () => {
     if (!session?.access_token) return;
     try {
       const res = await fetch("/api/strava/best-efforts", {
         headers: { Authorization: `Bearer ${session.access_token}` },
+        credentials: "include",
       });
       const data = await res.json().catch(() => ({}));
       if (data?.error === "strava_not_connected" || data?.error === "strava_reconnect_required") {
+        setStravaConnected(false);
         setStravaBestEfforts(null);
         return;
       }
+      setStravaConnected(true);
       if (data?.bestEfforts && typeof data.bestEfforts === "object") {
         setStravaBestEfforts(data.bestEfforts);
       } else {
@@ -3110,11 +3139,10 @@ export default function App() {
           planBlocks,
           whoopData,
           profile,
-          stravaConnected,
-          stravaZ2Data,
           garminConnected,
           garminActivities,
           unifiedMetrics,
+          sundayChoice,
         });
         const res = await fetch("/api/synthesis/morning", {
           method: "POST",
@@ -3155,11 +3183,10 @@ export default function App() {
     planBlocks,
     whoopData,
     profile,
-    stravaConnected,
-    stravaZ2Data,
     garminConnected,
     garminActivities,
     unifiedMetrics,
+    sundayChoice,
   ]);
 
   // Proactive Coaching: check HRV trend + Sunday weekly review
@@ -3753,18 +3780,6 @@ export default function App() {
           const minutes = safe % 60;
           return `${hours}h ${String(minutes).padStart(2, "0")}min`;
         };
-        const weeklyZ2Minutes = (() => {
-          if (stravaConnected) {
-            if (stravaZ2Data != null) return Math.max(0, Number(stravaZ2Data.totalMinutes) || 0);
-            return 0;
-          }
-          if (garminConnected && Array.isArray(garminActivities)) {
-            return weeklyZ2MinutesFromGarminActivities(garminActivities);
-          }
-          return 0;
-        })();
-        const z2WearableConnected = stravaConnected || garminConnected;
-        const z2HeaderDone = !z2WearableConnected ? "—" : stravaConnected && stravaZ2Loading ? "…" : String(Math.round(weeklyZ2Minutes));
         const todayDateIso = getDeviceLocalTodayYmd();
         const PLAN_YEAR = parseInt(String(todayDateIso || "").slice(0, 4), 10) || 2026;
         const allPlanEntries = planBlocks
@@ -3864,6 +3879,23 @@ export default function App() {
         const currentWeekNum = perfHdr?.currentWeekNum ?? 1;
         const currentPhaseName = perfHdr?.currentPhase || "Training";
         const currentWeekDaysStrip = todayEntry?.week?.days || [];
+        const planWeekIdForZ2 = todayEntry?.week?.id || weekId;
+        const fromGarminZ2 =
+          garminConnected && Array.isArray(garminActivities)
+            ? weeklyZ2MinutesFromGarminActivities(garminActivities)
+            : 0;
+        const fromPlanZ2 = weeklyZ2PlanMinutesEstimate({
+          weekDays: currentWeekDaysStrip,
+          dayLabelToIso,
+          garminActivities,
+          unifiedMetrics,
+          todayIso: todayDateIso,
+          planWeekId: planWeekIdForZ2,
+          sundayChoice,
+        });
+        const weeklyZ2Minutes = fromGarminZ2 > 0 ? fromGarminZ2 : fromPlanZ2;
+        const z2WearableConnected = garminConnected || stravaConnected || planBlocks.length > 0;
+        const z2HeaderDone = !z2WearableConnected ? "—" : String(Math.round(weeklyZ2Minutes));
         const isWeekDayDoneStrip = (d) => {
           const iso = dayLabelToIso(d?.date || d?.date_label);
           if (!iso) return false;
@@ -4046,15 +4078,6 @@ export default function App() {
                   <div style={{ fontSize: 9, fontWeight: 600, color: "rgba(255,255,255,0.22)", letterSpacing: "2.5px", textTransform: "uppercase", fontFamily: C.fs }}>Weekly Z2 Time</div>
                   <div style={{ fontSize: 12, fontWeight: 600, color: DS.gold, fontFamily: C.fs, flexShrink: 0 }}>{z2HeaderDone} / {TARGET_Z2_MIN} min</div>
                 </div>
-                {stravaConnected && stravaZ2Loading ? (
-                  <div style={{ fontFamily: C.fs, fontSize: 10, color: C.muted, marginBottom: 10 }}>Loading Z2 data…</div>
-                ) : null}
-                {stravaConnected && stravaZ2Error ? (
-                  <div style={{ marginBottom: 10 }}>
-                    <div style={{ fontFamily: C.fs, fontSize: 10, color: C.red }}>{stravaZ2Error}</div>
-                    <button type="button" onClick={fetchStravaWeeklyZ2} style={{ marginTop: 10, background: "transparent", border: `1px solid ${C.border}`, borderRadius: 10, padding: "8px 12px", color: C.text, fontFamily: C.fs, fontSize: 9, cursor: "pointer" }}>Retry</button>
-                  </div>
-                ) : null}
                 {!z2WearableConnected ? (
                   <div style={{ marginBottom: 10, display: "flex", flexWrap: "wrap", gap: 12, alignItems: "center" }}>
                     <a
