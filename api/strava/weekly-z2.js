@@ -1,5 +1,5 @@
 import { createClient } from "@supabase/supabase-js";
-import { getStravaAccessForRequest, stravaFetchWithToken } from "./tokenCookies.js";
+import { getStravaAccessForRequest } from "./tokenCookies.js";
 
 const supabase = createClient(
   process.env.SUPABASE_URL,
@@ -41,7 +41,60 @@ function z2SecondsFromHeartrateZones(zonesJson) {
   return z2;
 }
 
-async function fetchActivitiesInRange(stravaFetch, afterEpoch, beforeEpoch) {
+function stravaHeaders(accessToken) {
+  return { Authorization: `Bearer ${accessToken}` };
+}
+
+async function readZ2CacheRow(userId) {
+  const { data, error } = await supabase
+    .from("user_profiles")
+    .select("strava_z2_minutes, strava_z2_cached_at")
+    .eq("user_id", userId)
+    .maybeSingle();
+  if (error) {
+    console.warn("[strava/weekly-z2] cache read:", error.message);
+    return null;
+  }
+  return data;
+}
+
+async function writeZ2Cache(userId, weeklyZ2Minutes) {
+  const { error } = await supabase
+    .from("user_profiles")
+    .update({
+      strava_z2_minutes: weeklyZ2Minutes,
+      strava_z2_cached_at: new Date().toISOString(),
+    })
+    .eq("user_id", userId);
+  if (error) console.warn("[strava/weekly-z2] cache write:", error.message);
+}
+
+function cacheAgeMinutes(cached) {
+  if (!cached?.strava_z2_cached_at) return 999;
+  const ms = new Date(cached.strava_z2_cached_at).getTime();
+  if (!Number.isFinite(ms)) return 999;
+  return (Date.now() - ms) / 1000 / 60;
+}
+
+async function respondRateLimited(res, userId) {
+  if (userId) {
+    const { data } = await supabase
+      .from("user_profiles")
+      .select("strava_z2_minutes")
+      .eq("user_id", userId)
+      .maybeSingle();
+    if (data?.strava_z2_minutes != null) {
+      return res.status(200).json({
+        weeklyZ2Minutes: data.strava_z2_minutes,
+        fromCache: true,
+        rateLimited: true,
+      });
+    }
+  }
+  return res.status(200).json({ weeklyZ2Minutes: 0, error: "strava_rate_limited" });
+}
+
+async function fetchActivitiesInRange(accessToken, afterEpoch, beforeEpoch) {
   const all = [];
   let page = 1;
   const perPage = 200;
@@ -53,44 +106,49 @@ async function fetchActivitiesInRange(stravaFetch, afterEpoch, beforeEpoch) {
     url.searchParams.set("per_page", String(perPage));
     url.searchParams.set("page", String(page));
 
-    const res = await stravaFetch(url.toString());
-    if (!res) return { ok: false, activities: [] };
+    const r = await fetch(url.toString(), { headers: stravaHeaders(accessToken) });
+    if (r.status === 429) return { ok: false, activities: [], status: 429 };
+    if (!r.ok) return { ok: false, activities: [], status: r.status };
 
-    const batch = await res.json().catch(() => []);
+    const batch = await r.json().catch(() => []);
     if (!Array.isArray(batch) || batch.length === 0) break;
     all.push(...batch);
     if (batch.length < perPage) break;
     page += 1;
   }
 
-  return { ok: true, activities: all };
+  return { ok: true, activities: all, status: 200 };
 }
 
-async function fetchHrStream(stravaFetch, activityId) {
+async function fetchHrStream(accessToken, activityId) {
   const url = new URL(STRAVA_ACTIVITY_STREAM_URL(activityId));
   url.searchParams.set("keys", "heartrate");
   url.searchParams.set("key_by_type", "true");
 
-  const res = await stravaFetch(url.toString());
-  if (!res) return null;
-  return res.json().catch(() => null);
+  const res = await fetch(url.toString(), { headers: stravaHeaders(accessToken) });
+  if (res.status === 429) return { rateLimited: true, stream: null };
+  if (!res.ok) return { rateLimited: false, stream: null };
+  const stream = await res.json().catch(() => null);
+  return { rateLimited: false, stream };
 }
 
-async function z2SecondsForActivity(stravaFetch, activity) {
+async function z2SecondsForActivity(accessToken, activity) {
   const id = activity?.id;
-  if (!id || !activity?.has_heartrate) return 0;
+  if (!id || !activity?.has_heartrate) return { seconds: 0, rateLimited: false };
 
-  const zonesRes = await stravaFetch(STRAVA_ACTIVITY_ZONES(id));
-  if (zonesRes) {
+  const zonesRes = await fetch(STRAVA_ACTIVITY_ZONES(id), { headers: stravaHeaders(accessToken) });
+  if (zonesRes.status === 429) return { seconds: 0, rateLimited: true };
+  if (zonesRes.ok) {
     const zonesJson = await zonesRes.json().catch(() => null);
     const fromZones = z2SecondsFromHeartrateZones(zonesJson);
-    if (fromZones != null) return fromZones;
+    if (fromZones != null) return { seconds: fromZones, rateLimited: false };
   }
 
-  const stream = await fetchHrStream(stravaFetch, id);
+  const { rateLimited, stream } = await fetchHrStream(accessToken, id);
+  if (rateLimited) return { seconds: 0, rateLimited: true };
   const hrArray = stream?.heartrate?.data;
-  if (!Array.isArray(hrArray) || hrArray.length === 0) return 0;
-  return getSecondsInZ2Stream(hrArray, 133, 148);
+  if (!Array.isArray(hrArray) || hrArray.length === 0) return { seconds: 0, rateLimited: false };
+  return { seconds: getSecondsInZ2Stream(hrArray, 133, 148), rateLimited: false };
 }
 
 export default async function handler(req, res) {
@@ -108,12 +166,19 @@ export default async function handler(req, res) {
     console.warn("[strava/weekly-z2] x-user-id header does not match JWT user", { headerUid, appUserId });
   }
 
+  const cached = await readZ2CacheRow(appUserId);
+  const ageMin = cacheAgeMinutes(cached);
+  if (cached?.strava_z2_minutes != null && ageMin < 15) {
+    return res.status(200).json({
+      weeklyZ2Minutes: cached.strava_z2_minutes,
+      fromCache: true,
+    });
+  }
+
   const accessToken = await getStravaAccessForRequest(req, res, supabase, appUserId);
   if (!accessToken) {
     return res.status(200).json({ weeklyZ2Minutes: 0, error: "strava_not_connected" });
   }
-
-  const stravaFetch = stravaFetchWithToken(accessToken);
 
   try {
     const now = new Date();
@@ -121,10 +186,13 @@ export default async function handler(req, res) {
     const afterEpoch = Math.floor(weekStart.getTime() / 1000);
     const beforeEpoch = Math.floor(now.getTime() / 1000) + 2;
 
-    const activitiesRes = await fetchActivitiesInRange(stravaFetch, afterEpoch, beforeEpoch);
+    const activitiesRes = await fetchActivitiesInRange(accessToken, afterEpoch, beforeEpoch);
 
+    if (activitiesRes.status === 429) {
+      return respondRateLimited(res, appUserId);
+    }
     if (!activitiesRes.ok) {
-      return res.status(502).json({ error: "strava_activities_failed" });
+      return res.status(200).json({ weeklyZ2Minutes: 0, error: "strava_fetch_failed" });
     }
 
     const activities = Array.isArray(activitiesRes.activities) ? activitiesRes.activities : [];
@@ -134,12 +202,15 @@ export default async function handler(req, res) {
     const chunk = 4;
     for (let i = 0; i < activities.length; i += chunk) {
       const slice = activities.slice(i, i + chunk);
-      const secsList = await Promise.all(
-        slice.map((a) => z2SecondsForActivity(stravaFetch, a))
+      const results = await Promise.all(
+        slice.map((a) => z2SecondsForActivity(accessToken, a))
       );
       for (let j = 0; j < slice.length; j += 1) {
         const a = slice[j];
-        const secs = secsList[j] || 0;
+        const { seconds: secs, rateLimited } = results[j] || { seconds: 0, rateLimited: false };
+        if (rateLimited) {
+          return respondRateLimited(res, appUserId);
+        }
         if (secs <= 0) continue;
         totalZ2Seconds += secs;
         summary.push({
@@ -153,6 +224,8 @@ export default async function handler(req, res) {
 
     const weeklyZ2Minutes = Math.round(totalZ2Seconds / 60);
     const weeklyZ2Hours = (totalZ2Seconds / 3600).toFixed(1);
+
+    await writeZ2Cache(appUserId, weeklyZ2Minutes);
 
     return res.status(200).json({
       weeklyZ2Minutes,
