@@ -1,4 +1,4 @@
-const CACHE = "training-os-v1";
+const CACHE = "training-os-v2";
 const ASSETS = ["/", "/index.html"];
 
 self.addEventListener("install", e => {

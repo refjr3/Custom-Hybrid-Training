@@ -1,23 +1,29 @@
 {
-  "name": "The Lab",
-  "short_name": "The Lab",
-  "description": "Elite Hybrid Performance Coach",
+  "name": "The Lab.",
+  "short_name": "The Lab.",
+  "description": "Hybrid athlete performance OS",
   "start_url": "/",
   "display": "standalone",
-  "background_color": "#000000",
-  "theme_color": "#000000",
+  "background_color": "#0D0E10",
+  "theme_color": "#0D0E10",
   "orientation": "portrait",
   "icons": [
     {
-      "src": "/logo192.png",
+      "src": "/icon-192.png",
       "sizes": "192x192",
-      "type": "image/png"
+      "type": "image/png",
+      "purpose": "any maskable"
     },
     {
-      "src": "/logo512.png",
+      "src": "/icon-512.png",
       "sizes": "512x512",
       "type": "image/png",
       "purpose": "any maskable"
+    },
+    {
+      "src": "/icon-1024.png",
+      "sizes": "1024x1024",
+      "type": "image/png"
     }
   ]
 }
