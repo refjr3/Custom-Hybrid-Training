@@ -1,5 +1,5 @@
 import { createClient } from "@supabase/supabase-js";
-import { ensureStravaTokensForRequest } from "./stravaClient.js";
+import { getStravaAccessForRequest, stravaFetchWithToken } from "./tokenCookies.js";
 
 const supabase = createClient(
   process.env.SUPABASE_URL,
@@ -11,15 +11,6 @@ const STRAVA_ACTIVITY_ZONES = (id) => `https://www.strava.com/api/v3/activities/
 const STRAVA_ACTIVITY_STREAM_URL = (activityId) =>
   `https://www.strava.com/api/v3/activities/${activityId}/streams`;
 
-const MASK = "[REDACTED]";
-const maskValue = (value) => {
-  if (!value) return null;
-  const str = String(value);
-  if (str.length <= 8) return MASK;
-  return `${str.slice(0, 4)}...${str.slice(-4)}`;
-};
-
-/** Local calendar Monday 00:00 (same idea as Today tab / Garmin week). */
 function startOfLocalWeekMonday(d = new Date()) {
   const day = d.getDay();
   const diff = day === 0 ? -6 : 1 - day;
@@ -40,7 +31,6 @@ const getSecondsInZ2Stream = (hrData = [], lower = 133, upper = 148) => {
 const formatDateLabel = (isoString) =>
   new Date(isoString).toLocaleDateString("en-US", { month: "short", day: "numeric" });
 
-/** Strava HR zones: distribution_buckets[1] = Z2 time in seconds (not Z1). */
 function z2SecondsFromHeartrateZones(zonesJson) {
   if (!Array.isArray(zonesJson)) return null;
   const hrZones = zonesJson.find((z) => z.type === "heartrate");
@@ -118,103 +108,62 @@ export default async function handler(req, res) {
     console.warn("[strava/weekly-z2] x-user-id header does not match JWT user", { headerUid, appUserId });
   }
 
-  let profile = null;
-  let profileErr = null;
-  const primaryProfileRes = await supabase
-    .from("user_profiles")
-    .select("connected_wearables,strava_access_token,strava_refresh_token,strava_token_expires_at")
-    .eq("user_id", appUserId)
-    .single();
-  profile = primaryProfileRes.data || null;
-  profileErr = primaryProfileRes.error || null;
-
-  if (profileErr && /strava_(access|refresh)_token|strava_token_expires_at/i.test(profileErr.message || "")) {
-    const fallbackRes = await supabase
-      .from("user_profiles")
-      .select("connected_wearables")
-      .eq("user_id", appUserId)
-      .single();
-    profile = fallbackRes.data || null;
-    profileErr = fallbackRes.error || null;
+  const accessToken = await getStravaAccessForRequest(req, res, supabase, appUserId);
+  if (!accessToken) {
+    return res.status(200).json({ weeklyZ2Minutes: 0, error: "strava_not_connected" });
   }
 
-  console.log("[strava/weekly-z2] profile query result", {
-    appUserId,
-    hasProfile: Boolean(profile),
-    profileErr: profileErr ? { code: profileErr.code, message: profileErr.message } : null,
-    hasTopLevelAccessToken: Boolean(profile?.strava_access_token),
-    hasTopLevelRefreshToken: Boolean(profile?.strava_refresh_token),
-    topLevelExpiresAt: profile?.strava_token_expires_at || null,
-    hasConnectedWearables: Boolean(profile?.connected_wearables),
-    connectedWearablesKeys: Object.keys(profile?.connected_wearables || {}),
-    hasWearablesAccessToken: Boolean(profile?.connected_wearables?.strava_access_token),
-    hasWearablesRefreshToken: Boolean(profile?.connected_wearables?.strava_refresh_token),
-    wearablesExpiresAt: profile?.connected_wearables?.strava_token_expires_at || null,
-    accessTokenPreview: maskValue(profile?.strava_access_token || profile?.connected_wearables?.strava_access_token),
-    refreshTokenPreview: maskValue(profile?.strava_refresh_token || profile?.connected_wearables?.strava_refresh_token),
-  });
+  const stravaFetch = stravaFetchWithToken(accessToken);
 
-  if (profileErr) return res.status(500).json({ error: "profile_read_failed" });
+  try {
+    const now = new Date();
+    const weekStart = startOfLocalWeekMonday(now);
+    const afterEpoch = Math.floor(weekStart.getTime() / 1000);
+    const beforeEpoch = Math.floor(now.getTime() / 1000) + 2;
 
-  const wearables = profile?.connected_wearables || {};
-  const accessProbe = profile?.strava_access_token || wearables.strava_access_token || null;
-  const refreshProbe = profile?.strava_refresh_token || wearables.strava_refresh_token || null;
+    const activitiesRes = await fetchActivitiesInRange(stravaFetch, afterEpoch, beforeEpoch);
 
-  if (!accessProbe && !refreshProbe) {
-    console.warn("[strava/weekly-z2] no stored Strava tokens found", { appUserId });
-    return res.status(401).json({ error: "strava_not_connected" });
-  }
-
-  const stravaSession = await ensureStravaTokensForRequest({ supabase, appUserId, profile, res, req });
-  if (!stravaSession) {
-    console.warn("[strava/weekly-z2] token refresh failed", { appUserId, hasRefreshToken: Boolean(refreshProbe) });
-    return res.status(401).json({ error: "strava_reconnect_required" });
-  }
-
-  const now = new Date();
-  const weekStart = startOfLocalWeekMonday(now);
-  const afterEpoch = Math.floor(weekStart.getTime() / 1000);
-  const beforeEpoch = Math.floor(now.getTime() / 1000) + 2;
-
-  const activitiesRes = await fetchActivitiesInRange(stravaSession.stravaFetch, afterEpoch, beforeEpoch);
-
-  if (!activitiesRes.ok) {
-    return res.status(502).json({ error: "strava_activities_failed" });
-  }
-
-  const activities = Array.isArray(activitiesRes.activities) ? activitiesRes.activities : [];
-
-  let totalZ2Seconds = 0;
-  const summary = [];
-  const chunk = 4;
-  for (let i = 0; i < activities.length; i += chunk) {
-    const slice = activities.slice(i, i + chunk);
-    const secsList = await Promise.all(
-      slice.map((a) => z2SecondsForActivity(stravaSession.stravaFetch, a))
-    );
-    for (let j = 0; j < slice.length; j += 1) {
-      const a = slice[j];
-      const secs = secsList[j] || 0;
-      if (secs <= 0) continue;
-      totalZ2Seconds += secs;
-      summary.push({
-        name: a.name || "Activity",
-        type: a.type || "Workout",
-        date: formatDateLabel(a.start_date_local || a.start_date),
-        z2Minutes: Math.round(secs / 60),
-      });
+    if (!activitiesRes.ok) {
+      return res.status(502).json({ error: "strava_activities_failed" });
     }
+
+    const activities = Array.isArray(activitiesRes.activities) ? activitiesRes.activities : [];
+
+    let totalZ2Seconds = 0;
+    const summary = [];
+    const chunk = 4;
+    for (let i = 0; i < activities.length; i += chunk) {
+      const slice = activities.slice(i, i + chunk);
+      const secsList = await Promise.all(
+        slice.map((a) => z2SecondsForActivity(stravaFetch, a))
+      );
+      for (let j = 0; j < slice.length; j += 1) {
+        const a = slice[j];
+        const secs = secsList[j] || 0;
+        if (secs <= 0) continue;
+        totalZ2Seconds += secs;
+        summary.push({
+          name: a.name || "Activity",
+          type: a.type || "Workout",
+          date: formatDateLabel(a.start_date_local || a.start_date),
+          z2Minutes: Math.round(secs / 60),
+        });
+      }
+    }
+
+    const weeklyZ2Minutes = Math.round(totalZ2Seconds / 60);
+    const weeklyZ2Hours = (totalZ2Seconds / 3600).toFixed(1);
+
+    return res.status(200).json({
+      weeklyZ2Minutes,
+      weeklyZ2Hours,
+      activitiesScanned: activities.length,
+      totalMinutes: weeklyZ2Minutes,
+      targetMinutes: 240,
+      activities: summary,
+    });
+  } catch (err) {
+    console.error("[strava/weekly-z2]", err?.message || err);
+    return res.status(200).json({ weeklyZ2Minutes: 0, error: err?.message || "fetch_failed" });
   }
-
-  const weeklyZ2Minutes = Math.round(totalZ2Seconds / 60);
-  const weeklyZ2Hours = (totalZ2Seconds / 3600).toFixed(1);
-
-  return res.status(200).json({
-    weeklyZ2Minutes,
-    weeklyZ2Hours,
-    activitiesScanned: activities.length,
-    totalMinutes: weeklyZ2Minutes,
-    targetMinutes: 240,
-    activities: summary,
-  });
 }

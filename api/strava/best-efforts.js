@@ -1,5 +1,5 @@
 import { createClient } from "@supabase/supabase-js";
-import { ensureStravaTokensForRequest } from "./stravaClient.js";
+import { getStravaAccessForRequest, stravaFetchWithToken } from "./tokenCookies.js";
 
 const supabase = createClient(
   process.env.SUPABASE_URL,
@@ -42,38 +42,21 @@ export default async function handler(req, res) {
   const { data: authData, error: authErr } = await supabase.auth.getUser(token);
   if (authErr || !authData?.user) return res.status(401).json({ error: "Invalid token" });
   const appUserId = authData.user.id;
+
   const headerUid = typeof req.headers["x-user-id"] === "string" ? req.headers["x-user-id"].trim() : "";
   if (headerUid && headerUid !== appUserId) {
     console.warn("[strava/best-efforts] x-user-id header does not match JWT user", { headerUid, appUserId });
   }
 
-  let profile = null;
-  const primaryProfileRes = await supabase
-    .from("user_profiles")
-    .select("connected_wearables,strava_access_token,strava_refresh_token,strava_token_expires_at")
-    .eq("user_id", appUserId)
-    .single();
-  profile = primaryProfileRes.data || null;
-
-  if (primaryProfileRes.error && /strava_(access|refresh)_token|strava_token_expires_at/i.test(primaryProfileRes.error.message || "")) {
-    const fallbackRes = await supabase.from("user_profiles").select("connected_wearables").eq("user_id", appUserId).single();
-    profile = fallbackRes.data || null;
-  }
-
-  const wearables = profile?.connected_wearables || {};
-  const accessProbe = profile?.strava_access_token || wearables.strava_access_token || null;
-  const refreshProbe = profile?.strava_refresh_token || wearables.strava_refresh_token || null;
-  if (!accessProbe && !refreshProbe) {
+  const accessToken = await getStravaAccessForRequest(req, res, supabase, appUserId);
+  if (!accessToken) {
     return res.status(200).json({ error: "strava_not_connected" });
   }
 
-  const stravaSession = await ensureStravaTokensForRequest({ supabase, appUserId, profile, res, req });
-  if (!stravaSession) {
-    return res.status(200).json({ error: "strava_reconnect_required" });
-  }
+  const stravaFetch = stravaFetchWithToken(accessToken);
 
   try {
-    const listRes = await stravaSession.stravaFetch(`${STRAVA_ACTIVITIES}?per_page=200`);
+    const listRes = await stravaFetch(`${STRAVA_ACTIVITIES}?per_page=200`);
     if (!listRes) {
       return res.status(200).json({ error: "strava_list_failed", bestEfforts: {} });
     }
@@ -89,7 +72,7 @@ export default async function handler(req, res) {
       const slice = runIds.slice(i, i + chunk);
       const details = await Promise.all(
         slice.map(async (id) => {
-          const r = await stravaSession.stravaFetch(STRAVA_ACTIVITY(id));
+          const r = await stravaFetch(STRAVA_ACTIVITY(id));
           if (!r) return null;
           return r.json().catch(() => null);
         })

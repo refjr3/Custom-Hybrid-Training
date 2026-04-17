@@ -2696,6 +2696,10 @@ export default function App() {
       window.history.replaceState({}, "", "/");
       if (session?.access_token) fetchWhoopData();
     }
+    if (params.get("strava") === "connected") {
+      window.history.replaceState({}, "", "/");
+      setStravaConnected(true);
+    }
     if (params.get("error")) {
       console.error("Auth error:", params.get("error"));
       window.history.replaceState({}, "", "/");
@@ -2731,6 +2735,10 @@ export default function App() {
       window.history.replaceState({}, "", "/");
     }
     if (params.get("strava_connected") === "true") {
+      setStravaConnected(true);
+      window.history.replaceState({}, "", "/");
+    }
+    if (params.get("strava") === "connected") {
       setStravaConnected(true);
       window.history.replaceState({}, "", "/");
     }
@@ -2918,11 +2926,9 @@ export default function App() {
         credentials: "include",
       });
       const data = await res.json().catch(() => ({}));
-      if (res.status === 401) {
-        if (data.error === "strava_not_connected" || data.error === "strava_reconnect_required") {
-          setStravaConnected(false);
-          setStravaWeeklyZ2Minutes(0);
-        }
+      if (data.error === "strava_not_connected" || data.error === "strava_reconnect_required") {
+        setStravaConnected(false);
+        setStravaWeeklyZ2Minutes(0);
         return;
       }
       if (!res.ok) {
