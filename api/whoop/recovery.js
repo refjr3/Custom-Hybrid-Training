@@ -28,15 +28,34 @@ function formatResponse(recData, sleepData, cycleData) {
   const sleep = sleepData.records?.[0];
   const cycle = cycleData.records?.[0];
   const inBedMilli = sleep?.score?.stage_summary?.total_in_bed_time_milli;
-  const hrvMilli = rec?.score?.hrv_rmssd_milli;
-  const rhrRaw = rec?.score?.resting_heart_rate;
+  const score = rec?.score || {};
+  const hrvMilli =
+    score.hrv_rmssd_milli
+    ?? score.hrv?.rmssd_milli
+    ?? rec?.hrv_rmssd_milli
+    ?? rec?.hrv?.rmssd_milli;
+  const rhrRaw = score.resting_heart_rate ?? rec?.resting_heart_rate ?? score.rhr;
+
+  if (process.env.WHOOP_DEBUG_RECOVERY === "1") {
+    try {
+      console.log("[WHOOP recovery raw]", JSON.stringify(recData?.records?.[0] ?? null, null, 2));
+    } catch (_) {
+      /* ignore */
+    }
+  }
+
+  const hrvRounded =
+    hrvMilli != null && Number.isFinite(Number(hrvMilli)) ? Math.round(Number(hrvMilli)) : null;
+  const rhrRounded =
+    rhrRaw != null && Number.isFinite(Number(rhrRaw)) ? Math.round(Number(rhrRaw)) : null;
+
   return {
     recovery: {
-      score: Math.round(rec?.score?.recovery_score ?? 0),
-      hrv: hrvMilli != null && Number.isFinite(Number(hrvMilli)) ? Math.round(Number(hrvMilli)) : 0,
-      hrv_rmssd_milli: hrvMilli != null && Number.isFinite(Number(hrvMilli)) ? Math.round(Number(hrvMilli)) : null,
-      rhr: rhrRaw != null && Number.isFinite(Number(rhrRaw)) ? Math.round(Number(rhrRaw)) : 0,
-      resting_heart_rate: rhrRaw != null && Number.isFinite(Number(rhrRaw)) ? Math.round(Number(rhrRaw)) : null,
+      score: Math.round(score.recovery_score ?? rec?.recovery_score ?? 0),
+      hrv: hrvRounded,
+      hrv_rmssd_milli: hrvRounded,
+      rhr: rhrRounded ?? 0,
+      resting_heart_rate: rhrRounded,
     },
     sleep: {
       score: Math.round(sleep?.score?.sleep_performance_percentage ?? 0),

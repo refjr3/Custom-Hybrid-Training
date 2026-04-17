@@ -383,6 +383,19 @@ function dayHasCompletionSignal(iso, row, garminActivities, unifiedMetrics) {
   );
 }
 
+function dayIsPlannedTraining(row) {
+  if (!row) return false;
+  return !!(row.am_session || row.pm_session || row.am_session_custom || row.pm_session_custom || row.am || row.pm);
+}
+
+function weekDayLabelToIso(label, planYear) {
+  if (!label) return null;
+  const y = planYear || new Date().getFullYear();
+  const parsed = new Date(`${String(label).trim()} ${y}`);
+  if (Number.isNaN(parsed.getTime())) return null;
+  return formatLocalYmd(parsed);
+}
+
 /**
  * 4-week Mon-start grid. Cell values: null = before plan, 0 = neutral/future, 1 = done, -1 = missed, 2 = today in progress.
  * Sessions planned/completed: planned training days from plan start through yesterday only (not today).
@@ -455,40 +468,6 @@ function buildLast4WeeksComplianceGrid({ planBlocks, garminActivities, unifiedMe
   return { last4WeeksCompliance, sessionsPlanned, sessionsCompleted, compliancePct };
 }
 
-function calculateRunPRs(activities) {
-  if (!Array.isArray(activities) || activities.length === 0) return null;
-  const runs = activities.filter((a) => {
-    const t = String(a.activity_type || "").toLowerCase();
-    return t.includes("run");
-  });
-  if (!runs.length) return null;
-  const distM = (a) => Number(a.distance_meters ?? a.distance ?? 0);
-  const elapsed = (a) => Number(a.duration_seconds ?? a.elapsed_time ?? 0);
-  const findBest = (minM, maxM) => {
-    const matching = runs.filter((a) => {
-      const d = distM(a);
-      const e = elapsed(a);
-      return d >= minM && d <= maxM && e > 0;
-    });
-    if (!matching.length) return null;
-    return matching.reduce((best, a) => (elapsed(a) < elapsed(best) ? a : best));
-  };
-  return {
-    mile: findBest(1500, 1850),
-    fiveK: findBest(4800, 5300),
-    tenK: findBest(9800, 10300),
-    halfMarathon: findBest(20900, 22200),
-  };
-}
-
-function formatPrTime(seconds) {
-  if (seconds == null || !Number.isFinite(Number(seconds)) || Number(seconds) <= 0) return "—";
-  const s = Math.floor(Number(seconds));
-  const m = Math.floor(s / 60);
-  const r = s % 60;
-  return `${m}:${String(r).padStart(2, "0")}`;
-}
-
 function getDeviceLocalTodayYmd() {
   return formatLocalYmd(new Date());
 }
@@ -546,9 +525,13 @@ function buildMorningBriefApiContext({
 }) {
   const perfHdr = derivePerfPlanHeader(planBlocks);
   const recovery = whoopData?.recovery?.score ?? null;
-  const hrv = whoopData?.recovery?.hrv_rmssd_milli ?? whoopData?.recovery?.hrv ?? null;
+  const hrvMilli = whoopData?.recovery?.hrv_rmssd_milli ?? whoopData?.recovery?.hrv;
+  const hrv =
+    hrvMilli != null && Number.isFinite(Number(hrvMilli)) ? Math.round(Number(hrvMilli)) : null;
   const sleep = whoopData?.sleep?.score ?? null;
-  const rhr = whoopData?.recovery?.resting_heart_rate ?? whoopData?.recovery?.rhr ?? null;
+  const rhrRaw = whoopData?.recovery?.resting_heart_rate ?? whoopData?.recovery?.rhr;
+  const rhr =
+    rhrRaw != null && Number.isFinite(Number(rhrRaw)) ? Math.round(Number(rhrRaw)) : null;
 
   let todaySession = null;
   let tomorrowSession = null;
@@ -2635,6 +2618,7 @@ export default function App() {
   const [stravaZ2Loading, setStravaZ2Loading] = useState(false);
   const [stravaZ2Error, setStravaZ2Error] = useState("");
   const [stravaZ2Data, setStravaZ2Data] = useState(null);
+  const [stravaBestEfforts, setStravaBestEfforts] = useState(null);
   const [recentActivities, setRecentActivities] = useState([]);
   const [biomarkers, setBiomarkers] = useState([]);
   const [planBlocks, setPlanBlocks] = useState([]);
@@ -2940,6 +2924,7 @@ export default function App() {
         if (data.error === "strava_not_connected" || data.error === "strava_reconnect_required") {
           setStravaConnected(false);
           setStravaZ2Data(null);
+          setStravaBestEfforts(null);
           setStravaZ2Error("");
           return;
         }
@@ -2947,12 +2932,39 @@ export default function App() {
       }
       setStravaConnected(true);
       setStravaZ2Data(data);
+      fetchStravaBestEfforts();
     } catch (e) {
       setStravaZ2Error(e.message || "Failed loading Strava Z2 progress");
     } finally {
       setStravaZ2Loading(false);
     }
   };
+
+  const fetchStravaBestEfforts = async () => {
+    if (!session?.access_token) return;
+    try {
+      const res = await fetch("/api/strava/best-efforts", {
+        headers: { Authorization: `Bearer ${session.access_token}` },
+      });
+      const data = await res.json().catch(() => ({}));
+      if (data?.error === "strava_not_connected" || data?.error === "strava_reconnect_required") {
+        setStravaBestEfforts(null);
+        return;
+      }
+      if (data?.bestEfforts && typeof data.bestEfforts === "object") {
+        setStravaBestEfforts(data.bestEfforts);
+      } else {
+        setStravaBestEfforts({});
+      }
+    } catch {
+      setStravaBestEfforts({});
+    }
+  };
+
+  useEffect(() => {
+    if (nav !== "perf" || !stravaConnected || !session?.access_token) return;
+    fetchStravaBestEfforts();
+  }, [nav, stravaConnected, session?.access_token]);
 
   const selectDefaultPlanPosition = (blocks) => {
     if (!Array.isArray(blocks) || blocks.length === 0) return null;
@@ -3155,8 +3167,9 @@ export default function App() {
 
     const checkProactive = async () => {
       const msgs = [];
-      const hrv = whoopData?.recovery?.hrv;
-      if (hrv) {
+      const hrvRaw = whoopData?.recovery?.hrv_rmssd_milli ?? whoopData?.recovery?.hrv;
+      const hrv = hrvRaw != null && Number.isFinite(Number(hrvRaw)) ? Math.round(Number(hrvRaw)) : null;
+      if (hrv != null) {
         const storedHrvs = JSON.parse(localStorage.getItem("hrv_history") || "[]");
         storedHrvs.push({ date: today, value: hrv });
         const recent = storedHrvs.slice(-7);
@@ -3194,7 +3207,7 @@ export default function App() {
               type: "weekly_review",
               week_summary: {
                 recovery: whoopData?.recovery?.score,
-                hrv: whoopData?.recovery?.hrv,
+                hrv: whoopData?.recovery?.hrv_rmssd_milli ?? whoopData?.recovery?.hrv ?? null,
                 strain: whoopData?.strain?.score,
                 sleep: whoopData?.sleep?.score,
                 sessions_planned: planned,
@@ -3594,14 +3607,14 @@ export default function App() {
 
   const rec = intervalsNum(intervalsTodayMetric, "recovery_score")
     ?? Number(whoopData?.recovery?.score ?? 0);
-  const hrv = intervalsNum(intervalsTodayMetric, "hrv")
-    ?? Number(
-      whoopData?.recovery?.hrv_rmssd_milli
-        ?? whoopData?.recovery?.hrv
-        ?? 0
-    );
-  const rhr = intervalsNum(intervalsTodayMetric, "rhr")
-    ?? Number(whoopData?.recovery?.resting_heart_rate ?? whoopData?.recovery?.rhr ?? 0);
+  const whoopHrvMilli = whoopData?.recovery?.hrv_rmssd_milli ?? whoopData?.recovery?.hrv;
+  const whoopHrvRounded =
+    whoopHrvMilli != null && Number.isFinite(Number(whoopHrvMilli)) ? Math.round(Number(whoopHrvMilli)) : null;
+  const hrv = intervalsNum(intervalsTodayMetric, "hrv") ?? whoopHrvRounded;
+  const whoopRhrRaw = whoopData?.recovery?.resting_heart_rate ?? whoopData?.recovery?.rhr;
+  const whoopRhrRounded =
+    whoopRhrRaw != null && Number.isFinite(Number(whoopRhrRaw)) ? Math.round(Number(whoopRhrRaw)) : null;
+  const rhr = intervalsNum(intervalsTodayMetric, "rhr") ?? whoopRhrRounded;
   const sleepHoursRaw = intervalsNum(intervalsTodayMetric, "sleep_hours");
   const sleepHours = sleepHoursRaw != null && sleepHoursRaw > 0
     ? Math.round(sleepHoursRaw * 10) / 10
@@ -4513,6 +4526,113 @@ export default function App() {
             )}
           </div>
 
+          {(() => {
+            const planComplianceYear = parseInt(String((getLocalToday() || getDeviceLocalTodayYmd() || "").slice(0, 4)), 10) || 2026;
+            const complianceTodayIso = getLocalToday() || getDeviceLocalTodayYmd();
+            const currentWeekDaysCompliance = (week?.days || []).map((d) => {
+              const iso = weekDayLabelToIso(d?.date || d?.date_label, planComplianceYear);
+              return { ...d, _iso: iso, dayAbbr: String(d.day || "—").slice(0, 3) };
+            });
+            let plannedSessions = 0;
+            let completedSessions = 0;
+            const completedIsoList = [];
+            for (const d of currentWeekDaysCompliance) {
+              if (!d._iso || !dayIsPlannedTraining(d)) continue;
+              plannedSessions += 1;
+              if (dayHasCompletionSignal(d._iso, d, garminActivities, unifiedMetrics)) {
+                completedSessions += 1;
+                completedIsoList.push(d._iso);
+              }
+            }
+            const compliancePctPlan = plannedSessions > 0 ? Math.round((completedSessions / plannedSessions) * 100) : 0;
+            const glowTR = { position: "absolute", top: -20, right: -20, width: 120, height: 120, background: "radial-gradient(circle,rgba(210,190,155,0.1) 0%,transparent 70%)", pointerEvents: "none" };
+            return (
+              <div style={{ ...glassCard, marginTop: 16, borderRadius: 16 }}>
+                <div style={specularTop()} />
+                <div style={glowTR} />
+                <div style={{ padding: "18px 20px", position: "relative", zIndex: 1 }}>
+                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 14 }}>
+                    <div style={{ ...lbl, marginBottom: 0 }}>This Week</div>
+                    <div style={{ fontFamily: "'DM Serif Display',serif", fontSize: 24, color: "#C9A875", letterSpacing: "-1px", lineHeight: 1 }}>
+                      {compliancePctPlan}
+                      <span style={{ fontSize: 12, fontFamily: "'DM Sans',sans-serif", color: "rgba(201,168,117,0.6)" }}>%</span>
+                    </div>
+                  </div>
+                  <div style={{ display: "grid", gridTemplateColumns: "repeat(7,1fr)", gap: 6 }}>
+                    {currentWeekDaysCompliance.map((day, i) => {
+                      if (!day._iso) {
+                        return (
+                          <div key={i} style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 4 }}>
+                            <div style={{
+                              width: "100%",
+                              aspectRatio: "1",
+                              borderRadius: 10,
+                              background: "rgba(255,255,255,0.03)",
+                              border: "1px solid rgba(255,255,255,0.06)",
+                              display: "flex",
+                              alignItems: "center",
+                              justifyContent: "center",
+                              fontSize: 14,
+                            }}
+                            />
+                            <div style={{ fontSize: 8, fontWeight: 600, color: "rgba(255,255,255,0.15)", letterSpacing: "1px", textTransform: "uppercase" }}>{day.dayAbbr}</div>
+                          </div>
+                        );
+                      }
+                      const isPast = day._iso < complianceTodayIso;
+                      const isToday = day._iso === complianceTodayIso;
+                      const isPlanned = dayIsPlannedTraining(day);
+                      const isComplete = isPlanned && completedIsoList.includes(day._iso);
+                      const isMissed = isPlanned && isPast && !isComplete;
+                      return (
+                        <div key={i} style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 4 }}>
+                          <div style={{
+                            width: "100%",
+                            aspectRatio: "1",
+                            borderRadius: 10,
+                            background: isComplete ? "rgba(201,168,117,0.12)"
+                              : isMissed ? "rgba(255,59,48,0.08)"
+                                : isToday ? "rgba(255,255,255,0.06)"
+                                  : "rgba(255,255,255,0.03)",
+                            border: isComplete ? "1px solid rgba(201,168,117,0.35)"
+                              : isMissed ? "1px solid rgba(255,59,48,0.25)"
+                                : isToday ? "1px solid rgba(255,255,255,0.15)"
+                                  : "1px solid rgba(255,255,255,0.06)",
+                            display: "flex",
+                            alignItems: "center",
+                            justifyContent: "center",
+                            fontSize: 14,
+                          }}
+                          >
+                            {isComplete ? (
+                              <span style={{ color: "#C9A875", fontWeight: 600, fontSize: 13 }}>✓</span>
+                            ) : isMissed ? (
+                              <span style={{ color: "rgba(255,59,48,0.7)", fontSize: 12 }}>✕</span>
+                            ) : isToday ? (
+                              <span style={{ width: 6, height: 6, borderRadius: "50%", background: "rgba(255,255,255,0.4)", display: "inline-block" }} />
+                            ) : null}
+                          </div>
+                          <div style={{
+                            fontSize: 8,
+                            fontWeight: 600,
+                            color: isComplete ? "rgba(201,168,117,0.7)"
+                              : isMissed ? "rgba(255,59,48,0.5)"
+                                : isToday ? "rgba(255,255,255,0.5)"
+                                  : "rgba(255,255,255,0.15)",
+                            letterSpacing: "1px",
+                            textTransform: "uppercase",
+                          }}
+                          >{day.dayAbbr}
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              </div>
+            );
+          })()}
+
           <div style={{ marginTop:16 }}>
             <div style={{ fontFamily:C.fm, fontSize:10, color:C.cyan, letterSpacing:3, textTransform:"uppercase", marginBottom:8 }}>Weekly Structure</div>
             <div style={{ ...glassCard, borderRadius:16, marginBottom:0 }}>
@@ -4635,30 +4755,22 @@ export default function App() {
       )}
 
       {nav === "perf" && (() => {
-        const complianceWeek = perfTrends?.complianceWeek;
         const summary = perfTrends?.summary;
         const atl = summary?.atl != null && Number.isFinite(Number(summary.atl)) ? String(summary.atl) : null;
         const ctl = summary?.ctl != null && Number.isFinite(Number(summary.ctl)) ? String(summary.ctl) : null;
         const tsbRaw = summary?.tsb;
         const tsb = tsbRaw != null && Number.isFinite(Number(tsbRaw)) ? Number(tsbRaw) : null;
-        const todayIsoTrends = getLocalToday() || getDeviceLocalTodayYmd();
-        const heat = buildLast4WeeksComplianceGrid({
-          planBlocks,
-          garminActivities,
-          unifiedMetrics,
-          todayIso: todayIsoTrends,
-        });
-        const compliancePct = heat.sessionsPlanned > 0 ? heat.compliancePct : (complianceWeek?.percent ?? 0);
-        const { last4WeeksCompliance, sessionsPlanned, sessionsCompleted } = heat;
-        const prs = calculateRunPRs(garminActivities);
 
         const hrv30Arr = Array.isArray(perfTrends?.hrv30) ? perfTrends.hrv30 : [];
         const validH = hrv30Arr.filter(
           (d) => d?.date && d.date <= (getLocalToday() || "") && d?.hrv != null && Number.isFinite(Number(d.hrv))
         );
+        const whoopHrvPerfRaw = whoopData?.recovery?.hrv_rmssd_milli ?? whoopData?.recovery?.hrv;
+        const whoopHrvPerf =
+          whoopHrvPerfRaw != null && Number.isFinite(Number(whoopHrvPerfRaw)) ? Math.round(Number(whoopHrvPerfRaw)) : null;
         const currentHrv = perfTrends?.current?.hrv != null && Number.isFinite(Number(perfTrends.current.hrv))
           ? Math.round(Number(perfTrends.current.hrv))
-          : (validH.length ? Math.round(Number(validH[validH.length - 1].hrv)) : Math.round(Number(whoopData?.recovery?.hrv_rmssd_milli ?? whoopData?.recovery?.hrv ?? 0)));
+          : (validH.length ? Math.round(Number(validH[validH.length - 1].hrv)) : whoopHrvPerf);
         const last7h = validH.slice(-7).map((d) => Number(d.hrv));
         const prev7h = validH.slice(-14, -7).map((d) => Number(d.hrv));
         const hrvTrend = meanFinite(last7h) != null && meanFinite(prev7h) != null
@@ -4716,6 +4828,64 @@ export default function App() {
             <div style={glassCard}>
               <div style={specularTop()} />
               <div style={{ position: "absolute", top: -20, right: -20, width: 120, height: 120, background: "radial-gradient(circle,rgba(210,190,155,0.1) 0%,transparent 70%)", pointerEvents: "none" }} />
+              <div style={{ padding: "20px 22px", position: "relative", zIndex: 1 }}>
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 14 }}>
+                  <div style={{ ...lbl, marginBottom: 0 }}>Personal Records</div>
+                  {!stravaConnected && (
+                    <a
+                      href={session?.user?.id ? `/api/strava/login?uid=${encodeURIComponent(session.user.id)}` : "/api/strava/login"}
+                      style={{ fontSize: 9, color: "#C9A875", fontWeight: 600, letterSpacing: "1px", textDecoration: "none", fontFamily: C.fs }}
+                    >
+                      Connect Strava →
+                    </a>
+                  )}
+                </div>
+                {[
+                  { label: "400m", key: "400m" },
+                  { label: "1 Mile", key: "1 mile" },
+                  { label: "2 Mile", key: "2 mile" },
+                  { label: "5K", key: "5k" },
+                  { label: "10K", key: "10k" },
+                  { label: "10 Mile", key: "10 mile" },
+                ].map((pr, i, arr) => {
+                  const best = stravaBestEfforts?.[pr.key];
+                  return (
+                    <div
+                      key={pr.key}
+                      style={{
+                        display: "flex",
+                        alignItems: "center",
+                        justifyContent: "space-between",
+                        padding: "11px 0",
+                        borderBottom: i < arr.length - 1 ? "1px solid rgba(255,255,255,0.06)" : "none",
+                      }}
+                    >
+                      <div>
+                        <div style={{ fontSize: 13, fontWeight: 500, color: "rgba(255,255,255,0.65)", fontFamily: C.fs }}>{pr.label}</div>
+                        {best?.date ? (
+                          <div style={{ fontSize: 9, color: "rgba(255,255,255,0.2)", marginTop: 1, fontFamily: C.fs }}>
+                            {new Date(best.date).toLocaleDateString("en-US", { month: "short", year: "2-digit" })}
+                          </div>
+                        ) : null}
+                      </div>
+                      <div style={{
+                        fontFamily: "'DM Serif Display',serif",
+                        fontSize: 22,
+                        color: best?.formatted ? "#fff" : "rgba(255,255,255,0.15)",
+                        letterSpacing: "-0.5px",
+                      }}
+                      >
+                        {best?.formatted ?? "—"}
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+
+            <div style={glassCard}>
+              <div style={specularTop()} />
+              <div style={{ position: "absolute", top: -20, right: -20, width: 120, height: 120, background: "radial-gradient(circle,rgba(210,190,155,0.1) 0%,transparent 70%)", pointerEvents: "none" }} />
               <div style={{ padding: "20px 22px 14px", position: "relative", zIndex: 1 }}>
                 <div style={lbl}>Fitness vs Fatigue · 8 Weeks</div>
                 <div style={{ display: "flex", gap: 20, marginBottom: 16 }}>
@@ -4756,66 +4926,13 @@ export default function App() {
             <div style={glassCard}>
               <div style={specularTop()} />
               <div style={{ position: "absolute", top: -20, right: -20, width: 120, height: 120, background: "radial-gradient(circle,rgba(210,190,155,0.1) 0%,transparent 70%)", pointerEvents: "none" }} />
-              <div style={{ padding: "20px 22px", position: "relative", zIndex: 1 }}>
-                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 16 }}>
-                  <div style={lbl}>Compliance · Last 4 Weeks</div>
-                  <div style={{ fontFamily: "'DM Serif Display',serif", fontSize: 28, color: "#C9A875", letterSpacing: "-1px", lineHeight: 1 }}>{compliancePct}<span style={{ fontSize: 14, fontFamily: "'DM Sans',sans-serif", color: "rgba(201,168,117,0.6)" }}>%</span></div>
-                </div>
-                <div style={{ display: "grid", gridTemplateColumns: "repeat(7,1fr)", gap: 4, marginBottom: 4 }}>
-                  {["M", "T", "W", "T", "F", "S", "S"].map((d, i) => (
-                    <div key={i} style={{ textAlign: "center", fontSize: 8, fontWeight: 600, color: "rgba(255,255,255,0.2)", letterSpacing: "1px" }}>{d}</div>
-                  ))}
-                </div>
-                <div style={{ display: "grid", gridTemplateColumns: "repeat(7,1fr)", gap: 4 }}>
-                  {last4WeeksCompliance.map((v, i) => (
-                    <div
-                      key={i}
-                      style={{
-                        aspectRatio: "1",
-                        borderRadius: 5,
-                        background:
-                          v == null
-                            ? "transparent"
-                            : v === 1
-                              ? `rgba(201,168,117,${0.52 + ((i * 7) % 5) * 0.07})`
-                              : v === 2
-                                ? "rgba(201,168,117,0.12)"
-                                : v === -1
-                                  ? "rgba(255,59,48,0.15)"
-                                  : "rgba(255,255,255,0.04)",
-                        border:
-                          v === -1
-                            ? "1px solid rgba(255,59,48,0.2)"
-                            : v === 2
-                              ? "1px dashed rgba(201,168,117,0.45)"
-                              : "none",
-                      }}
-                    />
-                  ))}
-                </div>
-                <div style={{ display: "flex", justifyContent: "space-between", marginTop: 14, alignItems: "center" }}>
-                  <div style={{ display: "flex", gap: 10, alignItems: "center" }}>
-                    <span style={{ display: "inline-flex", alignItems: "center", gap: 4, fontSize: 9, color: "rgba(255,255,255,0.3)" }}><span style={{ width: 8, height: 8, borderRadius: 2, background: "#C9A875", display: "inline-block" }} /> Done</span>
-                    <span style={{ display: "inline-flex", alignItems: "center", gap: 4, fontSize: 9, color: "rgba(255,255,255,0.3)" }}><span style={{ width: 8, height: 8, borderRadius: 2, background: "rgba(255,59,48,0.2)", border: "1px solid rgba(255,59,48,0.3)", display: "inline-block" }} /> Missed</span>
-                    <span style={{ display: "inline-flex", alignItems: "center", gap: 4, fontSize: 9, color: "rgba(255,255,255,0.3)" }}><span style={{ width: 8, height: 8, borderRadius: 2, background: "rgba(201,168,117,0.12)", border: "1px dashed rgba(201,168,117,0.45)", display: "inline-block" }} /> Today</span>
-                  </div>
-                  <div style={{ fontSize: 9, color: "rgba(255,255,255,0.2)" }}>{sessionsCompleted} of {sessionsPlanned} sessions</div>
-                </div>
-              </div>
-            </div>
-            <div style={{ fontSize: 10, color: "rgba(255,255,255,0.2)", lineHeight: 1.5, marginTop: 10, marginBottom: 4 }}>
-              Planned vs completed sessions. Consistency here predicts race day performance more than any single workout.
-            </div>
-
-            <div style={glassCard}>
-              <div style={specularTop()} />
-              <div style={{ position: "absolute", top: -20, right: -20, width: 120, height: 120, background: "radial-gradient(circle,rgba(210,190,155,0.1) 0%,transparent 70%)", pointerEvents: "none" }} />
               <div style={{ padding: "20px 22px 14px", position: "relative", zIndex: 1 }}>
                 <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 16 }}>
                   <div>
                     <div style={lbl}>HRV · 30 Days</div>
                     <div style={{ fontFamily: "'DM Serif Display',serif", fontSize: 48, color: "#fff", letterSpacing: "-2px", lineHeight: 1 }}>
-                      {currentHrv}<span style={{ fontSize: 18, color: "rgba(255,255,255,0.3)", fontFamily: "'DM Sans',sans-serif", marginLeft: 2 }}>ms</span>
+                      {currentHrv != null ? currentHrv : "—"}
+                      <span style={{ fontSize: 18, color: "rgba(255,255,255,0.3)", fontFamily: "'DM Sans',sans-serif", marginLeft: 2 }}>ms</span>
                     </div>
                   </div>
                   <div style={{ textAlign: "right", paddingTop: 20 }}>
@@ -4844,50 +4961,6 @@ export default function App() {
             <div style={{ fontSize: 10, color: "rgba(255,255,255,0.2)", lineHeight: 1.5, marginTop: 10, marginBottom: 4 }}>
               Rising HRV = absorbing training. Falling HRV = accumulated stress. Use this to confirm your WHOOP gate decisions.
             </div>
-
-            <div style={glassCard}>
-              <div style={specularTop()} />
-              <div style={{ position: "absolute", top: -20, right: -20, width: 120, height: 120, background: "radial-gradient(circle,rgba(210,190,155,0.1) 0%,transparent 70%)", pointerEvents: "none" }} />
-              <div style={{ padding: "20px 22px", position: "relative", zIndex: 1 }}>
-                <div style={lbl}>Personal Records</div>
-                {[
-                  { label: "Mile", key: "mile", icon: "▷" },
-                  { label: "5K", key: "fiveK", icon: "▷" },
-                  { label: "10K", key: "tenK", icon: "▷" },
-                  { label: "Half Marathon", key: "halfMarathon", icon: "▷" },
-                ].map((pr, i, arr) => {
-                  const best = prs?.[pr.key];
-                  const sec = best ? Number(best.duration_seconds ?? best.elapsed_time) : null;
-                  const time = formatPrTime(sec);
-                  const date = best?.start_time
-                    ? new Date(best.start_time).toLocaleDateString("en-US", { month: "short", year: "2-digit" })
-                    : null;
-                  return (
-                    <div key={pr.key} style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "12px 0", borderBottom: i < arr.length - 1 ? "1px solid rgba(255,255,255,0.06)" : "none" }}>
-                      <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-                        <div style={{ width: 28, height: 28, borderRadius: 8, background: "rgba(255,255,255,0.05)", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 12, color: "rgba(201,168,117,0.6)", flexShrink: 0 }}>{pr.icon}</div>
-                        <div>
-                          <div style={{ fontSize: 13, fontWeight: 500, color: "rgba(255,255,255,0.7)" }}>{pr.label}</div>
-                          {date ? <div style={{ fontSize: 9, color: "rgba(255,255,255,0.2)", marginTop: 1 }}>{date}</div> : null}
-                        </div>
-                      </div>
-                      <div style={{ fontFamily: "'DM Serif Display',serif", fontSize: 22, color: best ? "#fff" : "rgba(255,255,255,0.2)", letterSpacing: "-0.5px" }}>{time}</div>
-                    </div>
-                  );
-                })}
-                {!garminActivities?.length ? (
-                  <div style={{ textAlign: "center", paddingTop: 8 }}>
-                    <div style={{ fontSize: 10, color: "rgba(255,255,255,0.2)", marginBottom: 8 }}>Connect Garmin to auto-detect PRs</div>
-                    <a
-                      href={session?.user?.id ? `/api/auth/garmin-login?user_id=${encodeURIComponent(session.user.id)}` : "/api/auth/garmin-login"}
-                      style={{ fontSize: 11, color: "#C9A875", fontWeight: 600, textDecoration: "none" }}
-                    >
-                      Connect Garmin →
-                    </a>
-                  </div>
-                ) : null}
-              </div>
-            </div>
           </div>
         );
       })()}
@@ -4909,6 +4982,35 @@ export default function App() {
         const dexaStatusColor = (st) => (st === "watch" ? statusDot.watch : st === "low" ? statusDot.low : statusDot.optimal);
         return (
           <div style={{ padding: "20px" }}>
+            {!stravaConnected && (
+              <div style={{ ...glassCard, marginBottom: 14, borderRadius: 16 }}>
+                <div style={specularTop()} />
+                <div style={{ padding: "14px 18px", position: "relative", zIndex: 1, display: "flex", justifyContent: "space-between", alignItems: "center", gap: 12 }}>
+                  <div style={{ fontFamily: C.fs, fontSize: 12, color: "rgba(255,255,255,0.55)", lineHeight: 1.4 }}>
+                    Connect Strava to sync run PRs on the Performance tab.
+                  </div>
+                  <a
+                    href={session?.user?.id ? `/api/strava/login?uid=${encodeURIComponent(session.user.id)}` : "/api/strava/login"}
+                    style={{
+                      flexShrink: 0,
+                      fontSize: 9,
+                      fontWeight: 600,
+                      color: "#C9A875",
+                      letterSpacing: "1.5px",
+                      textDecoration: "none",
+                      fontFamily: C.fm,
+                      textTransform: "uppercase",
+                      border: "1px solid rgba(201,168,117,0.35)",
+                      borderRadius: 20,
+                      padding: "8px 14px",
+                    }}
+                  >
+                    Connect Strava
+                  </a>
+                </div>
+              </div>
+            )}
+
             <div style={creamCard}>
               <div style={{ position: "absolute", top: 0, left: "5%", right: "5%", height: 1, background: "linear-gradient(90deg,transparent,rgba(255,255,255,0.9) 50%,transparent)", pointerEvents: "none" }} />
               <div style={{ position: "absolute", top: -30, right: -30, width: 160, height: 130, background: "radial-gradient(ellipse at top right,rgba(255,255,255,0.38) 0%,transparent 65%)", pointerEvents: "none" }} />
@@ -5018,9 +5120,9 @@ export default function App() {
         {[
           { icon: "◎", label: "TODAY", key: "today" },
           { icon: "▦", label: "PLAN", key: "plan" },
-          { icon: "◈", label: "SUPPS", key: "supps" },
           { icon: "▲", label: "PERF", key: "perf" },
           { icon: "◉", label: "STATS", key: "stats" },
+          { icon: "◈", label: "SUPPS", key: "supps" },
         ].map((tab) => (
           <button
             key={tab.key}
