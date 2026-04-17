@@ -46,156 +46,82 @@ const BLOCK_ID_BY_LABEL = {
   Recovery: "recovery_block",
 };
 
-/** Group class — odd weeks: SAT; even weeks: TUE */
-const HYROX_MOTION = {
-  label: "HYROX Motion",
-  note: `HYROX Motion — coached group class.
-Book your slot. Race-specific stations and pacing; log weak links for the next block.`,
+/** Monday — every training week: Z2 erg + mobility (HYROX never on Monday). */
+const MON_SESSION = {
+  label: "Z2 Erg/Echo + Mobility",
+  note: "Z2 Erg + Mobility — Row, Ski or Echo Bike. Cap at WHOOP strain target. HR 133-148bpm. Dynamic mobility after.",
 };
 
-const HYROX_MON = {
-  base_standard: {
-    label: "HYROX",
-    note: `HYROX — Base Phase (Technique Focus)
-4×(200m Run + Sled Push 20m + Wall Balls 10)
-Focus: nasal breathing on runs, perfect sled mechanics.
-Log time per round. Light loads — technique over pace.`,
-  },
-  base_brick: {
-    label: "HYROX",
-    note: `HYROX — Base Phase (Technique Focus)
-4×(200m Run + Sled Pull 20m + Wall Balls 10)
-Alternate sled direction from standard weeks.
-Same focus — technique over pace. Log time per round.`,
-  },
-  base_deload: {
-    label: "HYROX",
-    note: `HYROX — Deload (60% Effort)
-3×(200m Run + Sled Push 20m + Wall Balls 10)
-Recovery week. 60% effort. Absorb the work. No new stimulus.`,
-  },
+/** Odd weeks Saturday — HYROX Motion group class */
+const HYROX_MOTION = {
+  label: "HYROX Motion",
+  note: `HYROX Motion — Coach-led group class at gym. Just show up and work.
+🟢 Full send.
+🟡 Full send or skip — no half measures.
+🔴 Full rest.`,
+};
 
-  accum_standard: {
-    label: "HYROX",
-    note: `HYROX — Accumulation (Volume Climbs)
-5×(200m Run + Sled Push 25m + Sandbag Lunge 10m + Wall Balls 15)
-Add load vs Base. Sandbag lunges introduced.
-Log time per round. Add 1 round vs Base phase.`,
-  },
-  accum_brick: {
-    label: "HYROX",
-    note: `HYROX — Accumulation (Compromised Running)
-5×(400m Run + Sled Pull 25m + Wall Balls 15)
-Longer run segment. Compromised running emphasis begins.
-Push the run pace. Log every round.`,
-  },
-  accum_deload: {
-    label: "HYROX",
-    note: `HYROX — Deload (60% Effort)
-3×(400m Run + Sled Push 20m + Wall Balls 10)
-Recovery week. 60% effort. Flush fatigue.`,
-  },
+const DELOAD_NOTE_APPEND = "\n\nDELOAD WEEK — cut volume 50%. No new stimulus.";
 
-  intens_w9: {
-    label: "HYROX",
-    note: `HYROX — Half Sim (Race Pace)
-4 stations at race pace. 500m run between each.
-Sled Push 50m → Sandbag Lunge 20m → Wall Balls 20 → SkiErg 500m
-Log every split. This is your W9 benchmark.`,
-  },
-  intens_w10: {
-    label: "HYROX",
-    note: `HYROX — Heavy Compromised Running
-5×(400m Run + Sled Push 50m + Sled Pull 50m + Wall Balls 20)
-Race weight on sleds. Heavy loads. Push the pace.
-Log every round.`,
-  },
-  intens_w11: {
-    label: "HYROX",
-    note: `HYROX — Half Sim (Chase W9 Splits)
-4 stations at race pace. 500m run between each.
-Sled Push 50m → Sled Pull 50m → Sandbag Lunge 20m → Wall Balls 25
-Chase your W9 splits. Log everything.`,
-  },
-  intens_deload: {
-    label: "HYROX",
-    note: `HYROX — Deload (70% Effort)
-Half sim — 3 stations at 70% effort.
-Sled Push 30m → Wall Balls 15 → Sandbag Lunge 10m
-Recovery week. Absorb Block 3.`,
-  },
+/** Standard (odd) weeks — Tuesday quality rotation */
+const TUE_STANDARD = {
+  1: { label: "Threshold", note: "Threshold Run W1 — 20min comfortably hard. HR 155-165. Establish baseline. Log avg HR and time." },
+  3: { label: "Track", note: "Track W3 — 6×400m at race pace. 90sec rest. Log all splits." },
+  5: { label: "Threshold", note: "Threshold Run W5 — 25-30min comfortably hard. Build duration vs W1. Log avg HR." },
+  7: { label: "Track", note: "Track W7 — 8×400m race pace. Log vs W3." },
+  9: { label: "Threshold", note: "Threshold Run W9 — 30min + 2km race pace finish. Log splits." },
+  11: { label: "Track", note: "Track W11 — 10×400m race pace. 60sec rest. Log vs W7." },
+  13: { label: "Threshold", note: "Threshold Run W13 — 30min peak effort. Log vs W9." },
+  15: { label: "Track", note: "Track W15 — 6×800m race pace. Final big track session." },
+  17: { label: "Threshold", note: "Sharpen — Threshold 20min. Stay sharp, don't race it." },
+  19: { label: "Shakeout", note: "Taper — 15min easy with 4 strides. Wake up the legs." },
+  21: { label: "Rest", note: "Race Week — full rest. Trust the taper." },
+};
 
-  peak_w13: {
-    label: "HYROX",
-    note: `HYROX — Full Race Simulation (BENCHMARK)
-All 8 stations in order at race pace.
-1km Run → SkiErg 1000m → Sled Push 50m → Sled Pull 50m →
-Burpee Broad Jump 80m → Row 1000m → Farmers Carry 200m →
-Sandbag Lunge 100m → Wall Balls 100 reps
-LOG EVERY SPLIT. This is your race benchmark.`,
-  },
-  peak_w14: {
-    label: "HYROX",
-    note: `HYROX — Max Volume (Race Movements)
-6×(400m Run + Sled Push 50m + Wall Balls 25 + Sandbag Lunge 20m)
-Max HYROX volume. Heaviest loads. Push pace on runs.
-Log every round.`,
-  },
-  peak_w15: {
-    label: "HYROX",
-    note: `HYROX — Full Race Simulation (Chase W13)
-All 8 stations in order at race pace.
-1km Run → SkiErg 1000m → Sled Push 50m → Sled Pull 50m →
-Burpee Broad Jump 80m → Row 1000m → Farmers Carry 200m →
-Sandbag Lunge 100m → Wall Balls 100 reps
-Chase your W13 splits. Race your own clock.`,
-  },
-  peak_deload: {
-    label: "HYROX",
-    note: `HYROX — Deload (70% Effort)
-4 stations at 70% effort. Active recovery only.
-Sled Push 30m → Wall Balls 15 → Sandbag Lunge 10m → SkiErg 250m
-Final deload before sharpening.`,
-  },
+/** Brick (even) weeks — Tuesday HYROX + plyos progression */
+const TUE_BRICK = {
+  2: { label: "HYROX + Plyos", note: "HYROX W2 — Base phase. 4×(200m Run + Sled Push 20m + Wall Balls 10). Technique focus." },
+  4: { label: "HYROX + Plyos", note: "HYROX W4 — Accumulation. 5×(200m Run + Sled Push 25m + Sandbag Lunge 10m + Wall Balls 15). Add load." },
+  6: { label: "HYROX + Plyos", note: "HYROX W6 — Accumulation. 5×(400m Run + Sled Pull 25m + Wall Balls 15). Compromised running emphasis." },
+  8: { label: "HYROX + Plyos", note: "HYROX W8 — Deload. 3×(200m Run + Sled Push 20m + Wall Balls 10). 60% effort." },
+  10: { label: "HYROX + Plyos", note: "HYROX W10 — Intensification. 5×(400m Run + Sled Push 50m + Sled Pull 50m + Wall Balls 20). Heavy loads." },
+  12: { label: "HYROX + Plyos", note: "HYROX W12 — Deload. Half sim 3 stations at 70% effort." },
+  14: { label: "HYROX + Plyos", note: "HYROX W14 — Peak. 6×(400m Run + Sled Push 50m + Wall Balls 25 + Sandbag Lunge 20m). Max volume." },
+  16: { label: "HYROX + Plyos", note: "HYROX W16 — Deload. 4 stations at 70% effort." },
+  18: { label: "HYROX + Plyos", note: "HYROX W18 — Sharpen. 4 stations at 75% effort. Stay fast, protect legs." },
+  20: { label: "HYROX + Plyos", note: "HYROX W20 — Taper. Wall Balls 3×15 + Sled Push 2×20m at 60%. Minimum dose." },
+  22: { label: "Rest", note: "Recovery Week — full rest Tuesday." },
+};
 
-  sharpen_w17: {
-    label: "HYROX",
-    note: `HYROX — Sharpen (80% Effort)
-6 stations at 80% effort. Sharp but not fatiguing.
-Sled Push 50m → Sled Pull 50m → Sandbag Lunge 20m →
-Wall Balls 20 → SkiErg 500m → Row 500m
-Stay fast. Protect the legs.`,
-  },
-  sharpen_w18: {
-    label: "HYROX",
-    note: `HYROX — Sharpen (75% Effort)
-4 stations only at 75% effort.
-Sled Push 50m → Wall Balls 20 → Sandbag Lunge 20m → SkiErg 500m
-Stay fast. Do not fatigue. Legs need to be fresh.`,
-  },
+/** Week 4 is a deload week; Tuesday uses base-phase deload HYROX (not W4 accumulation prescription). */
+const TUE_BRICK_W4_DELOAD = {
+  label: "HYROX + Plyos",
+  note: "HYROX — Deload (60% Effort)\n3×(200m Run + Sled Push 20m + Wall Balls 10)\nRecovery week. 60% effort. Absorb the work. No new stimulus.",
+};
 
-  sharpen_w19: {
-    label: "HYROX",
-    note: `HYROX — Final Sharpen (70% Effort)
-3 stations only at 70% effort. Keep the feel.
-Sled Push 30m → Wall Balls 15 → SkiErg 250m
-Protect the legs. Race is 2 weeks away.`,
-  },
+/** Brick weeks — Saturday track / threshold rotation */
+const SAT_BRICK = {
+  2: { label: "Track / Race", note: "Track W2 — Apr 25 = 8k Race. Race it. Log all splits." },
+  4: { label: "Threshold", note: "Threshold Run W4 — 25-30min comfortably hard. Build duration vs W2. Log avg HR." },
+  6: { label: "Track", note: "Track W6 — 8×400m at race pace. Log splits vs W2." },
+  8: { label: "Easy Run", note: "Deload — easy Z2 run 20-30min. No quality work." },
+  10: { label: "Threshold", note: "Threshold Run W10 — 30min. Push duration. Log vs W4." },
+  12: { label: "Easy Run", note: "Deload — easy Z2 run 20-30min. No quality work." },
+  14: { label: "Track", note: "Track W14 — 10×400m race pace. 60sec rest. Log vs W6." },
+  16: { label: "Easy Run", note: "Final deload — easy Z2 15-20min. Very easy." },
+  18: { label: "Track", note: "Sharpen — 4×400m sharp. Fast not fatiguing." },
+  20: { label: "Easy Run", note: "Taper — 20min very easy Z2. Race next week." },
+  22: { label: "Recovery Run", note: "Post-race — easy 20-30min if legs allow. Otherwise full rest." },
+};
 
-  taper: {
-    label: "HYROX",
-    note: `HYROX — Taper (Minimum Dose)
-Wall Balls 3×15 fast + Sled Push 2×20m at 60%.
-Minimum effective dose. Keep the feel. Nothing more.`,
-  },
+const RACE_WEEK_SAT_SOLO = {
+  label: "RACE DAY — HYROX Solo",
+  note: "AMAZFIT HYROX WASHINGTON DC — Men's Solo Open. Sep 5. Trust the taper. Trust the 22 weeks. Run first 1km conservative. Log every split.",
+};
 
-  race_mon: {
-    label: "Easy Flush",
-    note: `Race Week — Easy Flush
-15 min easy movement only. Walk, easy jog, mobility.
-Visualize race execution — especially first 1km strategy.
-Mental prep begins today.`,
-  },
+const RACE_WEEK_TUE_REST = {
+  label: "Rest",
+  note: "Race Week — Full Rest. No training. Trust the taper.",
 };
 
 const RECOVERY_SESSIONS = {
@@ -543,34 +469,6 @@ No strength work.`,
   },
 };
 
-const SAT_SESSIONS = {
-  1: { label: "Threshold", note: "Threshold Run W1 — establish baseline. 20min comfortably hard. HR 155-165. Log avg HR and time." },
-  2: { label: "Track / Threshold", note: "Track W2 — Apr 25 = 8k Race. Treat as track / threshold quality session. Race it. Log all splits." },
-  3: { label: "Threshold", note: "Threshold Run W3 — push duration vs W1. 22-25min. Log avg HR and time." },
-  4: { label: "Easy Run", note: "Deload — Easy Z2 Run 20-30min. No quality work this week." },
-  5: { label: "Threshold", note: "Threshold Run W5 — 25-30min comfortably hard. Build duration. Log avg HR." },
-  6: { label: "Track", note: "Track W6 — 6×400m at race pace. 90sec rest. Log all splits vs W2." },
-  7: { label: "Threshold", note: "Threshold Run W7 — 30min extended threshold. Push the ceiling. Log avg HR." },
-  8: { label: "Easy Run", note: "Deload — Easy Z2 Run 20-30min. No quality work." },
-  9: { label: "Threshold", note: "Threshold Run W9 — 30min + 2km race pace finish. Log splits." },
-  10: { label: "Track", note: "Track W10 — 8×400m at race pace. 75sec rest. Log all splits vs W6." },
-  11: { label: "Threshold", note: "Threshold Run W11 — 30min extended. BENCHMARK. Log time vs W9." },
-  12: { label: "Easy Run", note: "Deload — Easy Z2 Run 20-30min. No quality work." },
-  13: { label: "Threshold", note: "Threshold Run W13 — 30min race pace effort. Peak phase. Log vs W11." },
-  14: { label: "Track", note: "Track W14 — 10×400m at race pace. 60sec rest. Log all splits vs W10." },
-  15: { label: "Threshold", note: "Threshold Run W15 — 30min peak effort. Final big threshold. Log vs W13." },
-  16: { label: "Easy Run", note: "Final Deload — Easy Z2 Run 15-20min. Very easy. Rest up." },
-  17: { label: "Threshold", note: "Sharpen — Threshold Run 20min. Stay sharp. Do not race it. Protect the legs." },
-  18: { label: "Track", note: "Sharpen — Track 4×400m sharp. 90sec rest. Fast not fatiguing. Log vs W14." },
-  19: { label: "Shakeout", note: "Taper — 15min easy with 4 strides. Just wake up the legs. Nothing more." },
-  20: { label: "Easy Run", note: "Taper — 20min very easy Z2. Protect the legs. Race is next week." },
-  21: {
-    label: "RACE DAY — HYROX Solo",
-    note: "AMAZFIT HYROX WASHINGTON DC — Men's Solo Open. Sep 5. Trust the taper. Trust the 22 weeks. Run first 1km conservative. Log every split.",
-  },
-  22: { label: "Recovery Run", note: "Post-race — easy 20-30min jog if legs allow. Otherwise full rest." },
-};
-
 const SUN_SESSIONS = {
   long_run: {
     base: { label: "Long Z2 Run", note: "Long Z2 Run — 50-60min. HR cap 133-148bpm strict. Walk if HR drifts." },
@@ -606,15 +504,10 @@ WALL BALL FINISHER: 4×20 wall balls with wet hands. Simulate race finish condit
   },
 };
 
-const TUE_SESSIONS = {
-  standard: { label: "Z2 Erg/Echo + Mobility", note: "Z2 Erg + Mobility — Row, Ski or Echo Bike. Cap at WHOOP strain target. HR 133-148bpm. Dynamic mobility after." },
-  brick: { label: "Z2 Run + Mobility", note: "Z2 Run + Mobility — HR cap 133-148bpm. Static stretch after. Cap at WHOOP strain target." },
-  deload: { label: "Z2 Erg/Echo + Mobility", note: "Deload — 20min easy erg. HR well below ceiling. Flush the legs." },
-  race: { label: "Rest", note: "Race Week — Full Rest. No training. Trust the taper." },
-};
-
 const WL_MAP = {
   HYROX: "FOR TIME — Hyrox Full Runs Half Stations",
+  "HYROX + Plyos": "FOR TIME — Hyrox Full Runs Half Stations",
+  "Threshold/Track": "THRESHOLD — 10x2 Min",
   "Easy Flush": "RECOVERY — Active Reset",
   "Z2 Erg/Echo + Mobility": "ZONE 2 — Easy Aerobic",
   "Z2 Run + Mobility": "ZONE 2 — Easy Aerobic",
@@ -683,78 +576,83 @@ const RECOVERY_DAY_KEYS = ["mon", "tue", "wed", "thu", "fri", "sat", "sun"];
 const sessionForDay = (weekNum, dayIndex) => {
   const isOdd = weekNum % 2 !== 0;
   const isDeload = DELOAD_WEEKS.includes(weekNum);
-  const isRaceWeek = weekNum === RACE_WEEK;
   const phase = getPhase(weekNum);
 
-  let session = { label: "Rest", note: "Rest day." };
+  const thuForPhase = () => {
+    if (phase === "peak") return THU_SESSIONS.tempo;
+    if (phase === "sharpen") return THU_SESSIONS.tempo_sharpen;
+    if (phase === "taper") return THU_SESSIONS.taper;
+    return THU_SESSIONS.z2;
+  };
+
+  const friForPhase = () => {
+    if (phase === "taper") return FRI_SESSIONS.taper;
+    if (phase === "sharpen") return FRI_SESSIONS.sharpen;
+    return FRI_SESSIONS[phase] || FRI_SESSIONS.base;
+  };
 
   if (weekNum === RECOVERY_WEEK) {
     const key = RECOVERY_DAY_KEYS[dayIndex];
     return RECOVERY_SESSIONS[key];
   }
 
-  if (isRaceWeek) {
-    if (dayIndex === 0) session = HYROX_MON.race_mon;
-    else if (dayIndex === 1) session = TUE_SESSIONS.race;
-    else if (dayIndex === 2) session = WED_SESSIONS.race_wed;
-    else if (dayIndex === 3) session = THU_SESSIONS.race_thu;
-    else if (dayIndex === 4) session = FRI_SESSIONS.race_fri;
-    else if (dayIndex === 5) session = { label: SAT_SESSIONS[RACE_WEEK].label, note: SAT_SESSIONS[RACE_WEEK].note };
-    else if (dayIndex === 6) session = SUN_SESSIONS.race_sun;
-  } else if (isDeload) {
+  if (weekNum === RACE_WEEK) {
+    if (dayIndex === 0) return { ...MON_SESSION };
+    if (dayIndex === 1) return { ...RACE_WEEK_TUE_REST };
+    if (dayIndex === 2) return WED_SESSIONS.race_wed;
+    if (dayIndex === 3) return THU_SESSIONS.race_thu;
+    if (dayIndex === 4) return FRI_SESSIONS.race_fri;
+    if (dayIndex === 5) return { ...RACE_WEEK_SAT_SOLO };
+    if (dayIndex === 6) return SUN_SESSIONS.race_sun;
+  }
+
+  let session;
+
+  if (isDeload) {
     if (dayIndex === 0) {
-      if (phase === "base") session = HYROX_MON.base_deload;
-      else if (phase === "accum") session = HYROX_MON.accum_deload;
-      else if (phase === "intens") session = HYROX_MON.intens_deload;
-      else session = HYROX_MON.peak_deload;
-    } else if (dayIndex === 1) session = TUE_SESSIONS.deload;
-    else if (dayIndex === 2) session = WED_SESSIONS.deload;
-    else if (dayIndex === 3) {
-      session = { ...THU_SESSIONS.z2, note: "Deload — 20min easy jog. HR well below ceiling. Easy. Recovery." };
-    } else if (dayIndex === 4) session = FRI_SESSIONS.deload;
-    else if (dayIndex === 5) session = { label: SAT_SESSIONS[weekNum].label, note: SAT_SESSIONS[weekNum].note };
-    else if (dayIndex === 6) {
+      session = { ...MON_SESSION };
+    } else if (dayIndex === 1) {
+      session =
+        weekNum === 4
+          ? { ...TUE_BRICK_W4_DELOAD }
+          : { ...TUE_BRICK[weekNum] };
+    } else if (dayIndex === 2) {
+      session = WED_SESSIONS.deload;
+    } else if (dayIndex === 3) {
+      session = {
+        ...THU_SESSIONS.z2,
+        note: "Deload — 20min easy jog. HR well below ceiling. Easy. Recovery.",
+      };
+    } else if (dayIndex === 4) {
+      session = FRI_SESSIONS.deload;
+    } else if (dayIndex === 5) {
+      session = { ...SAT_BRICK[weekNum] };
+    } else {
       session = isOdd ? SUN_SESSIONS.long_run.deload : SUN_SESSIONS.brick.deload;
     }
-  } else {
-    if (dayIndex === 0) {
-      if (phase === "base") session = isOdd ? HYROX_MON.base_standard : HYROX_MON.base_brick;
-      else if (phase === "accum") session = isOdd ? HYROX_MON.accum_standard : HYROX_MON.accum_brick;
-      else if (phase === "intens") {
-        if (weekNum === 9) session = HYROX_MON.intens_w9;
-        else if (weekNum === 10) session = HYROX_MON.intens_w10;
-        else session = HYROX_MON.intens_w11;
-      } else if (phase === "peak") {
-        if (weekNum === 13) session = HYROX_MON.peak_w13;
-        else if (weekNum === 14) session = HYROX_MON.peak_w14;
-        else session = HYROX_MON.peak_w15;
-      } else if (phase === "sharpen") {
-        if (weekNum === 17) session = HYROX_MON.sharpen_w17;
-        else if (weekNum === 18) session = HYROX_MON.sharpen_w18;
-        else session = HYROX_MON.sharpen_w19;
-      } else if (phase === "taper") session = HYROX_MON.taper;
-    } else if (dayIndex === 1) {
-      session = isOdd ? TUE_SESSIONS.standard : HYROX_MOTION;
-    } else if (dayIndex === 2) {
-      session = WED_SESSIONS[phase] || WED_SESSIONS.base;
-    } else if (dayIndex === 3) {
-      if (phase === "peak") session = THU_SESSIONS.tempo;
-      else if (phase === "sharpen") session = THU_SESSIONS.tempo_sharpen;
-      else if (phase === "taper") session = THU_SESSIONS.taper;
-      else session = THU_SESSIONS.z2;
-    } else if (dayIndex === 4) {
-      if (phase === "taper") session = FRI_SESSIONS.taper;
-      else if (phase === "sharpen") session = FRI_SESSIONS.sharpen;
-      else session = FRI_SESSIONS[phase] || FRI_SESSIONS.base;
-    } else if (dayIndex === 5) {
-      session = isOdd
-        ? HYROX_MOTION
-        : { label: SAT_SESSIONS[weekNum].label, note: SAT_SESSIONS[weekNum].note };
-    } else if (dayIndex === 6) {
-      session = isOdd
-        ? SUN_SESSIONS.long_run[phase] || SUN_SESSIONS.long_run.base
-        : SUN_SESSIONS.brick[phase] || SUN_SESSIONS.brick.base;
+
+    if (dayIndex !== 2) {
+      session = { ...session, note: session.note + DELOAD_NOTE_APPEND };
     }
+    return session;
+  }
+
+  if (isOdd) {
+    if (dayIndex === 0) session = { ...MON_SESSION };
+    else if (dayIndex === 1) session = { ...TUE_STANDARD[weekNum] };
+    else if (dayIndex === 2) session = WED_SESSIONS[phase] || WED_SESSIONS.base;
+    else if (dayIndex === 3) session = thuForPhase();
+    else if (dayIndex === 4) session = friForPhase();
+    else if (dayIndex === 5) session = { ...HYROX_MOTION };
+    else session = SUN_SESSIONS.long_run[phase] || SUN_SESSIONS.long_run.base;
+  } else {
+    if (dayIndex === 0) session = { ...MON_SESSION };
+    else if (dayIndex === 1) session = { ...TUE_BRICK[weekNum] };
+    else if (dayIndex === 2) session = WED_SESSIONS[phase] || WED_SESSIONS.base;
+    else if (dayIndex === 3) session = thuForPhase();
+    else if (dayIndex === 4) session = friForPhase();
+    else if (dayIndex === 5) session = { ...SAT_BRICK[weekNum] };
+    else session = SUN_SESSIONS.brick[phase] || SUN_SESSIONS.brick.base;
   }
 
   return session;
