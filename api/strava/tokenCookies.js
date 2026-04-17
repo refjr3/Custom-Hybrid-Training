@@ -13,10 +13,10 @@ export function parseCookies(header = "") {
   return out;
 }
 
-export function setStravaAuthCookies(res, tokens) {
+export function setStravaAuthCookies(res, tokens, existingRefreshFallback = "") {
   const base = "Path=/; HttpOnly; Secure; SameSite=Lax";
   const exp = Number(tokens.expires_at || 0);
-  const refresh = tokens.refresh_token || "";
+  const refresh = tokens.refresh_token || existingRefreshFallback || "";
   res.setHeader("Set-Cookie", [
     `strava_access=${tokens.access_token}; ${base}; Max-Age=21600`,
     `strava_refresh=${refresh}; ${base}; Max-Age=31536000`,
@@ -74,7 +74,7 @@ export async function getStravaAccessForRequest(req, res, supabase, userId) {
   if (!accessToken || !expiresAt || expiresAt - nowSec < 300) {
     const t = await refreshStravaWithJson(refreshToken);
     if (!t?.access_token) return null;
-    if (res) setStravaAuthCookies(res, t);
+    if (res) setStravaAuthCookies(res, t, refreshToken);
     accessToken = t.access_token;
   }
 

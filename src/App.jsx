@@ -2634,6 +2634,8 @@ export default function App() {
   const [profile, setProfile]       = useState(null);
   const [authLoading, setAuthLoading] = useState(true);
   const dataFetched = useRef(false);
+  /** After OAuth, session may load after URL is cleaned — refetch Strava once JWT exists. */
+  const stravaOAuthReturnRef = useRef(false);
 
   useEffect(() => {
   }, [selDay, weekId, sess]);
@@ -2697,8 +2699,14 @@ export default function App() {
       if (session?.access_token) fetchWhoopData();
     }
     if (params.get("strava") === "connected") {
+      stravaOAuthReturnRef.current = true;
       window.history.replaceState({}, "", "/");
       setStravaConnected(true);
+    }
+    if (stravaOAuthReturnRef.current && session?.access_token) {
+      stravaOAuthReturnRef.current = false;
+      void fetchStravaWeeklyZ2();
+      void fetchStravaBestEfforts();
     }
     if (params.get("error")) {
       console.error("Auth error:", params.get("error"));
