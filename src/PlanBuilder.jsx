@@ -160,7 +160,11 @@ export default function PlanBuilder({ open, onGenerated, onClose }) {
     return (
       <div style={{ position: "fixed", inset: 0, zIndex: 1200, background: C.bg, display: "flex", alignItems: "center", justifyContent: "center", padding: 24 }}>
         <div style={{ textAlign: "center" }}>
-          <div style={{ fontFamily: C.ff, color: C.text, fontSize: 48, letterSpacing: 2 }}>TRIAD.</div>
+          <div style={{ color: C.text, fontSize: 48, letterSpacing: 2 }}>
+            <span style={{ fontFamily: "'DM Sans',sans-serif", fontWeight: 700 }}>The </span>
+            <em style={{ fontFamily: "'DM Serif Display',serif", fontStyle: "italic", fontWeight: 400 }}>Lab</em>
+            <span style={{ fontFamily: "'DM Sans',sans-serif", fontWeight: 700 }}>.</span>
+          </div>
           <div style={{ fontSize: 36, color: C.cyan, margin: "8px 0 14px", animation: "pbSpin 1s linear infinite" }}>⬡</div>
           <div style={{ fontFamily: C.fm, color: C.text, fontSize: 10, letterSpacing: 2 }}>YOUR COACH IS BUILDING YOUR PROGRAM...</div>
           <div style={{ marginTop: 12, textAlign: "left", display: "inline-flex", flexDirection: "column", gap: 6 }}>
@@ -186,7 +190,11 @@ export default function PlanBuilder({ open, onGenerated, onClose }) {
     <div style={{ position: "fixed", inset: 0, zIndex: 1200, background: C.bg, color: C.text, overflowY: "auto" }}>
       <div style={{ maxWidth: 520, margin: "0 auto", minHeight: "100vh", padding: "20px 20px 96px", boxSizing: "border-box" }}>
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 16 }}>
-          <div style={{ fontFamily: C.ff, fontSize: 26, letterSpacing: 2 }}>TRIAD.</div>
+          <div style={{ fontSize: 26, letterSpacing: 2 }}>
+            <span style={{ fontFamily: "'DM Sans',sans-serif", fontWeight: 700 }}>The </span>
+            <em style={{ fontFamily: "'DM Serif Display',serif", fontStyle: "italic", fontWeight: 400 }}>Lab</em>
+            <span style={{ fontFamily: "'DM Sans',sans-serif", fontWeight: 700 }}>.</span>
+          </div>
           <button onClick={onClose} style={{ background: "transparent", color: C.muted, border: `1px solid ${C.border}`, borderRadius: 10, padding: "8px 10px", cursor: "pointer", fontFamily: C.fm, fontSize: 10 }}>✕</button>
         </div>
 

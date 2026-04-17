@@ -348,6 +348,45 @@ function mondayIsoContainingYmd(isoYmd) {
   return formatLocalYmd(d);
 }
 
+/** Earliest calendar day in the loaded plan (YYYY-MM-DD), or null. */
+function deriveEarliestPlanIsoYmd(planBlocks, planYear) {
+  if (!Array.isArray(planBlocks) || planBlocks.length === 0) return null;
+  const y = planYear || new Date().getFullYear();
+  let best = null;
+  for (const b of planBlocks) {
+    for (const w of b?.weeks || []) {
+      for (const day of w?.days || []) {
+        const label = day?.date || day?.date_label;
+        if (!label) continue;
+        const parsed = new Date(`${String(label).trim()} ${y}`);
+        if (Number.isNaN(parsed.getTime())) continue;
+        const iso = formatLocalYmd(parsed);
+        if (!iso) continue;
+        if (best == null || iso < best) best = iso;
+      }
+    }
+  }
+  return best;
+}
+
+function dayHasCompletionSignal(iso, row, garminActivities, unifiedMetrics) {
+  if (!iso) return false;
+  if (row && (row.completed === true || row.done === true || row.manual_complete === true)) return true;
+  if (Array.isArray(garminActivities) && garminActivities.some(
+    (a) => String(a?.start_time || "").slice(0, 10) === iso && Number(a?.duration_seconds || 0) >= 60
+  )) return true;
+  return Array.isArray(unifiedMetrics) && unifiedMetrics.some(
+    (m) =>
+      m?.source === "intervals"
+      && String(m?.date || "").slice(0, 10) === iso
+      && Number(m?.training_load ?? m?.strain ?? m?.active_calories ?? m?.steps ?? 0) > 0
+  );
+}
+
+/**
+ * 4-week Mon-start grid. Cell values: null = before plan, 0 = neutral/future, 1 = done, -1 = missed, 2 = today in progress.
+ * Sessions planned/completed: planned training days from plan start through yesterday only (not today).
+ */
 function buildLast4WeeksComplianceGrid({ planBlocks, garminActivities, unifiedMetrics, todayIso }) {
   const todayIsoSafe = todayIso || getDeviceLocalTodayYmd();
   const PLAN_YEAR = parseInt(String(todayIsoSafe || "").slice(0, 4), 10) || 2026;
@@ -366,46 +405,88 @@ function buildLast4WeeksComplianceGrid({ planBlocks, garminActivities, unifiedMe
       }
     }
   }
+  const planStartIso = deriveEarliestPlanIsoYmd(planBlocks, PLAN_YEAR);
   const monThis = mondayIsoContainingYmd(todayIsoSafe);
-  const startIso = addCalendarDaysToYmd(monThis, -21);
+  const gridStartIso = addCalendarDaysToYmd(monThis, -21);
   const last4WeeksCompliance = [];
   let sessionsPlanned = 0;
   let sessionsCompleted = 0;
-  for (let i = 0; i < 28; i++) {
-    const iso = addCalendarDaysToYmd(startIso, i);
-    const row = planByIso.get(iso);
+
+  if (!planStartIso) {
+    for (let i = 0; i < 28; i++) last4WeeksCompliance.push(0);
+    return { last4WeeksCompliance, sessionsPlanned: 0, sessionsCompleted: 0, compliancePct: 0 };
+  }
+
+  const yesterdayIso = addCalendarDaysToYmd(todayIsoSafe, -1);
+
+  for (let d = planStartIso; d && d <= yesterdayIso; d = addCalendarDaysToYmd(d, 1)) {
+    const row = planByIso.get(d);
     const plannedTrain = row && (row.am_session || row.pm_session || row.am_session_custom || row.pm_session_custom || row.am || row.pm);
-    if (!plannedTrain) {
-      last4WeeksCompliance.push(0);
+    if (!plannedTrain) continue;
+    sessionsPlanned += 1;
+    if (dayHasCompletionSignal(d, row, garminActivities, unifiedMetrics)) sessionsCompleted += 1;
+  }
+
+  for (let i = 0; i < 28; i++) {
+    const iso = addCalendarDaysToYmd(gridStartIso, i);
+    if (iso < planStartIso) {
+      last4WeeksCompliance.push(null);
       continue;
     }
     if (iso > todayIsoSafe) {
       last4WeeksCompliance.push(0);
       continue;
     }
-    const hasGarmin = Array.isArray(garminActivities) && garminActivities.some(
-      (a) => String(a?.start_time || "").slice(0, 10) === iso && Number(a?.duration_seconds || 0) >= 60
-    );
-    const hasIntervals = Array.isArray(unifiedMetrics) && unifiedMetrics.some(
-      (m) =>
-        m?.source === "intervals"
-        && String(m?.date || "").slice(0, 10) === iso
-        && Number(m?.training_load ?? m?.strain ?? m?.active_calories ?? m?.steps ?? 0) > 0
-    );
-    const manual = row && (row.completed === true || row.done === true || row.manual_complete === true);
-    const done = hasGarmin || hasIntervals || manual;
-    sessionsPlanned += 1;
-    if (done) {
-      last4WeeksCompliance.push(1);
-      sessionsCompleted += 1;
-    } else if (iso < todayIsoSafe) {
-      last4WeeksCompliance.push(-1);
-    } else {
-      last4WeeksCompliance.push(0);
+    const row = planByIso.get(iso);
+    const plannedTrain = row && (row.am_session || row.pm_session || row.am_session_custom || row.pm_session_custom || row.am || row.pm);
+    if (iso === todayIsoSafe) {
+      last4WeeksCompliance.push(plannedTrain ? 2 : 0);
+      continue;
     }
+    if (!plannedTrain) {
+      last4WeeksCompliance.push(0);
+      continue;
+    }
+    const done = dayHasCompletionSignal(iso, row, garminActivities, unifiedMetrics);
+    last4WeeksCompliance.push(done ? 1 : -1);
   }
+
   const compliancePct = sessionsPlanned > 0 ? Math.round((sessionsCompleted / sessionsPlanned) * 100) : 0;
   return { last4WeeksCompliance, sessionsPlanned, sessionsCompleted, compliancePct };
+}
+
+function calculateRunPRs(activities) {
+  if (!Array.isArray(activities) || activities.length === 0) return null;
+  const runs = activities.filter((a) => {
+    const t = String(a.activity_type || "").toLowerCase();
+    return t.includes("run");
+  });
+  if (!runs.length) return null;
+  const distM = (a) => Number(a.distance_meters ?? a.distance ?? 0);
+  const elapsed = (a) => Number(a.duration_seconds ?? a.elapsed_time ?? 0);
+  const findBest = (minM, maxM) => {
+    const matching = runs.filter((a) => {
+      const d = distM(a);
+      const e = elapsed(a);
+      return d >= minM && d <= maxM && e > 0;
+    });
+    if (!matching.length) return null;
+    return matching.reduce((best, a) => (elapsed(a) < elapsed(best) ? a : best));
+  };
+  return {
+    mile: findBest(1500, 1850),
+    fiveK: findBest(4800, 5300),
+    tenK: findBest(9800, 10300),
+    halfMarathon: findBest(20900, 22200),
+  };
+}
+
+function formatPrTime(seconds) {
+  if (seconds == null || !Number.isFinite(Number(seconds)) || Number(seconds) <= 0) return "—";
+  const s = Math.floor(Number(seconds));
+  const m = Math.floor(s / 60);
+  const r = s % 60;
+  return `${m}:${String(r).padStart(2, "0")}`;
 }
 
 function getDeviceLocalTodayYmd() {
@@ -520,12 +601,7 @@ function buildMorningBriefApiContext({
   complianceThisWeek = currentWeekDays.filter((d) => {
     const iso = dayLabelToIso(d?.date || d?.date_label);
     if (!iso) return false;
-    return unifiedMetrics.some(
-      (m) =>
-        m?.source === "intervals"
-        && m?.date === iso
-        && Number(m?.training_load ?? m?.strain ?? m?.active_calories ?? m?.steps ?? 0) > 0
-    );
+    return dayHasCompletionSignal(iso, d, garminActivities, unifiedMetrics);
   }).length;
 
   const racesList = Array.isArray(profile?.races) ? profile.races : [];
@@ -2571,6 +2647,7 @@ export default function App() {
   const bloodworkInputRef = useRef(null);
   const [coachPersona, setCoachPersona] = useState("grinder");
   const [showEntrance, setShowEntrance] = useState(false);
+  const [showSplash, setShowSplash] = useState(true);
   const [garminActivities, setGarminActivities] = useState([]);
   const [garminConnected, setGarminConnected] = useState(false);
   const [proactiveMessages, setProactiveMessages] = useState([]);
@@ -3003,12 +3080,18 @@ export default function App() {
   }, [whoopData, planBlocks]);
 
   useEffect(() => {
+    if (!session || !profile) return;
+    const t = setTimeout(() => setShowSplash(false), 1500);
+    return () => clearTimeout(t);
+  }, [session, profile]);
+
+  useEffect(() => {
     if (!session?.access_token) return;
     let cancelled = false;
     (async () => {
       setCoachBriefLoading(true);
       try {
-        const context = buildMorningBriefApiContext({
+        const ctx = buildMorningBriefApiContext({
           planBlocks,
           whoopData,
           profile,
@@ -3024,7 +3107,20 @@ export default function App() {
             "Content-Type": "application/json",
             Authorization: `Bearer ${session.access_token}`,
           },
-          body: JSON.stringify({ mode: "brief", context }),
+          body: JSON.stringify({
+            mode: "brief",
+            recovery: ctx.recovery,
+            hrv: ctx.hrv,
+            sleep: ctx.sleep,
+            rhr: ctx.rhr,
+            todaySession: typeof ctx.todaySession === "string" ? ctx.todaySession.split("\n")[0] : ctx.todaySession,
+            tomorrowSession: typeof ctx.tomorrowSession === "string" ? ctx.tomorrowSession.split("\n")[0] : ctx.tomorrowSession,
+            weekNum: ctx.weekNum,
+            phase: ctx.phase,
+            daysToRace: ctx.daysToRace,
+            weeklyZ2Minutes: ctx.weeklyZ2Minutes,
+            complianceThisWeek: ctx.complianceThisWeek,
+          }),
         });
         const data = await res.json().catch(() => ({}));
         if (!cancelled) {
@@ -3341,7 +3437,11 @@ export default function App() {
         <div style={{ fontFamily: C.fm, fontSize: 8, color: C.muted, letterSpacing: 3, textTransform: "uppercase" }}>
           {new Date().toLocaleDateString("en-US", { weekday: "long", month: "long", day: "numeric" })}
         </div>
-        <div style={{ fontFamily: C.ff, fontWeight: 800, fontSize: 28, letterSpacing: 4, marginTop: 4 }}>TRIAD</div>
+        <div style={{ fontSize: 22, letterSpacing: "-0.5px", marginTop: 4 }}>
+          <span style={{ fontFamily: "'DM Sans',sans-serif", fontWeight: 600, color: "rgba(255,255,255,0.45)" }}>The </span>
+          <em style={{ fontFamily: "'DM Serif Display',serif", fontStyle: "italic", fontWeight: 400, color: "rgba(255,255,255,0.5)" }}>Lab</em>
+          <span style={{ fontFamily: "'DM Sans',sans-serif", fontWeight: 600, color: "rgba(255,255,255,0.45)" }}>.</span>
+        </div>
         <div style={{ height: 1, background: DS.divider, marginTop: 12, marginBottom: 16 }} />
         <div style={{ display: "grid", gap: 16 }}>
           {[0, 1, 2].map((i) => (
@@ -3355,6 +3455,35 @@ export default function App() {
   }
   if (!session) return <AuthScreen supabase={supabase} />;
   if (!profile) return <Onboarding supabase={supabase} session={session} onComplete={(p) => { setShowEntrance(true); setTimeout(() => setShowEntrance(false), 2800); setProfile(p); }} />;
+
+  if (showSplash) {
+    return (
+      <div
+        style={{
+          position: "fixed",
+          inset: 0,
+          zIndex: 9999,
+          display: "flex",
+          flexDirection: "column",
+          alignItems: "center",
+          justifyContent: "center",
+          background:
+            "radial-gradient(ellipse 65% 50% at 82% 8%, rgba(210,190,155,0.22) 0%, rgba(180,155,110,0.08) 35%, transparent 65%), radial-gradient(ellipse 45% 35% at 15% 92%, rgba(160,130,90,0.10) 0%, transparent 55%), #0D0E10",
+        }}
+      >
+        <div style={{ position: "absolute", top: -100, right: -50, width: 300, height: 300, background: "radial-gradient(circle,rgba(210,190,155,0.12) 0%,transparent 65%)", pointerEvents: "none" }} />
+        <div style={{ textAlign: "center", position: "relative", zIndex: 1 }}>
+          <div style={{ fontSize: 52, lineHeight: 1, letterSpacing: "-1.5px", marginBottom: 8 }}>
+            <span style={{ fontFamily: "'DM Sans',sans-serif", fontWeight: 600, color: "#fff" }}>The </span>
+            <em style={{ fontFamily: "'DM Serif Display',serif", fontStyle: "italic", fontWeight: 400, color: "rgba(255,255,255,0.92)" }}>Lab</em>
+            <span style={{ fontFamily: "'DM Sans',sans-serif", fontWeight: 600, color: "#fff" }}>.</span>
+          </div>
+          <div style={{ fontFamily: "'DM Sans',sans-serif", fontSize: 10, fontWeight: 500, color: "rgba(255,255,255,0.2)", letterSpacing: "4px", textTransform: "uppercase" }}>Hybrid Performance</div>
+        </div>
+        <div style={{ width: 40, height: 1, background: "rgba(201,168,117,0.4)", marginTop: 24, position: "relative", zIndex: 1 }} />
+      </div>
+    );
+  }
 
   const sortedBlocks = [...planBlocks].sort(
     (a, b) => Number(a?.order ?? Number.MAX_SAFE_INTEGER) - Number(b?.order ?? Number.MAX_SAFE_INTEGER)
@@ -3571,7 +3700,7 @@ export default function App() {
       {showEntrance && (
         <div style={{ position:"fixed", inset:0, zIndex:9999, background:"rgba(15,8,0,0.94)", display:"flex", flexDirection:"column", alignItems:"center", justifyContent:"center", animation:"entrance-fade 2.8s ease forwards", backdropFilter:"blur(8px)" }}>
           <div style={{ fontSize:64, color:DS.gold, animation:"entrance-scale 1s cubic-bezier(.175,.885,.32,1.275) forwards", transform:"scale(0)" }}>△</div>
-          <div style={{ fontFamily:C.fm, fontSize:10, color:DS.gold, letterSpacing:6, marginTop:20, opacity:0, animation:"entrance-text 0.8s ease 0.6s forwards" }}>HYBRID PERFORMANCE OS</div>
+          <div style={{ fontFamily:C.fm, fontSize:10, color:DS.gold, letterSpacing:6, marginTop:20, opacity:0, animation:"entrance-text 0.8s ease 0.6s forwards" }}>THE LAB · HYBRID PERFORMANCE</div>
           <style>{`
             @keyframes entrance-scale { 0%{transform:scale(0);opacity:0} 60%{transform:scale(1.1);opacity:1} 100%{transform:scale(1);opacity:1} }
             @keyframes entrance-text { 0%{opacity:0;transform:translateY(8px)} 100%{opacity:1;transform:translateY(0)} }
@@ -3730,8 +3859,42 @@ export default function App() {
             ? "Solo"
             : "Race";
 
+        const sleepStages = whoopData?.sleep?.stage_summary;
+        const sleepStageMs = sleepStages && typeof sleepStages === "object"
+          ? {
+            awake: Number(sleepStages.total_awake_time_milli || sleepStages.awake_time_milli || 0),
+            rem: Number(sleepStages.total_rem_sleep_time_milli || sleepStages.rem_sleep_time_milli || 0),
+            light: Number(sleepStages.total_light_sleep_time_milli || sleepStages.light_sleep_time_milli || 0),
+            deep: Number(sleepStages.total_slow_wave_sleep_time_milli || sleepStages.slow_wave_sleep_time_milli || 0),
+          }
+          : null;
+        const sleepStageTotal = sleepStageMs
+          ? sleepStageMs.awake + sleepStageMs.rem + sleepStageMs.light + sleepStageMs.deep
+          : 0;
+        const showSleepStageBar = sleepStageTotal > 0;
+        const fmtStageMin = (ms) => {
+          const m = Math.round(Number(ms || 0) / 60000);
+          const h = Math.floor(m / 60);
+          const r = m % 60;
+          return h > 0 ? `${h}h ${r}m` : `${r}m`;
+        };
+        const inBedMs = Number(whoopData?.sleep?.total_in_bed_time_milli || 0)
+          || (Number(whoopData?.sleep?.hours || 0) > 0 ? Math.round(Number(whoopData.sleep.hours) * 3600000) : 0);
+        const sleepHoursDisp = inBedMs > 0 ? Math.floor(inBedMs / 3600000) : 0;
+        const sleepMinsDisp = inBedMs > 0 ? Math.floor((inBedMs % 3600000) / 60000) : 0;
+
         return (
           <div style={{ padding: "12px 16px 20px", display: "flex", flexDirection: "column", gap: 14, overflowX: "hidden" }}>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 4 }}>
+              <div style={{ fontSize: 16, letterSpacing: "-0.5px" }}>
+                <span style={{ fontFamily: "'DM Sans',sans-serif", fontWeight: 600, color: "rgba(255,255,255,0.5)" }}>The </span>
+                <em style={{ fontFamily: "'DM Serif Display',serif", fontStyle: "italic", fontWeight: 400, color: "rgba(255,255,255,0.5)" }}>Lab</em>
+                <span style={{ fontFamily: "'DM Sans',sans-serif", fontWeight: 600, color: "rgba(255,255,255,0.5)" }}>.</span>
+              </div>
+              <div style={{ fontSize: 10, color: "rgba(255,255,255,0.2)", letterSpacing: "1px", fontFamily: C.fs }}>
+                {new Date().toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric" })}
+              </div>
+            </div>
             <div style={{ fontSize: 10, fontWeight: 500, color: "rgba(255,255,255,0.22)", letterSpacing: "3px", textTransform: "uppercase", marginBottom: 10, fontFamily: C.fs }}>
               {dayName} · Week {currentWeekNum} · {currentPhaseName}
             </div>
@@ -3997,6 +4160,54 @@ export default function App() {
                 </div>
               </div>
             )}
+
+            {whoopData?.sleep && (inBedMs > 0 || whoopData.sleep.score > 0) ? (
+              <div style={glassCard}>
+                <div style={specularTop()} />
+                <div style={{ position: "absolute", top: -20, right: -20, width: 120, height: 120, background: "radial-gradient(circle,rgba(210,190,155,0.1) 0%,transparent 70%)", pointerEvents: "none" }} />
+                <div style={{ padding: "20px 22px 16px", position: "relative", zIndex: 1 }}>
+                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 14 }}>
+                    <div>
+                      <div style={lbl}>{"Last Night's Sleep"}</div>
+                      <div style={{ fontFamily: "'DM Serif Display',serif", fontSize: 44, color: "#fff", letterSpacing: "-2px", lineHeight: 1 }}>
+                        {sleepHoursDisp}
+                        <span style={{ fontSize: 20 }}>h</span>
+                        {" "}
+                        {sleepMinsDisp}
+                        <span style={{ fontSize: 20 }}>m</span>
+                      </div>
+                    </div>
+                    <div style={{ textAlign: "right", paddingTop: 20 }}>
+                      <div style={{ fontFamily: "'DM Serif Display',serif", fontSize: 28, color: "#C9A875", letterSpacing: "-1px", lineHeight: 1 }}>{whoopData.sleep.score ?? "—"}</div>
+                      <div style={{ fontSize: 8, color: "rgba(255,255,255,0.3)", letterSpacing: "1.5px", textTransform: "uppercase", marginTop: 2 }}>Score</div>
+                    </div>
+                  </div>
+                  {showSleepStageBar ? (
+                    <>
+                      <div style={{ height: 8, borderRadius: 4, overflow: "hidden", display: "flex", marginBottom: 10 }}>
+                        <div style={{ width: `${(sleepStageMs.awake / sleepStageTotal) * 100}%`, background: "rgba(255,255,255,0.15)", minWidth: 2 }} />
+                        <div style={{ width: `${(sleepStageMs.rem / sleepStageTotal) * 100}%`, background: "#C9A875", minWidth: 2 }} />
+                        <div style={{ width: `${(sleepStageMs.light / sleepStageTotal) * 100}%`, background: "rgba(201,168,117,0.4)", minWidth: 2 }} />
+                        <div style={{ width: `${(sleepStageMs.deep / sleepStageTotal) * 100}%`, background: "rgba(201,168,117,0.7)", minWidth: 2 }} />
+                      </div>
+                      <div style={{ display: "flex", gap: 12, flexWrap: "wrap" }}>
+                        {[
+                          ["Awake", "rgba(255,255,255,0.15)", fmtStageMin(sleepStageMs.awake)],
+                          ["REM", "#C9A875", fmtStageMin(sleepStageMs.rem)],
+                          ["Light", "rgba(201,168,117,0.4)", fmtStageMin(sleepStageMs.light)],
+                          ["Deep", "rgba(201,168,117,0.7)", fmtStageMin(sleepStageMs.deep)],
+                        ].map(([label, color, time]) => (
+                          <div key={label} style={{ display: "flex", alignItems: "center", gap: 4 }}>
+                            <span style={{ width: 8, height: 8, borderRadius: 2, background: color, display: "inline-block", flexShrink: 0 }} />
+                            <span style={{ fontSize: 9, color: "rgba(255,255,255,0.3)" }}>{label} {time}</span>
+                          </div>
+                        ))}
+                      </div>
+                    </>
+                  ) : null}
+                </div>
+              </div>
+            ) : null}
           </div>
         );
       })()}
@@ -4347,7 +4558,7 @@ export default function App() {
                   y += 10; ctx.fillStyle = "#00D4A0"; ctx.font = "bold 14px 'DM Sans', sans-serif"; ctx.fillText("OPTIMAL BIOMARKERS", pad, y); y += 28;
                   optBio.forEach(b => { ctx.fillStyle = "#00D4A0"; ctx.font = "14px 'DM Sans', sans-serif"; ctx.fillText(`✓ ${b.label}: ${b.value}${b.unit?" "+b.unit:""}`, pad + 12, y); y += 24; });
                 }
-                y = H - 30; ctx.fillStyle = "#444"; ctx.font = "10px 'DM Sans', sans-serif"; ctx.fillText("△ HYBRID PERFORMANCE OS", pad, y);
+                y = H - 30; ctx.fillStyle = "#444"; ctx.font = "10px 'DM Sans', sans-serif"; ctx.fillText("△ THE LAB · HYBRID PERFORMANCE", pad, y);
                 const link = document.createElement("a");
                 link.download = "my-stack.png"; link.href = canvas.toDataURL("image/png"); link.click();
               }}
@@ -4410,23 +4621,9 @@ export default function App() {
           unifiedMetrics,
           todayIso: todayIsoTrends,
         });
-        let compliancePct = heat.sessionsPlanned > 0 ? heat.compliancePct : (complianceWeek?.percent ?? 0);
-        if (heat.sessionsPlanned === 0 && complianceWeek?.percent != null) {
-          compliancePct = complianceWeek.percent;
-        }
-        const { last4WeeksCompliance, sessionsPlanned, sessionsCompleted } = heat.sessionsPlanned > 0
-          ? heat
-          : {
-            last4WeeksCompliance: Array.from({ length: 28 }, (_, i) => {
-              const d = Array.isArray(complianceWeek?.days) ? complianceWeek.days[i % 7] : null;
-              if (!d) return 0;
-              if (d.status === "completed") return 1;
-              if (d.status === "missed") return -1;
-              return 0;
-            }),
-            sessionsPlanned: (complianceWeek?.days || []).filter((d) => d.status !== "rest" && d.status !== "future").length || 0,
-            sessionsCompleted: (complianceWeek?.days || []).filter((d) => d.status === "completed").length || 0,
-          };
+        const compliancePct = heat.sessionsPlanned > 0 ? heat.compliancePct : (complianceWeek?.percent ?? 0);
+        const { last4WeeksCompliance, sessionsPlanned, sessionsCompleted } = heat;
+        const prs = calculateRunPRs(garminActivities);
 
         const hrv30Arr = Array.isArray(perfTrends?.hrv30) ? perfTrends.hrv30 : [];
         const validH = hrv30Arr.filter(
@@ -4485,6 +4682,9 @@ export default function App() {
                 })}
               </div>
             </div>
+            <div style={{ fontSize: 10, color: "rgba(255,255,255,0.2)", lineHeight: 1.5, marginTop: 10, marginBottom: 4 }}>
+              Bar length shows relative strength across stations. Longer = stronger relative to your overall race time.
+            </div>
 
             <div style={glassCard}>
               <div style={specularTop()} />
@@ -4508,12 +4708,12 @@ export default function App() {
                 </div>
                 <svg width="100%" height="80" viewBox="0 0 320 80" preserveAspectRatio="none">
                   <defs>
-                    <linearGradient id="ctlG" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stopColor="rgba(201,168,117,0.3)" /><stop offset="100%" stopColor="rgba(201,168,117,0)" /></linearGradient>
-                    <linearGradient id="atlG" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stopColor="rgba(255,255,255,0.1)" /><stop offset="100%" stopColor="rgba(255,255,255,0)" /></linearGradient>
+                    <linearGradient id="ctlGPerf" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stopColor="rgba(201,168,117,0.3)" /><stop offset="100%" stopColor="rgba(201,168,117,0)" /></linearGradient>
+                    <linearGradient id="atlGPerf" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stopColor="rgba(255,255,255,0.1)" /><stop offset="100%" stopColor="rgba(255,255,255,0)" /></linearGradient>
                   </defs>
-                  <path d="M0 70 C40 65 80 58 120 52 S200 44 240 40 S290 38 320 36 L320 80 L0 80 Z" fill="url(#ctlG)" />
+                  <path d="M0 70 C40 65 80 58 120 52 S200 44 240 40 S290 38 320 36 L320 80 L0 80 Z" fill="url(#ctlGPerf)" />
                   <path d="M0 70 C40 65 80 58 120 52 S200 44 240 40 S290 38 320 36" fill="none" stroke="#C9A875" strokeWidth="1.5" strokeLinecap="round" />
-                  <path d="M0 74 C40 67 80 54 120 48 S190 34 230 30 S290 27 320 24 L320 80 L0 80 Z" fill="url(#atlG)" />
+                  <path d="M0 74 C40 67 80 54 120 48 S190 34 230 30 S290 27 320 24 L320 80 L0 80 Z" fill="url(#atlGPerf)" />
                   <path d="M0 74 C40 67 80 54 120 48 S190 34 230 30 S290 27 320 24" fill="none" stroke="rgba(255,255,255,0.3)" strokeWidth="1.5" strokeLinecap="round" />
                 </svg>
                 <div style={{ display: "flex", gap: 16, marginTop: 10 }}>
@@ -4521,6 +4721,9 @@ export default function App() {
                   <div style={{ display: "flex", alignItems: "center", gap: 5 }}><span style={{ width: 16, height: 1.5, background: "rgba(255,255,255,0.3)", display: "inline-block" }} /><span style={{ fontSize: 9, color: "rgba(255,255,255,0.3)" }}>ATL Fatigue</span></div>
                 </div>
               </div>
+            </div>
+            <div style={{ fontSize: 10, color: "rgba(255,255,255,0.2)", lineHeight: 1.5, marginTop: 10, marginBottom: 4 }}>
+              TSB (Training Stress Balance) = Fitness − Fatigue. Positive = fresh and ready to perform. Negative = accumulated fatigue.
             </div>
 
             <div style={glassCard}>
@@ -4544,12 +4747,21 @@ export default function App() {
                         aspectRatio: "1",
                         borderRadius: 5,
                         background:
-                          v === 1
-                            ? `rgba(201,168,117,${0.52 + ((i * 7) % 5) * 0.07})`
-                            : v === -1
-                              ? "rgba(255,59,48,0.15)"
-                              : "rgba(255,255,255,0.04)",
-                        border: v === -1 ? "1px solid rgba(255,59,48,0.2)" : "none",
+                          v == null
+                            ? "transparent"
+                            : v === 1
+                              ? `rgba(201,168,117,${0.52 + ((i * 7) % 5) * 0.07})`
+                              : v === 2
+                                ? "rgba(201,168,117,0.12)"
+                                : v === -1
+                                  ? "rgba(255,59,48,0.15)"
+                                  : "rgba(255,255,255,0.04)",
+                        border:
+                          v === -1
+                            ? "1px solid rgba(255,59,48,0.2)"
+                            : v === 2
+                              ? "1px dashed rgba(201,168,117,0.45)"
+                              : "none",
                       }}
                     />
                   ))}
@@ -4558,10 +4770,14 @@ export default function App() {
                   <div style={{ display: "flex", gap: 10, alignItems: "center" }}>
                     <span style={{ display: "inline-flex", alignItems: "center", gap: 4, fontSize: 9, color: "rgba(255,255,255,0.3)" }}><span style={{ width: 8, height: 8, borderRadius: 2, background: "#C9A875", display: "inline-block" }} /> Done</span>
                     <span style={{ display: "inline-flex", alignItems: "center", gap: 4, fontSize: 9, color: "rgba(255,255,255,0.3)" }}><span style={{ width: 8, height: 8, borderRadius: 2, background: "rgba(255,59,48,0.2)", border: "1px solid rgba(255,59,48,0.3)", display: "inline-block" }} /> Missed</span>
+                    <span style={{ display: "inline-flex", alignItems: "center", gap: 4, fontSize: 9, color: "rgba(255,255,255,0.3)" }}><span style={{ width: 8, height: 8, borderRadius: 2, background: "rgba(201,168,117,0.12)", border: "1px dashed rgba(201,168,117,0.45)", display: "inline-block" }} /> Today</span>
                   </div>
                   <div style={{ fontSize: 9, color: "rgba(255,255,255,0.2)" }}>{sessionsCompleted} of {sessionsPlanned} sessions</div>
                 </div>
               </div>
+            </div>
+            <div style={{ fontSize: 10, color: "rgba(255,255,255,0.2)", lineHeight: 1.5, marginTop: 10, marginBottom: 4 }}>
+              Planned vs completed sessions. Consistency here predicts race day performance more than any single workout.
             </div>
 
             <div style={glassCard}>
@@ -4582,12 +4798,12 @@ export default function App() {
                 </div>
                 <svg width="100%" height="60" viewBox="0 0 320 60" preserveAspectRatio="none">
                   <defs>
-                    <linearGradient id="hrvG" x1="0" y1="0" x2="0" y2="1">
+                    <linearGradient id="hrvGPerf" x1="0" y1="0" x2="0" y2="1">
                       <stop offset="0%" stopColor="rgba(201,168,117,0.25)" />
                       <stop offset="100%" stopColor="rgba(201,168,117,0)" />
                     </linearGradient>
                   </defs>
-                  <path d="M0 40 C20 38 35 35 50 32 S75 28 90 30 S110 36 130 34 S155 25 175 22 S200 20 220 18 S250 15 270 17 S295 20 320 18 L320 60 L0 60 Z" fill="url(#hrvG)" />
+                  <path d="M0 40 C20 38 35 35 50 32 S75 28 90 30 S110 36 130 34 S155 25 175 22 S200 20 220 18 S250 15 270 17 S295 20 320 18 L320 60 L0 60 Z" fill="url(#hrvGPerf)" />
                   <path d="M0 40 C20 38 35 35 50 32 S75 28 90 30 S110 36 130 34 S155 25 175 22 S200 20 220 18 S250 15 270 17 S295 20 320 18" fill="none" stroke="#C9A875" strokeWidth="1.5" strokeLinecap="round" />
                   <circle cx="320" cy="18" r="3" fill="#C9A875" />
                   <circle cx="320" cy="18" r="6" fill="rgba(201,168,117,0.2)" />
@@ -4596,6 +4812,53 @@ export default function App() {
                   <span style={{ fontSize: 8, color: "rgba(255,255,255,0.18)" }}>{hrvStartLabel || "—"}</span>
                   <span style={{ fontSize: 8, color: "rgba(255,255,255,0.18)" }}>{hrvEndLabel || "—"}</span>
                 </div>
+              </div>
+            </div>
+            <div style={{ fontSize: 10, color: "rgba(255,255,255,0.2)", lineHeight: 1.5, marginTop: 10, marginBottom: 4 }}>
+              Rising HRV = absorbing training. Falling HRV = accumulated stress. Use this to confirm your WHOOP gate decisions.
+            </div>
+
+            <div style={glassCard}>
+              <div style={specularTop()} />
+              <div style={{ position: "absolute", top: -20, right: -20, width: 120, height: 120, background: "radial-gradient(circle,rgba(210,190,155,0.1) 0%,transparent 70%)", pointerEvents: "none" }} />
+              <div style={{ padding: "20px 22px", position: "relative", zIndex: 1 }}>
+                <div style={lbl}>Personal Records</div>
+                {[
+                  { label: "Mile", key: "mile", icon: "▷" },
+                  { label: "5K", key: "fiveK", icon: "▷" },
+                  { label: "10K", key: "tenK", icon: "▷" },
+                  { label: "Half Marathon", key: "halfMarathon", icon: "▷" },
+                ].map((pr, i, arr) => {
+                  const best = prs?.[pr.key];
+                  const sec = best ? Number(best.duration_seconds ?? best.elapsed_time) : null;
+                  const time = formatPrTime(sec);
+                  const date = best?.start_time
+                    ? new Date(best.start_time).toLocaleDateString("en-US", { month: "short", year: "2-digit" })
+                    : null;
+                  return (
+                    <div key={pr.key} style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "12px 0", borderBottom: i < arr.length - 1 ? "1px solid rgba(255,255,255,0.06)" : "none" }}>
+                      <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                        <div style={{ width: 28, height: 28, borderRadius: 8, background: "rgba(255,255,255,0.05)", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 12, color: "rgba(201,168,117,0.6)", flexShrink: 0 }}>{pr.icon}</div>
+                        <div>
+                          <div style={{ fontSize: 13, fontWeight: 500, color: "rgba(255,255,255,0.7)" }}>{pr.label}</div>
+                          {date ? <div style={{ fontSize: 9, color: "rgba(255,255,255,0.2)", marginTop: 1 }}>{date}</div> : null}
+                        </div>
+                      </div>
+                      <div style={{ fontFamily: "'DM Serif Display',serif", fontSize: 22, color: best ? "#fff" : "rgba(255,255,255,0.2)", letterSpacing: "-0.5px" }}>{time}</div>
+                    </div>
+                  );
+                })}
+                {!garminActivities?.length ? (
+                  <div style={{ textAlign: "center", paddingTop: 8 }}>
+                    <div style={{ fontSize: 10, color: "rgba(255,255,255,0.2)", marginBottom: 8 }}>Connect Garmin to auto-detect PRs</div>
+                    <a
+                      href={session?.user?.id ? `/api/auth/garmin-login?user_id=${encodeURIComponent(session.user.id)}` : "/api/auth/garmin-login"}
+                      style={{ fontSize: 11, color: "#C9A875", fontWeight: 600, textDecoration: "none" }}
+                    >
+                      Connect Garmin →
+                    </a>
+                  </div>
+                ) : null}
               </div>
             </div>
           </div>
@@ -4729,8 +4992,8 @@ export default function App() {
           { icon: "◎", label: "TODAY", key: "today" },
           { icon: "▦", label: "PLAN", key: "plan" },
           { icon: "◈", label: "SUPPS", key: "supps" },
-          { icon: "◉", label: "STATS", key: "stats" },
           { icon: "▲", label: "PERF", key: "perf" },
+          { icon: "◉", label: "STATS", key: "stats" },
         ].map((tab) => (
           <button
             key={tab.key}

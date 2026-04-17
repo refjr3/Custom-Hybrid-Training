@@ -80,6 +80,7 @@ export default async function handler(req, res) {
             : 0,
         total_in_bed_time_milli: inBedMilli != null && Number.isFinite(Number(inBedMilli)) ? Number(inBedMilli) : null,
         efficiency: Math.round(sleep?.score?.sleep_efficiency_percentage ?? 0),
+        stage_summary: sleep?.score?.stage_summary ?? null,
       },
       strain: {
         score: Math.round((cycle?.score?.strain ?? 0) * 10) / 10,

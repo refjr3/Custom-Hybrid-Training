@@ -16,39 +16,60 @@ function isHighIntensity(sessionName) {
   return HIGH_INTENSITY_PATTERNS.some((p) => upper.includes(p));
 }
 
-function fmt(v) {
-  if (v == null || v === "") return "—";
-  if (typeof v === "number" && !Number.isFinite(v)) return "—";
-  return String(v);
-}
-
 async function handleMorningBrief(req, res) {
-  const ctx = req.body?.context || {};
-  const recovery = fmt(ctx.recovery);
-  const hrv = fmt(ctx.hrv);
-  const sleep = fmt(ctx.sleep);
-  const rhr = fmt(ctx.rhr);
-  const todaySession = fmt(ctx.todaySession);
-  const tomorrowSession = fmt(ctx.tomorrowSession);
-  const weekNum = fmt(ctx.weekNum);
-  const phase = fmt(ctx.phase);
-  const daysToRace = fmt(ctx.daysToRace);
-  const weeklyZ2Minutes = fmt(ctx.weeklyZ2Minutes);
-  const complianceThisWeek = fmt(ctx.complianceThisWeek);
+  const b = req.body || {};
+  const c = b.context || {};
+  const recovery = b.recovery ?? c.recovery;
+  const hrv = b.hrv ?? c.hrv;
+  const sleep = b.sleep ?? c.sleep;
+  const rhr = b.rhr ?? c.rhr;
+  const todaySessionRaw = b.todaySession ?? c.todaySession;
+  const tomorrowSessionRaw = b.tomorrowSession ?? c.tomorrowSession;
+  const weekNum = b.weekNum ?? c.weekNum;
+  const phase = b.phase ?? c.phase;
+  const daysToRace = b.daysToRace ?? c.daysToRace;
+  const weeklyZ2Minutes = b.weeklyZ2Minutes ?? c.weeklyZ2Minutes;
+  const complianceThisWeek = b.complianceThisWeek ?? c.complianceThisWeek;
 
-  const prompt = `You are a hybrid athlete coach. Give a 2-3 sentence morning brief for this athlete.
-Be direct, specific, and motivating. Reference their actual data. No fluff.
+  const recoveryNum = recovery != null && recovery !== "" ? Number(recovery) : null;
+  const recoveryLabel =
+    recoveryNum != null && Number.isFinite(recoveryNum)
+      ? recoveryNum >= 67
+        ? "Green"
+        : recoveryNum >= 34
+          ? "Yellow"
+          : "Red"
+      : "Unknown";
 
-Recovery: ${recovery}% | HRV: ${hrv}ms | Sleep: ${sleep}%
-RHR: ${rhr} bpm
-Today: ${todaySession}
-Tomorrow: ${tomorrowSession}
-Phase: Week ${weekNum} - ${phase}
-Days to race: ${daysToRace}
-Weekly Z2 so far: ${weeklyZ2Minutes} min
-Sessions completed this week: ${complianceThisWeek}
+  const todayLine =
+    typeof todaySessionRaw === "string" && todaySessionRaw.trim()
+      ? todaySessionRaw.split("\n")[0].trim()
+      : todaySessionRaw != null && todaySessionRaw !== ""
+        ? String(todaySessionRaw)
+        : "rest";
+  const tomorrowLine =
+    typeof tomorrowSessionRaw === "string" && tomorrowSessionRaw.trim()
+      ? tomorrowSessionRaw.split("\n")[0].trim()
+      : tomorrowSessionRaw != null && tomorrowSessionRaw !== ""
+        ? String(tomorrowSessionRaw)
+        : "rest";
 
-Keep it under 60 words. Sound like a coach, not a bot.`;
+  const hrvDisplay =
+    hrv != null && hrv !== "" && Number.isFinite(Number(hrv)) ? `${Math.round(Number(hrv))}ms` : "unavailable";
+
+  const prompt = `You are a hybrid athlete coach. Give a 2-3 sentence morning brief.
+Be direct, specific, motivating. Reference their actual numbers. No fluff. Under 60 words.
+
+Recovery: ${recovery != null && recovery !== "" ? `${recovery}%` : "unavailable"} (${recoveryLabel})
+HRV: ${hrvDisplay}
+Sleep: ${sleep != null && sleep !== "" ? `${sleep}%` : "unavailable"}
+RHR: ${rhr != null && rhr !== "" ? `${rhr} bpm` : "unavailable"}
+Today: ${todayLine}
+Tomorrow: ${tomorrowLine}
+Phase: Week ${weekNum ?? "?"} — ${phase ?? "Training"}
+Days to race: ${daysToRace != null && daysToRace !== "" ? daysToRace : "unavailable"}
+Weekly Z2: ${weeklyZ2Minutes ?? 0} min
+Sessions done this week: ${complianceThisWeek ?? 0}`;
 
   if (!process.env.ANTHROPIC_API_KEY) {
     return res.status(200).json({ brief: "", error: "missing_ai_key" });

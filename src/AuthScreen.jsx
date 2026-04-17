@@ -72,7 +72,11 @@ export default function AuthScreen({ supabase }) {
 
         {/* Title */}
         <div style={{ textAlign:"center", marginBottom:40 }}>
-          <div style={{ fontFamily:C.ff, fontWeight:800, fontSize:44, color:C.text, letterSpacing:5, lineHeight:0.95 }}>TRIAD</div>
+          <div style={{ fontSize: 44, color: C.text, letterSpacing: 2, lineHeight: 0.95 }}>
+            <span style={{ fontFamily: "'DM Sans',sans-serif", fontWeight: 800 }}>The </span>
+            <em style={{ fontFamily: "'DM Serif Display',serif", fontStyle: "italic", fontWeight: 400 }}>Lab</em>
+            <span style={{ fontFamily: "'DM Sans',sans-serif", fontWeight: 800 }}>.</span>
+          </div>
           <div style={{ fontFamily:C.fm, fontSize:8, color:C.muted, letterSpacing:4, marginTop:12, textTransform:"uppercase" }}>PERFORMANCE DASHBOARD</div>
         </div>
 
