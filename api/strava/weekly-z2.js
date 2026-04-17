@@ -40,17 +40,15 @@ const getSecondsInZ2Stream = (hrData = [], lower = 133, upper = 148) => {
 const formatDateLabel = (isoString) =>
   new Date(isoString).toLocaleDateString("en-US", { month: "short", day: "numeric" });
 
-/** Strava HR zones: buckets[0]=Z1, [1]=Z2 — sum aerobic time (seconds). */
-function z1z2SecondsFromHeartrateZones(zonesJson) {
+/** Strava HR zones: distribution_buckets[1] = Z2 time in seconds (not Z1). */
+function z2SecondsFromHeartrateZones(zonesJson) {
   if (!Array.isArray(zonesJson)) return null;
   const hrZones = zonesJson.find((z) => z.type === "heartrate");
   const buckets = hrZones?.distribution_buckets;
   if (!Array.isArray(buckets) || buckets.length < 2) return null;
-  const z1 = Number(buckets[0]?.time ?? 0) || 0;
   const z2 = Number(buckets[1]?.time ?? 0) || 0;
-  const t = z1 + z2;
-  if (!Number.isFinite(t) || t < 0) return null;
-  return t;
+  if (!Number.isFinite(z2) || z2 < 0) return null;
+  return z2;
 }
 
 async function fetchActivitiesInRange(stravaFetch, afterEpoch, beforeEpoch) {
@@ -95,7 +93,7 @@ async function z2SecondsForActivity(stravaFetch, activity) {
   const zonesRes = await stravaFetch(STRAVA_ACTIVITY_ZONES(id));
   if (zonesRes) {
     const zonesJson = await zonesRes.json().catch(() => null);
-    const fromZones = z1z2SecondsFromHeartrateZones(zonesJson);
+    const fromZones = z2SecondsFromHeartrateZones(zonesJson);
     if (fromZones != null) return fromZones;
   }
 

@@ -4023,7 +4023,7 @@ export default function App() {
                 {!stravaConnected ? (
                   <div style={{ marginBottom: 10 }}>
                     <div style={{ fontFamily: C.fs, fontSize: 10, color: "rgba(255,255,255,0.35)", marginBottom: 8, lineHeight: 1.45 }}>
-                      Connect Strava to track Z2. Weekly minutes use Strava HR zones 1–2 from each activity (not plan estimates).
+                      Connect Strava to track Z2. Weekly minutes use Strava HR zone 2 time from each activity (not plan estimates).
                     </div>
                     <a
                       href={session?.user?.id ? `/api/strava/login?uid=${encodeURIComponent(session.user.id)}` : "/api/strava/login"}
