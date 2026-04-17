@@ -384,6 +384,13 @@ function dayHasCompletionSignal(iso, row, garminActivities, unifiedMetrics) {
   );
 }
 
+function hasGarminActivityOnIso(iso, garminActivities) {
+  if (!iso || !Array.isArray(garminActivities)) return false;
+  return garminActivities.some(
+    (a) => String(a?.start_time || "").slice(0, 10) === iso && Number(a?.duration_seconds || 0) >= 60
+  );
+}
+
 function dayIsPlannedTraining(row) {
   if (!row) return false;
   return !!(row.am_session || row.pm_session || row.am_session_custom || row.pm_session_custom || row.am || row.pm);
@@ -513,7 +520,7 @@ function weeklyZ2MinutesFromGarminActivities(activities) {
   return Math.round(mins);
 }
 
-function estimateZ2SessionMinutesFromPlanDay(dayRow, planWeekId, sundayChoice) {
+function planDayZ2SessionLabel(dayRow, planWeekId, sundayChoice) {
   const getAm = (d) => {
     if (d?.isSunday) {
       const c = sundayChoice?.[planWeekId];
@@ -527,14 +534,37 @@ function estimateZ2SessionMinutesFromPlanDay(dayRow, planWeekId, sundayChoice) {
   };
   const sn = getAm(dayRow) || "";
   const custom = dayRow?.am_session_custom || "";
-  const blob = `${sn} ${custom}`;
-  const z2Hits = /Z2|ZONE\s*2|Long\s+Z2|Erg\/Echo|Brick|20\/20|25\/25|30\/30/i.test(blob);
-  if (!z2Hits) return 0;
-  if (/Long\s+Z2/i.test(blob)) return 60;
-  if (/brick/i.test(blob)) return 60;
-  if (/Z2\s+Run/i.test(blob)) return 45;
-  if (/Z2\s+Erg|Erg\/Echo/i.test(blob)) return 35;
-  return 40;
+  return `${sn} ${custom}`.trim();
+}
+
+function isPlanZ2SessionLabel(sessionLabel) {
+  return /Z2|ZONE\s*2|Long\s+Z2|Erg\/Echo|Brick|20\/20|25\/25|30\/30|full body/i.test(sessionLabel || "");
+}
+
+/** Plan-only Z2 duration estimate (minutes) from session text; more generous than raw schedule titles. */
+function getZ2Minutes(sessionLabel) {
+  const s = String(sessionLabel || "").toLowerCase();
+
+  if (s.includes("30/30/30")) return 90;
+  if (s.includes("25/25/25")) return 75;
+  if (s.includes("20/20/25")) return 65;
+  if (s.includes("20/20/20") || s.includes("brick")) return 60;
+  if (s.includes("long z2 run")) return 70;
+
+  if (s.includes("z2 run") && s.includes("core")) return 50;
+  if (s.includes("z2 run")) return 50;
+
+  if (s.includes("z2 erg") || s.includes("echo") || s.includes("mobility")) return 45;
+
+  if (s.includes("full body")) return 25;
+
+  return 30;
+}
+
+function estimateZ2SessionMinutesFromPlanDay(dayRow, planWeekId, sundayChoice) {
+  const label = planDayZ2SessionLabel(dayRow, planWeekId, sundayChoice);
+  if (!isPlanZ2SessionLabel(label)) return 0;
+  return getZ2Minutes(label);
 }
 
 function weeklyZ2PlanMinutesEstimate({
@@ -553,9 +583,12 @@ function weeklyZ2PlanMinutesEstimate({
     if (!iso) continue;
     const mins = estimateZ2SessionMinutesFromPlanDay(day, planWeekId, sundayChoice || {});
     if (mins <= 0) continue;
-    const completed = dayHasCompletionSignal(iso, day, garminActivities, unifiedMetrics);
+    const isToday = iso === todayIso;
     const isPast = iso < todayIso;
-    if (!(completed || isPast)) continue;
+    const isComplete = dayHasCompletionSignal(iso, day, garminActivities, unifiedMetrics);
+    const garminOnDay = hasGarminActivityOnIso(iso, garminActivities);
+    const shouldCount = isComplete || (isPast && garminOnDay) || isToday;
+    if (!shouldCount) continue;
     sum += mins;
   }
   return Math.round(sum);
