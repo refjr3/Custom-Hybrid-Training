@@ -7,6 +7,7 @@ import {
 import AuthScreen from "./AuthScreen";
 import Onboarding from "./Onboarding";
 import PlanBuilder from "./PlanBuilder";
+import TodayDrawer from "./TodayDrawer.jsx";
 
 const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
 const supabaseKey = import.meta.env.VITE_SUPABASE_ANON_KEY;
@@ -2664,6 +2665,8 @@ export default function App() {
   const [cqSelections, setCqSelections] = useState({});
   const [labAnsweredQuestions, setLabAnsweredQuestions] = useState({});
   const [labSessionId, setLabSessionId] = useState(createSessionId);
+  const [drawerOpen, setDrawerOpen] = useState(false);
+  const [drawerSection, setDrawerSection] = useState("menu");
   // Auth state is declared with the rest of top-level hooks to keep hook order stable.
   const [session, setSession]       = useState(null);
   const [profile, setProfile]       = useState(null);
@@ -3710,6 +3713,23 @@ export default function App() {
 
   return (
     <div style={{ minHeight:"100vh", background:C.bg, color:C.text, fontFamily:C.fs, maxWidth:480, margin:"0 auto", paddingBottom:88 }}>
+      <TodayDrawer
+        open={drawerOpen}
+        onClose={() => {
+          setDrawerOpen(false);
+          setDrawerSection("menu");
+        }}
+        section={drawerSection}
+        setSection={setDrawerSection}
+        profile={profile}
+        setProfile={setProfile}
+        session={session}
+        supabase={supabase}
+        whoopConnected={whoopConnected}
+        garminConnected={garminConnected}
+        stravaConnected={stravaConnected}
+      />
+
       {showEntrance && (
         <div style={{ position:"fixed", inset:0, zIndex:9999, background:"rgba(15,8,0,0.94)", display:"flex", flexDirection:"column", alignItems:"center", justifyContent:"center", animation:"entrance-fade 2.8s ease forwards", backdropFilter:"blur(8px)" }}>
           <div style={{ fontSize:64, color:DS.gold, animation:"entrance-scale 1s cubic-bezier(.175,.885,.32,1.275) forwards", transform:"scale(0)" }}>△</div>
@@ -3896,38 +3916,67 @@ export default function App() {
         const sleepHoursDisp = inBedMs > 0 ? Math.floor(inBedMs / 3600000) : 0;
         const sleepMinsDisp = inBedMs > 0 ? Math.floor((inBedMs % 3600000) / 60000) : 0;
 
-        const whoopScore = whoopData?.recovery?.score;
-        const whoopConnectedOk = whoopScore != null && Number.isFinite(Number(whoopScore)) && Number(whoopScore) > 0;
-
         return (
           <div style={{ padding: "12px 16px 20px", display: "flex", flexDirection: "column", gap: 14, overflowX: "hidden" }}>
-            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 16, gap: 10, flexWrap: "wrap" }}>
-              <div style={{ fontSize: 16, letterSpacing: "-0.5px" }}>
-                <span style={{ fontFamily: "'DM Sans',sans-serif", fontWeight: 600, color: "rgba(255,255,255,0.5)" }}>The </span>
-                <em style={{ fontFamily: "'DM Serif Display',serif", fontStyle: "italic", fontWeight: 400, color: "rgba(255,255,255,0.5)" }}>Lab</em>
-                <span style={{ fontFamily: "'DM Sans',sans-serif", fontWeight: 600, color: "rgba(255,255,255,0.5)" }}>.</span>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 20, gap: 8 }}>
+              <button
+                type="button"
+                aria-label="Open menu"
+                onClick={() => {
+                  setDrawerOpen(true);
+                  setDrawerSection("menu");
+                }}
+                style={{
+                  background: "none",
+                  border: "none",
+                  cursor: "pointer",
+                  padding: "4px",
+                  display: "flex",
+                  flexDirection: "column",
+                  gap: "5px",
+                  flexShrink: 0,
+                }}
+              >
+                <span style={{ width: 22, height: 2, background: "rgba(255,255,255,0.5)", display: "block", borderRadius: 2 }} />
+                <span style={{ width: 16, height: 2, background: "rgba(255,255,255,0.5)", display: "block", borderRadius: 2 }} />
+                <span style={{ width: 22, height: 2, background: "rgba(255,255,255,0.5)", display: "block", borderRadius: 2 }} />
+              </button>
+              <div style={{ flex: 1, display: "flex", justifyContent: "center", minWidth: 0 }}>
+                <div style={{ fontSize: 16, letterSpacing: "-0.5px" }}>
+                  <span style={{ fontFamily: "'DM Sans',sans-serif", fontWeight: 600, color: "rgba(255,255,255,0.5)" }}>The </span>
+                  <em style={{ fontFamily: "'DM Serif Display',serif", fontStyle: "italic", fontWeight: 400, color: "rgba(255,255,255,0.5)" }}>Lab</em>
+                  <span style={{ fontFamily: "'DM Sans',sans-serif", fontWeight: 600, color: "rgba(255,255,255,0.5)" }}>.</span>
+                </div>
               </div>
-              <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+              <div style={{ display: "flex", alignItems: "center", gap: 8, flexShrink: 0 }}>
                 <a
                   href="/api/auth/login"
                   style={{
                     display: "flex",
                     alignItems: "center",
                     gap: 5,
-                    background: whoopConnectedOk ? "rgba(255,255,255,0.05)" : "rgba(255,59,48,0.1)",
-                    border: whoopConnectedOk ? "1px solid rgba(255,255,255,0.08)" : "1px solid rgba(255,59,48,0.25)",
+                    background: !whoopData?.recovery?.score ? "rgba(255,59,48,0.1)" : "rgba(255,255,255,0.05)",
+                    border: !whoopData?.recovery?.score ? "1px solid rgba(255,59,48,0.25)" : "1px solid rgba(255,255,255,0.08)",
                     borderRadius: 20,
                     padding: "5px 10px",
                     fontSize: 9,
                     fontWeight: 600,
-                    color: whoopConnectedOk ? "rgba(255,255,255,0.3)" : "#ff6b6b",
+                    color: !whoopData?.recovery?.score ? "#ff6b6b" : "rgba(255,255,255,0.3)",
                     letterSpacing: "1px",
                     textDecoration: "none",
                     textTransform: "uppercase",
                     fontFamily: C.fs,
                   }}
                 >
-                  <span style={{ width: 5, height: 5, borderRadius: "50%", background: whoopConnectedOk ? "#5dffa0" : "#ff6b6b", flexShrink: 0 }} />
+                  <span
+                    style={{
+                      width: 5,
+                      height: 5,
+                      borderRadius: "50%",
+                      background: !whoopData?.recovery?.score ? "#ff6b6b" : "#5dffa0",
+                      flexShrink: 0,
+                    }}
+                  />
                   WHOOP
                 </a>
                 <div style={{ fontSize: 10, color: "rgba(255,255,255,0.2)", letterSpacing: "1px", fontFamily: C.fs }}>

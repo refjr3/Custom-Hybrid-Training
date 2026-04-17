@@ -72,3 +72,16 @@ button:active {
 .pulse {
   animation: pulse-glow 2s ease-in-out infinite;
 }
+
+@keyframes slideInLeft {
+  from {
+    transform: translateX(-100%);
+  }
+  to {
+    transform: translateX(0);
+  }
+}
+
+.drawer-panel {
+  animation: slideInLeft 0.28s cubic-bezier(0.22, 1, 0.36, 1);
+}
