@@ -3861,7 +3861,6 @@ export default function App() {
           || String(tomorrowDuration || "—");
         const gateWord = gateUpper.charAt(0) + gateUpper.slice(1).toLowerCase();
         const phaseNameHdr = perfHdr?.currentPhase || "Training";
-        const dayName = new Date().toLocaleDateString("en-US", { weekday: "long" });
         const currentWeekNum = perfHdr?.currentWeekNum ?? 1;
         const currentPhaseName = perfHdr?.currentPhase || "Training";
         const currentWeekDaysStrip = todayEntry?.week?.days || [];
@@ -3892,6 +3891,15 @@ export default function App() {
             ? "Solo"
             : "Race";
 
+        const totalPlanWeeksRaw = planBlocks.reduce(
+          (sum, b) => sum + (Array.isArray(b?.weeks) ? b.weeks.length : 0),
+          0,
+        );
+        const totalPlanWeeks = totalPlanWeeksRaw > 0 ? totalPlanWeeksRaw : 22;
+        const raceCityShort = /dc|washington/i.test(String(raceName || ""))
+          ? "DC"
+          : (String(raceName || "").trim().split(/\s+/).filter(Boolean).pop() || "race");
+
         const sleepStages = whoopData?.sleep?.stage_summary;
         const sleepStageMs = sleepStages && typeof sleepStages === "object"
           ? {
@@ -3918,7 +3926,7 @@ export default function App() {
 
         return (
           <div style={{ padding: "12px 16px 20px", display: "flex", flexDirection: "column", gap: 14, overflowX: "hidden" }}>
-            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 20, gap: 8 }}>
+            <div style={{ position: "relative", marginBottom: 24, paddingTop: 8, minHeight: 40 }}>
               <button
                 type="button"
                 aria-label="Open menu"
@@ -3927,6 +3935,10 @@ export default function App() {
                   setDrawerSection("menu");
                 }}
                 style={{
+                  position: "absolute",
+                  left: 0,
+                  top: "50%",
+                  transform: "translateY(-50%)",
                   background: "none",
                   border: "none",
                   cursor: "pointer",
@@ -3934,58 +3946,41 @@ export default function App() {
                   display: "flex",
                   flexDirection: "column",
                   gap: "5px",
-                  flexShrink: 0,
                 }}
               >
-                <span style={{ width: 22, height: 2, background: "rgba(255,255,255,0.5)", display: "block", borderRadius: 2 }} />
-                <span style={{ width: 16, height: 2, background: "rgba(255,255,255,0.5)", display: "block", borderRadius: 2 }} />
-                <span style={{ width: 22, height: 2, background: "rgba(255,255,255,0.5)", display: "block", borderRadius: 2 }} />
+                <span style={{ width: 22, height: 2, background: "rgba(255,255,255,0.35)", display: "block", borderRadius: 2 }} />
+                <span style={{ width: 16, height: 2, background: "rgba(255,255,255,0.35)", display: "block", borderRadius: 2 }} />
+                <span style={{ width: 22, height: 2, background: "rgba(255,255,255,0.35)", display: "block", borderRadius: 2 }} />
               </button>
-              <div style={{ flex: 1, display: "flex", justifyContent: "center", minWidth: 0 }}>
-                <div style={{ fontSize: 16, letterSpacing: "-0.5px" }}>
-                  <span style={{ fontFamily: "'DM Sans',sans-serif", fontWeight: 600, color: "rgba(255,255,255,0.5)" }}>The </span>
-                  <em style={{ fontFamily: "'DM Serif Display',serif", fontStyle: "italic", fontWeight: 400, color: "rgba(255,255,255,0.5)" }}>Lab</em>
-                  <span style={{ fontFamily: "'DM Sans',sans-serif", fontWeight: 600, color: "rgba(255,255,255,0.5)" }}>.</span>
-                </div>
-              </div>
-              <div style={{ display: "flex", alignItems: "center", gap: 8, flexShrink: 0 }}>
-                <a
-                  href="/api/auth/login"
-                  style={{
-                    display: "flex",
-                    alignItems: "center",
-                    gap: 5,
-                    background: !whoopData?.recovery?.score ? "rgba(255,59,48,0.1)" : "rgba(255,255,255,0.05)",
-                    border: !whoopData?.recovery?.score ? "1px solid rgba(255,59,48,0.25)" : "1px solid rgba(255,255,255,0.08)",
-                    borderRadius: 20,
-                    padding: "5px 10px",
-                    fontSize: 9,
-                    fontWeight: 600,
-                    color: !whoopData?.recovery?.score ? "#ff6b6b" : "rgba(255,255,255,0.3)",
-                    letterSpacing: "1px",
-                    textDecoration: "none",
-                    textTransform: "uppercase",
-                    fontFamily: C.fs,
-                  }}
-                >
-                  <span
-                    style={{
-                      width: 5,
-                      height: 5,
-                      borderRadius: "50%",
-                      background: !whoopData?.recovery?.score ? "#ff6b6b" : "#5dffa0",
-                      flexShrink: 0,
-                    }}
-                  />
-                  WHOOP
-                </a>
-                <div style={{ fontSize: 10, color: "rgba(255,255,255,0.2)", letterSpacing: "1px", fontFamily: C.fs }}>
-                  {new Date().toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric" })}
+              <div style={{ textAlign: "center" }}>
+                <div style={{ fontSize: 28, lineHeight: 1, letterSpacing: "-0.5px" }}>
+                  <span style={{ fontFamily: "'DM Sans',sans-serif", fontWeight: 600, color: "rgba(255,255,255,0.75)" }}>The </span>
+                  <em style={{ fontFamily: "'DM Serif Display',serif", fontStyle: "italic", fontWeight: 400, color: "rgba(255,255,255,0.85)" }}>Lab</em>
+                  <span style={{ fontFamily: "'DM Sans',sans-serif", fontWeight: 600, color: "rgba(255,255,255,0.75)" }}>.</span>
                 </div>
               </div>
             </div>
-            <div style={{ fontSize: 10, fontWeight: 500, color: "rgba(255,255,255,0.22)", letterSpacing: "3px", textTransform: "uppercase", marginBottom: 10, fontFamily: C.fs }}>
-              {dayName} · Week {currentWeekNum} · {currentPhaseName}
+            <div
+              style={{
+                textAlign: "center",
+                marginBottom: 10,
+                fontSize: 13,
+                letterSpacing: "-0.2px",
+                lineHeight: 1.3,
+              }}
+            >
+              <span style={{ fontFamily: "'DM Sans',sans-serif", fontWeight: 600, color: "rgba(255,255,255,0.45)" }}>
+                Week {currentWeekNum}/{totalPlanWeeks} ·{" "}
+              </span>
+              <em style={{ fontFamily: "'DM Serif Display',serif", fontStyle: "italic", fontWeight: 400, color: "rgba(255,255,255,0.55)" }}>
+                {currentPhaseName}
+              </em>
+              {daysAway != null ? (
+                <span style={{ fontFamily: "'DM Sans',sans-serif", fontWeight: 600, color: "rgba(255,255,255,0.35)" }}>
+                  {" "}
+                  · {daysAway} days to {raceCityShort}
+                </span>
+              ) : null}
             </div>
             <div style={{ display: "flex", gap: "2.5px", alignItems: "center", marginBottom: 24 }}>
               {Array.from({ length: 56 }).map((_, i) => {
