@@ -46,6 +46,13 @@ const BLOCK_ID_BY_LABEL = {
   Recovery: "recovery_block",
 };
 
+/** Group class — odd weeks: SAT; even weeks: TUE */
+const HYROX_MOTION = {
+  label: "HYROX Motion",
+  note: `HYROX Motion — coached group class.
+Book your slot. Race-specific stations and pacing; log weak links for the next block.`,
+};
+
 const HYROX_MON = {
   base_standard: {
     label: "HYROX",
@@ -538,7 +545,7 @@ No strength work.`,
 
 const SAT_SESSIONS = {
   1: { label: "Threshold", note: "Threshold Run W1 — establish baseline. 20min comfortably hard. HR 155-165. Log avg HR and time." },
-  2: { label: "Track / Race", note: "Track W2 — Apr 25 = 8k Race. Treat as track quality session. Race it. Log all splits." },
+  2: { label: "Track / Threshold", note: "Track W2 — Apr 25 = 8k Race. Treat as track / threshold quality session. Race it. Log all splits." },
   3: { label: "Threshold", note: "Threshold Run W3 — push duration vs W1. 22-25min. Log avg HR and time." },
   4: { label: "Easy Run", note: "Deload — Easy Z2 Run 20-30min. No quality work this week." },
   5: { label: "Threshold", note: "Threshold Run W5 — 25-30min comfortably hard. Build duration. Log avg HR." },
@@ -617,6 +624,8 @@ const WL_MAP = {
   "Upper Moderate": "STRENGTH C — Upper Dominant",
   Threshold: "THRESHOLD — 10x2 Min",
   "Track / Race": "THRESHOLD — 10x2 Min",
+  "Track / Threshold": "THRESHOLD — 10x2 Min",
+  "HYROX Motion": "EMOM 60 — Hyrox Stations",
   Track: "THRESHOLD — 10x2 Min",
   "Tempo Run + Core": "TEMPO — 20 Min Sustained",
   Shakeout: "RECOVERY — Active Reset",
@@ -725,7 +734,7 @@ const sessionForDay = (weekNum, dayIndex) => {
         else session = HYROX_MON.sharpen_w19;
       } else if (phase === "taper") session = HYROX_MON.taper;
     } else if (dayIndex === 1) {
-      session = isOdd ? TUE_SESSIONS.standard : TUE_SESSIONS.brick;
+      session = isOdd ? TUE_SESSIONS.standard : HYROX_MOTION;
     } else if (dayIndex === 2) {
       session = WED_SESSIONS[phase] || WED_SESSIONS.base;
     } else if (dayIndex === 3) {
@@ -738,7 +747,9 @@ const sessionForDay = (weekNum, dayIndex) => {
       else if (phase === "sharpen") session = FRI_SESSIONS.sharpen;
       else session = FRI_SESSIONS[phase] || FRI_SESSIONS.base;
     } else if (dayIndex === 5) {
-      session = { label: SAT_SESSIONS[weekNum].label, note: SAT_SESSIONS[weekNum].note };
+      session = isOdd
+        ? HYROX_MOTION
+        : { label: SAT_SESSIONS[weekNum].label, note: SAT_SESSIONS[weekNum].note };
     } else if (dayIndex === 6) {
       session = isOdd
         ? SUN_SESSIONS.long_run[phase] || SUN_SESSIONS.long_run.base

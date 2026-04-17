@@ -3883,16 +3883,43 @@ export default function App() {
         const sleepHoursDisp = inBedMs > 0 ? Math.floor(inBedMs / 3600000) : 0;
         const sleepMinsDisp = inBedMs > 0 ? Math.floor((inBedMs % 3600000) / 60000) : 0;
 
+        const whoopScore = whoopData?.recovery?.score;
+        const whoopConnectedOk = whoopScore != null && Number.isFinite(Number(whoopScore)) && Number(whoopScore) > 0;
+
         return (
           <div style={{ padding: "12px 16px 20px", display: "flex", flexDirection: "column", gap: 14, overflowX: "hidden" }}>
-            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 4 }}>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 16, gap: 10, flexWrap: "wrap" }}>
               <div style={{ fontSize: 16, letterSpacing: "-0.5px" }}>
                 <span style={{ fontFamily: "'DM Sans',sans-serif", fontWeight: 600, color: "rgba(255,255,255,0.5)" }}>The </span>
                 <em style={{ fontFamily: "'DM Serif Display',serif", fontStyle: "italic", fontWeight: 400, color: "rgba(255,255,255,0.5)" }}>Lab</em>
                 <span style={{ fontFamily: "'DM Sans',sans-serif", fontWeight: 600, color: "rgba(255,255,255,0.5)" }}>.</span>
               </div>
-              <div style={{ fontSize: 10, color: "rgba(255,255,255,0.2)", letterSpacing: "1px", fontFamily: C.fs }}>
-                {new Date().toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric" })}
+              <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                <a
+                  href="/api/auth/login"
+                  style={{
+                    display: "flex",
+                    alignItems: "center",
+                    gap: 5,
+                    background: whoopConnectedOk ? "rgba(255,255,255,0.05)" : "rgba(255,59,48,0.1)",
+                    border: whoopConnectedOk ? "1px solid rgba(255,255,255,0.08)" : "1px solid rgba(255,59,48,0.25)",
+                    borderRadius: 20,
+                    padding: "5px 10px",
+                    fontSize: 9,
+                    fontWeight: 600,
+                    color: whoopConnectedOk ? "rgba(255,255,255,0.3)" : "#ff6b6b",
+                    letterSpacing: "1px",
+                    textDecoration: "none",
+                    textTransform: "uppercase",
+                    fontFamily: C.fs,
+                  }}
+                >
+                  <span style={{ width: 5, height: 5, borderRadius: "50%", background: whoopConnectedOk ? "#5dffa0" : "#ff6b6b", flexShrink: 0 }} />
+                  WHOOP
+                </a>
+                <div style={{ fontSize: 10, color: "rgba(255,255,255,0.2)", letterSpacing: "1px", fontFamily: C.fs }}>
+                  {new Date().toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric" })}
+                </div>
               </div>
             </div>
             <div style={{ fontSize: 10, fontWeight: 500, color: "rgba(255,255,255,0.22)", letterSpacing: "3px", textTransform: "uppercase", marginBottom: 10, fontFamily: C.fs }}>

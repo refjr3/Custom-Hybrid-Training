@@ -31,48 +31,65 @@ async function handleMorningBrief(req, res) {
   const weeklyZ2Minutes = b.weeklyZ2Minutes ?? c.weeklyZ2Minutes;
   const complianceThisWeek = b.complianceThisWeek ?? c.complianceThisWeek;
 
-  const recoveryNum = recovery != null && recovery !== "" ? Number(recovery) : null;
-  const recoveryLabel =
-    recoveryNum != null && Number.isFinite(recoveryNum)
-      ? recoveryNum >= 67
-        ? "Green"
-        : recoveryNum >= 34
-          ? "Yellow"
-          : "Red"
-      : "Unknown";
-
   const todayLine =
     typeof todaySessionRaw === "string" && todaySessionRaw.trim()
       ? todaySessionRaw.split("\n")[0].trim()
       : todaySessionRaw != null && todaySessionRaw !== ""
         ? String(todaySessionRaw)
-        : "rest";
+        : null;
   const tomorrowLine =
     typeof tomorrowSessionRaw === "string" && tomorrowSessionRaw.trim()
       ? tomorrowSessionRaw.split("\n")[0].trim()
       : tomorrowSessionRaw != null && tomorrowSessionRaw !== ""
         ? String(tomorrowSessionRaw)
-        : "rest";
+        : null;
 
-  const hrvDisplay =
-    hrv != null && hrv !== "" && Number.isFinite(Number(hrv)) ? `${Math.round(Number(hrv))}ms` : "unavailable";
+  const lines = [];
+  if (recovery != null && recovery !== "" && Number.isFinite(Number(recovery))) {
+    const r = Number(recovery);
+    const band = r >= 67 ? "Green" : r >= 34 ? "Yellow" : "Red";
+    lines.push(`Recovery: ${Math.round(r)}% — ${band}`);
+  }
+  if (hrv != null && hrv !== "" && Number.isFinite(Number(hrv))) {
+    lines.push(`HRV: ${Math.round(Number(hrv))}ms`);
+  }
+  if (sleep != null && sleep !== "" && Number.isFinite(Number(sleep))) {
+    lines.push(`Sleep score: ${Math.round(Number(sleep))}%`);
+  }
+  if (rhr != null && rhr !== "" && Number.isFinite(Number(rhr))) {
+    lines.push(`RHR: ${Math.round(Number(rhr))}bpm`);
+  }
+  if (todayLine) lines.push(`Today: ${todayLine}`);
+  if (tomorrowLine) lines.push(`Tomorrow: ${tomorrowLine}`);
+  if (weekNum != null && weekNum !== "" && phase) {
+    lines.push(`Week ${weekNum} of 22 — ${phase}`);
+  } else if (weekNum != null && weekNum !== "") {
+    lines.push(`Week ${weekNum} of 22`);
+  } else if (phase) {
+    lines.push(`Phase: ${phase}`);
+  }
+  if (daysToRace != null && daysToRace !== "" && Number.isFinite(Number(daysToRace)) && Number(daysToRace) >= 0) {
+    lines.push(`${Math.round(Number(daysToRace))} days to HYROX Washington DC`);
+  }
+  if (weeklyZ2Minutes != null && weeklyZ2Minutes !== "" && Number.isFinite(Number(weeklyZ2Minutes)) && Number(weeklyZ2Minutes) > 0) {
+    lines.push(`Z2 this week: ${Math.round(Number(weeklyZ2Minutes))}min`);
+  }
+  if (complianceThisWeek != null && complianceThisWeek !== "" && Number.isFinite(Number(complianceThisWeek))) {
+    lines.push(`Sessions completed this week: ${Math.round(Number(complianceThisWeek))}`);
+  }
 
-  const prompt = `You are a hybrid athlete coach. Give a 2-3 sentence morning brief.
-Be direct, specific, motivating. Reference their actual numbers. No fluff. Under 60 words.
+  if (!lines.length) {
+    lines.push("Training plan is loaded — anchor on execution quality and recovery discipline today.");
+  }
 
-Recovery: ${recovery != null && recovery !== "" ? `${recovery}%` : "unavailable"} (${recoveryLabel})
-HRV: ${hrvDisplay}
-Sleep: ${sleep != null && sleep !== "" ? `${sleep}%` : "unavailable"}
-RHR: ${rhr != null && rhr !== "" ? `${rhr} bpm` : "unavailable"}
-Today: ${todayLine}
-Tomorrow: ${tomorrowLine}
-Phase: Week ${weekNum ?? "?"} — ${phase ?? "Training"}
-Days to race: ${daysToRace != null && daysToRace !== "" ? daysToRace : "unavailable"}
-Weekly Z2: ${weeklyZ2Minutes ?? 0} min
-Sessions done this week: ${complianceThisWeek ?? 0}`;
+  const prompt = `You are a high-performance hybrid athlete coach. Write a 2-3 sentence morning brief for your athlete. Be specific, direct, and motivating. Reference their actual numbers. Never say "no data" or "train by feel" unless truly nothing is available. Under 60 words.
+
+${lines.join("\n")}`;
+
+  const fallbackBrief = "Ready to work. Let's get after it.";
 
   if (!process.env.ANTHROPIC_API_KEY) {
-    return res.status(200).json({ brief: "", error: "missing_ai_key" });
+    return res.status(200).json({ brief: fallbackBrief });
   }
 
   try {
@@ -84,8 +101,8 @@ Sessions done this week: ${complianceThisWeek ?? 0}`;
         "anthropic-version": "2023-06-01",
       },
       body: JSON.stringify({
-        model: "claude-sonnet-4-6",
-        max_tokens: 220,
+        model: "claude-sonnet-4-20250514",
+        max_tokens: 150,
         messages: [{ role: "user", content: prompt }],
       }),
     });
@@ -93,14 +110,14 @@ Sessions done this week: ${complianceThisWeek ?? 0}`;
     const data = await response.json();
     if (data.error) {
       console.error("[synthesis/morning brief] Claude error:", data.error);
-      return res.status(200).json({ brief: "", error: "ai_error" });
+      return res.status(200).json({ brief: fallbackBrief });
     }
 
     const text = (data.content?.[0]?.text || "").trim();
-    return res.status(200).json({ brief: text || "" });
+    return res.status(200).json({ brief: text || fallbackBrief });
   } catch (err) {
     console.error("[synthesis/morning brief]", err);
-    return res.status(200).json({ brief: "", error: "exception" });
+    return res.status(200).json({ brief: fallbackBrief });
   }
 }
 
