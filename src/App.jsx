@@ -3070,15 +3070,26 @@ export default function App() {
     }
   };
 
+  const z2WeeklyLocalKey = (uid) => (uid ? `lab:z2_weekly_minutes:${uid}` : null);
+
   const fetchStravaWeeklyZ2 = async () => {
     if (!session?.access_token) return;
+    const uid = session.user?.id;
+    const lsKey = z2WeeklyLocalKey(uid);
+    if (lsKey) {
+      try {
+        const raw = localStorage.getItem(lsKey);
+        const n = parseInt(raw, 10);
+        if (Number.isFinite(n) && n >= 0) setStravaWeeklyZ2Minutes(n);
+      } catch (_) {}
+    }
     setStravaWeeklyZ2Loading(true);
     setStravaWeeklyZ2Error("");
     try {
       const res = await fetch("/api/strava/weekly-z2", {
         headers: {
           Authorization: `Bearer ${session.access_token}`,
-          ...(session.user?.id ? { "x-user-id": session.user.id } : {}),
+          ...(uid ? { "x-user-id": uid } : {}),
         },
         credentials: "include",
       });
@@ -3086,6 +3097,11 @@ export default function App() {
       if (data.error === "strava_not_connected" || data.error === "strava_reconnect_required") {
         setStravaConnected(false);
         setStravaWeeklyZ2Minutes(0);
+        if (lsKey) {
+          try {
+            localStorage.removeItem(lsKey);
+          } catch (_) {}
+        }
         return;
       }
       if (!res.ok) {
@@ -3095,8 +3111,14 @@ export default function App() {
       }
       const mins = data.weeklyZ2Minutes ?? data.totalMinutes;
       if (typeof mins === "number" && Number.isFinite(mins)) {
-        setStravaWeeklyZ2Minutes(Math.max(0, mins));
+        const m = Math.max(0, mins);
+        setStravaWeeklyZ2Minutes(m);
         setStravaConnected(true);
+        if (lsKey) {
+          try {
+            localStorage.setItem(lsKey, String(m));
+          } catch (_) {}
+        }
       } else {
         setStravaWeeklyZ2Minutes(0);
       }
@@ -3972,7 +3994,7 @@ export default function App() {
           : 0;
         const z2HeaderDone = !stravaConnected
           ? "0"
-          : stravaWeeklyZ2Loading
+          : stravaWeeklyZ2Loading && stravaWeeklyZ2Minutes == null
             ? "…"
             : String(Math.round(weeklyZ2Minutes));
         const isWeekDayDoneStrip = (d) => {

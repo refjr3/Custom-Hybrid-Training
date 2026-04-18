@@ -58,6 +58,19 @@ async function readZ2CacheRow(userId) {
   return data;
 }
 
+function cacheAgeMinutes(cached) {
+  if (!cached?.strava_z2_cached_at) return 999;
+  const ms = new Date(cached.strava_z2_cached_at).getTime();
+  if (!Number.isFinite(ms)) return 999;
+  return (Date.now() - ms) / 1000 / 60;
+}
+
+function normalizedCachedMinutes(row) {
+  if (row?.strava_z2_minutes == null) return null;
+  const n = Number(row.strava_z2_minutes);
+  return Number.isFinite(n) ? Math.max(0, Math.round(n)) : null;
+}
+
 async function writeZ2Cache(userId, weeklyZ2Minutes) {
   const { error } = await supabase
     .from("user_profiles")
@@ -66,30 +79,20 @@ async function writeZ2Cache(userId, weeklyZ2Minutes) {
       strava_z2_cached_at: new Date().toISOString(),
     })
     .eq("user_id", userId);
-  if (error) console.warn("[strava/weekly-z2] cache write:", error.message);
+  if (error) {
+    console.warn("[strava/weekly-z2] cache write:", error.message);
+  } else {
+    console.log("[weekly-z2] cached:", weeklyZ2Minutes, "for user:", userId);
+  }
 }
 
-function cacheAgeMinutes(cached) {
-  if (!cached?.strava_z2_cached_at) return 999;
-  const ms = new Date(cached.strava_z2_cached_at).getTime();
-  if (!Number.isFinite(ms)) return 999;
-  return (Date.now() - ms) / 1000 / 60;
-}
-
-async function respondRateLimited(res, userId) {
-  if (userId) {
-    const { data } = await supabase
-      .from("user_profiles")
-      .select("strava_z2_minutes")
-      .eq("user_id", userId)
-      .maybeSingle();
-    if (data?.strava_z2_minutes != null) {
-      return res.status(200).json({
-        weeklyZ2Minutes: data.strava_z2_minutes,
-        fromCache: true,
-        rateLimited: true,
-      });
-    }
+async function respondRateLimited(res, fallbackMinutes) {
+  if (fallbackMinutes != null) {
+    return res.status(200).json({
+      weeklyZ2Minutes: fallbackMinutes,
+      fromCache: true,
+      rateLimited: true,
+    });
   }
   return res.status(200).json({ weeklyZ2Minutes: 0, error: "strava_rate_limited" });
 }
@@ -166,17 +169,33 @@ export default async function handler(req, res) {
     console.warn("[strava/weekly-z2] x-user-id header does not match JWT user", { headerUid, appUserId });
   }
 
-  const cached = await readZ2CacheRow(appUserId);
-  const ageMin = cacheAgeMinutes(cached);
-  if (cached?.strava_z2_minutes != null && ageMin < 15) {
-    return res.status(200).json({
-      weeklyZ2Minutes: cached.strava_z2_minutes,
-      fromCache: true,
-    });
+  let cachedRow = null;
+  let cachedMinutes = null;
+  try {
+    cachedRow = await readZ2CacheRow(appUserId);
+    cachedMinutes = normalizedCachedMinutes(cachedRow);
+    const ageMin = cacheAgeMinutes(cachedRow);
+    if (cachedMinutes != null) {
+      console.log("[weekly-z2] cache age:", Math.round(ageMin), "min, value:", cachedMinutes);
+    }
+    if (cachedMinutes != null && ageMin < 15) {
+      return res.status(200).json({
+        weeklyZ2Minutes: cachedMinutes,
+        fromCache: true,
+      });
+    }
+  } catch (e) {
+    console.warn("[weekly-z2] cache read failed:", e?.message || e);
   }
 
   const accessToken = await getStravaAccessForRequest(req, res, supabase, appUserId);
   if (!accessToken) {
+    if (cachedMinutes != null) {
+      return res.status(200).json({
+        weeklyZ2Minutes: cachedMinutes,
+        fromCache: true,
+      });
+    }
     return res.status(200).json({ weeklyZ2Minutes: 0, error: "strava_not_connected" });
   }
 
@@ -189,10 +208,15 @@ export default async function handler(req, res) {
     const activitiesRes = await fetchActivitiesInRange(accessToken, afterEpoch, beforeEpoch);
 
     if (activitiesRes.status === 429) {
-      return respondRateLimited(res, appUserId);
+      console.warn("[weekly-z2] rate limited (activities), returning cache:", cachedMinutes);
+      return respondRateLimited(res, cachedMinutes);
     }
     if (!activitiesRes.ok) {
-      return res.status(200).json({ weeklyZ2Minutes: 0, error: "strava_fetch_failed" });
+      return res.status(200).json({
+        weeklyZ2Minutes: cachedMinutes ?? 0,
+        error: "strava_fetch_failed",
+        fromCache: cachedMinutes != null,
+      });
     }
 
     const activities = Array.isArray(activitiesRes.activities) ? activitiesRes.activities : [];
@@ -209,7 +233,8 @@ export default async function handler(req, res) {
         const a = slice[j];
         const { seconds: secs, rateLimited } = results[j] || { seconds: 0, rateLimited: false };
         if (rateLimited) {
-          return respondRateLimited(res, appUserId);
+          console.warn("[weekly-z2] rate limited (zones), returning cache:", cachedMinutes);
+          return respondRateLimited(res, cachedMinutes);
         }
         if (secs <= 0) continue;
         totalZ2Seconds += secs;
@@ -234,9 +259,14 @@ export default async function handler(req, res) {
       totalMinutes: weeklyZ2Minutes,
       targetMinutes: 240,
       activities: summary,
+      fromCache: false,
     });
   } catch (err) {
     console.error("[strava/weekly-z2]", err?.message || err);
-    return res.status(200).json({ weeklyZ2Minutes: 0, error: err?.message || "fetch_failed" });
+    return res.status(200).json({
+      weeklyZ2Minutes: cachedMinutes ?? 0,
+      error: err?.message || "fetch_failed",
+      fromCache: cachedMinutes != null,
+    });
   }
 }
