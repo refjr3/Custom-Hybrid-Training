@@ -3871,11 +3871,6 @@ export default function App() {
           );
         };
         const daysCompletedThisWeek = currentWeekDaysStrip.filter(isWeekDayDoneStrip).length;
-        const jdStrip = new Date().getDay();
-        const todayWeekdayIndexStrip = jdStrip === 0 ? 6 : jdStrip - 1;
-        const litTicksStrip = Math.min(56, Math.max(0, daysCompletedThisWeek * 8));
-        const todayStripStart = todayWeekdayIndexStrip * 8;
-        const todayStripHighlight = Math.min(55, todayStripStart + 3);
         const raceDateStr = raceDate
           ? new Date(`${raceDate}T12:00:00`).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })
           : "";
@@ -3954,50 +3949,75 @@ export default function App() {
                 </div>
               </div>
             </div>
+            <div style={{ textAlign: "center", marginBottom: 16 }}>
+              <div
+                style={{
+                  fontSize: 11,
+                  letterSpacing: "-0.1px",
+                  lineHeight: 1.5,
+                }}
+              >
+                <span
+                  style={{
+                    fontFamily: "'DM Sans', sans-serif",
+                    fontWeight: 600,
+                    color: "rgba(255,255,255,0.38)",
+                  }}
+                >
+                  Week {currentWeekNum}/{totalPlanWeeks} ·{" "}
+                </span>
+                <em
+                  style={{
+                    fontFamily: "'DM Serif Display', serif",
+                    fontStyle: "italic",
+                    fontWeight: 400,
+                    color: "rgba(255,255,255,0.5)",
+                  }}
+                >
+                  {currentPhaseName}
+                </em>
+                {daysAway != null ? (
+                  <span
+                    style={{
+                      fontFamily: "'DM Sans', sans-serif",
+                      fontWeight: 500,
+                      color: "rgba(255,255,255,0.28)",
+                    }}
+                  >
+                    {" "}
+                    · {daysAway} days to {raceCityShort}
+                  </span>
+                ) : null}
+              </div>
+            </div>
             <div
               style={{
-                textAlign: "center",
-                marginBottom: 10,
-                fontSize: 13,
-                letterSpacing: "-0.2px",
-                lineHeight: 1.3,
+                display: "flex",
+                gap: "2.5px",
+                alignItems: "center",
+                marginBottom: 28,
+                width: "100%",
               }}
             >
-              <span style={{ fontFamily: "'DM Sans',sans-serif", fontWeight: 600, color: "rgba(255,255,255,0.45)" }}>
-                Week {currentWeekNum}/{totalPlanWeeks} ·{" "}
-              </span>
-              <em style={{ fontFamily: "'DM Serif Display',serif", fontStyle: "italic", fontWeight: 400, color: "rgba(255,255,255,0.55)" }}>
-                {currentPhaseName}
-              </em>
-              {daysAway != null ? (
-                <span style={{ fontFamily: "'DM Sans',sans-serif", fontWeight: 600, color: "rgba(255,255,255,0.35)" }}>
-                  {" "}
-                  · {daysAway} days to {raceCityShort}
-                </span>
-              ) : null}
-            </div>
-            <div style={{ display: "flex", gap: "2.5px", alignItems: "center", marginBottom: 24 }}>
-              {Array.from({ length: 56 }).map((_, i) => {
-                const inTodayBand = i >= todayStripStart && i < todayStripStart + 8;
-                const isHighlightTick = i === todayStripHighlight;
-                const gold = i < litTicksStrip;
-                const h = isHighlightTick ? 5 : 8;
-                let bg = "#3A3530";
-                if (gold) bg = "#C9A875";
-                else if (inTodayBand) bg = "rgba(201,168,117,0.35)";
-                return (
-                  <span
-                    key={i}
-                    style={{
-                      width: 1,
-                      flexShrink: 0,
-                      borderRadius: "0.5px",
-                      height: h,
-                      background: bg,
-                    }}
-                  />
-                );
-              })}
+              {Array.from({ length: 56 }).map((_, i) => (
+                <span
+                  key={i}
+                  style={{
+                    width: 1,
+                    flexShrink: 0,
+                    borderRadius: "0.5px",
+                    height: i === daysCompletedThisWeek ? 5 : 8,
+                    background:
+                      i < daysCompletedThisWeek
+                        ? "#C9A875"
+                        : i === daysCompletedThisWeek
+                          ? "rgba(201,168,117,0.35)"
+                          : "#3A3530",
+                    flex: 1,
+                    maxWidth: 4,
+                  }}
+                />
+              ))}
             </div>
             <div style={{ fontSize: 42, fontWeight: 600, color: "#fff", lineHeight: 1.05, letterSpacing: "-1.5px", marginBottom: 24, fontFamily: "'DM Sans',sans-serif" }}>
               Make{" "}
