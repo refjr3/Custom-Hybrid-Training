@@ -85,3 +85,13 @@ button:active {
 .drawer-panel {
   animation: slideInLeft 0.28s cubic-bezier(0.22, 1, 0.36, 1);
 }
+
+@keyframes tickPulse {
+  0%,
+  100% {
+    opacity: 0.4;
+  }
+  50% {
+    opacity: 1;
+  }
+}

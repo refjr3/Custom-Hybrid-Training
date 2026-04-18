@@ -21,6 +21,139 @@ const supabase = createClient(
   supabaseKey || "placeholder"
 );
 
+/** Full-screen cinematic splash on every cold load (phased animation). */
+const SplashScreen = ({ phase }) => {
+  const logoVisible = ["logo-in", "tagline", "glow", "out"].includes(phase);
+  const taglineVisible = ["tagline", "glow", "out"].includes(phase);
+  const glowVisible = ["glow", "out"].includes(phase);
+  const exiting = phase === "out";
+
+  return (
+    <div
+      style={{
+        position: "fixed",
+        inset: 0,
+        background: "#0D0E10",
+        display: "flex",
+        flexDirection: "column",
+        alignItems: "center",
+        justifyContent: "center",
+        zIndex: 9999,
+        transition: "opacity 0.5s ease",
+        opacity: exiting ? 0 : 1,
+        overflow: "hidden",
+      }}
+    >
+      <div
+        style={{
+          position: "absolute",
+          top: "-20%",
+          right: "-10%",
+          width: "70%",
+          height: "70%",
+          background: "radial-gradient(ellipse at center, rgba(201,168,117,0.15) 0%, transparent 70%)",
+          transition: "opacity 1.2s ease",
+          opacity: glowVisible ? 1 : 0,
+          pointerEvents: "none",
+        }}
+      />
+      <div
+        style={{
+          position: "absolute",
+          bottom: "-10%",
+          left: "-10%",
+          width: "50%",
+          height: "50%",
+          background: "radial-gradient(ellipse at center, rgba(201,168,117,0.07) 0%, transparent 70%)",
+          transition: "opacity 1.2s ease",
+          opacity: glowVisible ? 1 : 0,
+          pointerEvents: "none",
+        }}
+      />
+      <div
+        style={{
+          position: "absolute",
+          bottom: 80,
+          left: "50%",
+          transform: "translateX(-50%)",
+          display: "flex",
+          gap: "2.5px",
+          transition: "opacity 0.8s ease",
+          opacity: taglineVisible ? 0.6 : 0,
+        }}
+      >
+        {Array.from({ length: 40 }).map((_, i) => (
+          <span
+            key={i}
+            style={{
+              width: 1,
+              height: i % 5 === 0 ? 10 : 6,
+              borderRadius: "0.5px",
+              background: i < 12 ? "#C9A875" : "#3A3530",
+              display: "block",
+              opacity: i < 12 ? 1 : 0.4,
+            }}
+          />
+        ))}
+      </div>
+      <div
+        style={{
+          textAlign: "center",
+          transition: "opacity 0.7s ease, transform 0.9s cubic-bezier(0.22,1,0.36,1)",
+          opacity: logoVisible ? 1 : 0,
+          transform: logoVisible ? "translateY(0) scale(1)" : "translateY(24px) scale(0.92)",
+        }}
+      >
+        <div
+          style={{
+            fontSize: 52,
+            lineHeight: 1,
+            letterSpacing: "-1.5px",
+            marginBottom: 12,
+          }}
+        >
+          <span style={{ fontFamily: "'DM Sans', sans-serif", fontWeight: 600, color: "#fff" }}>The </span>
+          <em
+            style={{
+              fontFamily: "'DM Serif Display', serif",
+              fontStyle: "italic",
+              fontWeight: 400,
+              color: "rgba(255,255,255,0.92)",
+            }}
+          >
+            Lab
+          </em>
+          <span style={{ fontFamily: "'DM Sans', sans-serif", fontWeight: 600, color: "#fff" }}>.</span>
+        </div>
+        <div
+          style={{
+            height: 1,
+            background: "#C9A875",
+            margin: "0 auto 14px",
+            transition: "opacity 0.6s ease, width 0.8s ease",
+            opacity: taglineVisible ? 1 : 0,
+            width: taglineVisible ? 40 : 0,
+          }}
+        />
+        <div
+          style={{
+            fontFamily: "'DM Sans', sans-serif",
+            fontSize: 10,
+            fontWeight: 500,
+            color: "rgba(255,255,255,0.25)",
+            letterSpacing: "4px",
+            textTransform: "uppercase",
+            transition: "opacity 0.8s ease",
+            opacity: taglineVisible ? 1 : 0,
+          }}
+        >
+          Hybrid Performance OS
+        </div>
+      </div>
+    </div>
+  );
+};
+
 /** DM Sans / DM Serif + gold glass — global background in index.css */
 const DS = {
   bg: "transparent",
@@ -2594,7 +2727,8 @@ export default function App() {
   const bloodworkInputRef = useRef(null);
   const [coachPersona, setCoachPersona] = useState("grinder");
   const [showEntrance, setShowEntrance] = useState(false);
-  const [showSplash, setShowSplash] = useState(true);
+  const [splashDone, setSplashDone] = useState(false);
+  const [splashPhase, setSplashPhase] = useState("dark");
   const [garminActivities, setGarminActivities] = useState([]);
   const [garminConnected, setGarminConnected] = useState(false);
   const [proactiveMessages, setProactiveMessages] = useState([]);
@@ -2636,6 +2770,21 @@ export default function App() {
   const dataFetched = useRef(false);
   /** After OAuth, session may load after URL is cleaned — refetch Strava once JWT exists. */
   const stravaOAuthReturnRef = useRef(false);
+
+  useEffect(() => {
+    const t1 = setTimeout(() => setSplashPhase("logo-in"), 300);
+    const t2 = setTimeout(() => setSplashPhase("tagline"), 1100);
+    const t3 = setTimeout(() => setSplashPhase("glow"), 1800);
+    const t4 = setTimeout(() => setSplashPhase("out"), 2600);
+    const t5 = setTimeout(() => setSplashDone(true), 3100);
+    return () => {
+      clearTimeout(t1);
+      clearTimeout(t2);
+      clearTimeout(t3);
+      clearTimeout(t4);
+      clearTimeout(t5);
+    };
+  }, []);
 
   useEffect(() => {
   }, [selDay, weekId, sess]);
@@ -3095,12 +3244,6 @@ export default function App() {
   }, [whoopData, planBlocks]);
 
   useEffect(() => {
-    if (!session || !profile) return;
-    const t = setTimeout(() => setShowSplash(false), 1500);
-    return () => clearTimeout(t);
-  }, [session, profile]);
-
-  useEffect(() => {
     if (!session?.access_token) return;
     let cancelled = false;
     (async () => {
@@ -3444,6 +3587,9 @@ export default function App() {
     }
   };
 
+  // ── Cinematic splash — after all hooks, before auth routing ───────────────
+  if (!splashDone) return <SplashScreen phase={splashPhase} />;
+
   // ── Auth routing — must come after all hooks ───────────────────────────────
   if (authLoading) {
     return (
@@ -3469,35 +3615,6 @@ export default function App() {
   }
   if (!session) return <AuthScreen supabase={supabase} />;
   if (!profile) return <Onboarding supabase={supabase} session={session} onComplete={(p) => { setShowEntrance(true); setTimeout(() => setShowEntrance(false), 2800); setProfile(p); }} />;
-
-  if (showSplash) {
-    return (
-      <div
-        style={{
-          position: "fixed",
-          inset: 0,
-          zIndex: 9999,
-          display: "flex",
-          flexDirection: "column",
-          alignItems: "center",
-          justifyContent: "center",
-          background:
-            "radial-gradient(ellipse 65% 50% at 82% 8%, rgba(210,190,155,0.22) 0%, rgba(180,155,110,0.08) 35%, transparent 65%), radial-gradient(ellipse 45% 35% at 15% 92%, rgba(160,130,90,0.10) 0%, transparent 55%), #0D0E10",
-        }}
-      >
-        <div style={{ position: "absolute", top: -100, right: -50, width: 300, height: 300, background: "radial-gradient(circle,rgba(210,190,155,0.12) 0%,transparent 65%)", pointerEvents: "none" }} />
-        <div style={{ textAlign: "center", position: "relative", zIndex: 1 }}>
-          <div style={{ fontSize: 52, lineHeight: 1, letterSpacing: "-1.5px", marginBottom: 8 }}>
-            <span style={{ fontFamily: "'DM Sans',sans-serif", fontWeight: 600, color: "#fff" }}>The </span>
-            <em style={{ fontFamily: "'DM Serif Display',serif", fontStyle: "italic", fontWeight: 400, color: "rgba(255,255,255,0.92)" }}>Lab</em>
-            <span style={{ fontFamily: "'DM Sans',sans-serif", fontWeight: 600, color: "#fff" }}>.</span>
-          </div>
-          <div style={{ fontFamily: "'DM Sans',sans-serif", fontSize: 10, fontWeight: 500, color: "rgba(255,255,255,0.2)", letterSpacing: "4px", textTransform: "uppercase" }}>Hybrid Performance</div>
-        </div>
-        <div style={{ width: 40, height: 1, background: "rgba(201,168,117,0.4)", marginTop: 24, position: "relative", zIndex: 1 }} />
-      </div>
-    );
-  }
 
   const sortedBlocks = [...planBlocks].sort(
     (a, b) => Number(a?.order ?? Number.MAX_SAFE_INTEGER) - Number(b?.order ?? Number.MAX_SAFE_INTEGER)
