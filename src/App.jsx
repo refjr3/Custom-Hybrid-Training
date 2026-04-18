@@ -2900,7 +2900,6 @@ export default function App() {
       window.history.replaceState({}, "", "/");
     }
 
-    fetchWhoopData();
     fetchBiomarkers();
     fetchSupplements();
     fetchPlan(session?.access_token);
@@ -2939,11 +2938,38 @@ export default function App() {
 
   const fetchWhoopData = async () => {
     try {
-      const res = await fetch("/api/whoop/recovery");
+      const { data: live } = await supabase.auth.getSession();
+      const token = live?.session?.access_token || session?.access_token;
+
+      if (token) {
+        const res = await fetch("/api/whoop/sync", {
+          credentials: "include",
+          headers: { Authorization: `Bearer ${token}` },
+        });
+        const data = await res.json().catch(() => ({}));
+        if (!res.ok || data?.error) {
+          if (profile && !profile.connected_wearables?.whoop) {
+            setWhoopConnected(false);
+          }
+          setWhoopLoading(false);
+          return;
+        }
+        if (data?.throttled && data?.recovery == null) {
+          setWhoopLoading(false);
+          return;
+        }
+        if (import.meta.env.DEV) {
+          console.log("[WHOOP sync]", JSON.stringify(data, null, 2));
+        }
+        const { throttled: _t, ...rest } = data;
+        setWhoopData(rest);
+        setWhoopConnected(true);
+        return;
+      }
+
+      const res = await fetch("/api/whoop/recovery", { credentials: "include" });
       if (res.status === 401) {
-        // If profile says WHOOP was connected, keep the connected state
-        // but mark data as unavailable (token may have expired)
-        if (!profile?.connected_wearables?.whoop) {
+        if (profile && !profile.connected_wearables?.whoop) {
           setWhoopConnected(false);
         }
         setWhoopLoading(false);
@@ -2956,7 +2982,7 @@ export default function App() {
       setWhoopData(data);
       setWhoopConnected(true);
     } catch (e) {
-      if (!profile?.connected_wearables?.whoop) {
+      if (profile && !profile.connected_wearables?.whoop) {
         setWhoopConnected(false);
       }
     } finally {
@@ -3158,6 +3184,11 @@ export default function App() {
   useEffect(() => {
     if (nav !== "today" || !session?.access_token) return;
     fetchStravaWeeklyZ2();
+  }, [nav, session?.access_token]);
+
+  useEffect(() => {
+    if (nav !== "today" || !session?.access_token) return;
+    void fetchWhoopData();
   }, [nav, session?.access_token]);
 
   const selectDefaultPlanPosition = (blocks) => {
@@ -4481,40 +4512,6 @@ export default function App() {
           </div>
         );
       })()}
-
-      {/* TEMP DEBUG — remove before beta */}
-      {nav === "today" && (
-        <button
-          type="button"
-          onClick={async () => {
-            const {
-              data: { session: s },
-            } = await supabase.auth.getSession();
-            const res = await fetch("/api/metrics/today", {
-              headers: { Authorization: `Bearer ${s?.access_token}` },
-            });
-            const data = await res.json();
-            alert(JSON.stringify(data, null, 2));
-          }}
-          style={{
-            position: "fixed",
-            bottom: 90,
-            right: 16,
-            background: "rgba(201,168,117,0.15)",
-            border: "1px solid rgba(201,168,117,0.3)",
-            borderRadius: 20,
-            padding: "8px 14px",
-            fontSize: 10,
-            fontWeight: 600,
-            color: "#C9A875",
-            letterSpacing: "1px",
-            cursor: "pointer",
-            zIndex: 999,
-          }}
-        >
-          TEST METRICS
-        </button>
-      )}
 
       {nav === "plan" && planLoading && (
         <div style={{ display:"flex", alignItems:"center", justifyContent:"center", padding:60 }}>

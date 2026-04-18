@@ -1,97 +1,11 @@
-function parseCookies(header) {
-  const cookies = {};
-  if (!header) return cookies;
-  header.split(";").forEach((c) => {
-    const [k, ...v] = c.trim().split("=");
-    cookies[k.trim()] = v.join("=").trim();
-  });
-  return cookies;
-}
-
-async function refreshWhoopTokens(refreshTok) {
-  const res = await fetch("https://api.prod.whoop.com/oauth/oauth2/token", {
-    method: "POST",
-    headers: { "Content-Type": "application/x-www-form-urlencoded" },
-    body: new URLSearchParams({
-      grant_type: "refresh_token",
-      refresh_token: refreshTok,
-      client_id: process.env.VITE_WHOOP_CLIENT_ID,
-      client_secret: process.env.VITE_WHOOP_CLIENT_SECRET,
-      scope: "offline read:recovery read:sleep read:cycles read:profile",
-    }).toString(),
-  });
-  return res.json();
-}
-
-function formatResponse(recData, sleepData, cycleData) {
-  const rec = recData.records?.[0];
-  const sleep = sleepData.records?.[0];
-  const cycle = cycleData.records?.[0];
-  const inBedMilli = sleep?.score?.stage_summary?.total_in_bed_time_milli;
-  const score = rec?.score || {};
-  const hrvMilli =
-    score.hrv_rmssd_milli
-    ?? score.hrv?.rmssd_milli
-    ?? rec?.hrv_rmssd_milli
-    ?? rec?.hrv?.rmssd_milli;
-  const rhrRaw = score.resting_heart_rate ?? rec?.resting_heart_rate ?? score.rhr;
-
-  if (process.env.WHOOP_DEBUG_RECOVERY === "1") {
-    try {
-      console.log("[WHOOP recovery raw]", JSON.stringify(recData?.records?.[0] ?? null, null, 2));
-    } catch (_) {
-      /* ignore */
-    }
-  }
-
-  const hrvRounded =
-    hrvMilli != null && Number.isFinite(Number(hrvMilli)) ? Math.round(Number(hrvMilli)) : null;
-  const rhrRounded =
-    rhrRaw != null && Number.isFinite(Number(rhrRaw)) ? Math.round(Number(rhrRaw)) : null;
-
-  return {
-    recovery: {
-      score: Math.round(score.recovery_score ?? rec?.recovery_score ?? 0),
-      hrv: hrvRounded,
-      hrv_rmssd_milli: hrvRounded,
-      rhr: rhrRounded ?? 0,
-      resting_heart_rate: rhrRounded,
-    },
-    sleep: {
-      score: Math.round(sleep?.score?.sleep_performance_percentage ?? 0),
-      hours:
-        inBedMilli != null && Number.isFinite(Number(inBedMilli))
-          ? Math.round((Number(inBedMilli) / 3600000) * 10) / 10
-          : 0,
-      total_in_bed_time_milli: inBedMilli != null && Number.isFinite(Number(inBedMilli)) ? Number(inBedMilli) : null,
-      efficiency: Math.round(sleep?.score?.sleep_efficiency_percentage ?? 0),
-      stage_summary: sleep?.score?.stage_summary ?? null,
-    },
-    strain: {
-      score: Math.round((cycle?.score?.strain ?? 0) * 10) / 10,
-      avgHr: Math.round(cycle?.score?.average_heart_rate ?? 0),
-      maxHr: Math.round(cycle?.score?.max_heart_rate ?? 0),
-    },
-  };
-}
-
-async function fetchWhoopV2(token) {
-  const headers = { Authorization: `Bearer ${token}` };
-  const [recRes, sleepRes, cycleRes] = await Promise.all([
-    fetch("https://api.prod.whoop.com/developer/v2/recovery?limit=1", { headers }),
-    fetch("https://api.prod.whoop.com/developer/v2/activity/sleep?limit=1", { headers }),
-    fetch("https://api.prod.whoop.com/developer/v2/cycle?limit=1", { headers }),
-  ]);
-  return { recRes, sleepRes, cycleRes };
-}
-
-function setWhoopCookieHeader(res, access, refresh) {
-  const opts = "Path=/; HttpOnly; Secure; SameSite=Lax";
-  res.setHeader("Set-Cookie", [
-    `whoop_access=${access}; ${opts}; Max-Age=3600`,
-    `whoop_refresh=${refresh}; ${opts}; Max-Age=2592000`,
-  ]);
-}
+import { createClient } from "@supabase/supabase-js";
+import { getAccessTokenFromRequest } from "../lib/sessionToken.js";
+import {
+  parseCookies,
+  loadWhoopRecordJson,
+  formatClientWhoopResponse,
+  upsertWhoopUnifiedFromApiJson,
+} from "./lib.js";
 
 export default async function handler(req, res) {
   const cookies = parseCookies(req.headers.cookie || "");
@@ -103,46 +17,49 @@ export default async function handler(req, res) {
   }
 
   try {
-    if (!access && refresh) {
-      const newTokens = await refreshWhoopTokens(refresh);
-      if (!newTokens.access_token) {
-        return res.status(401).json({ error: "whoop_reconnect_required" });
-      }
-      access = newTokens.access_token;
-      const refreshedToken = newTokens.refresh_token || newTokens.refreshToken || refresh;
-      setWhoopCookieHeader(res, access, refreshedToken);
+    const loaded = await loadWhoopRecordJson(access, refresh, res);
+    if (loaded.error) {
+      return res.status(401).json({
+        error: loaded.error,
+        reconnect: Boolean(loaded.reconnect),
+      });
     }
 
-    let { recRes, sleepRes, cycleRes } = await fetchWhoopV2(access);
+    const { recData, sleepData, cycleData } = loaded;
+    const body = formatClientWhoopResponse(recData, sleepData, cycleData);
 
-    if (recRes.status === 401 || sleepRes.status === 401 || cycleRes.status === 401) {
-      if (!refresh) {
-        return res.status(401).json({ error: "whoop_reconnect_required", reconnect: true });
+    const bearer = getAccessTokenFromRequest(req);
+    if (bearer) {
+      const supabase = createClient(
+        process.env.SUPABASE_URL,
+        process.env.SUPABASE_SERVICE_KEY
+      );
+      const {
+        data: { user },
+      } = await supabase.auth.getUser(bearer);
+      if (user) {
+        const { data: profile } = await supabase
+          .from("user_profiles")
+          .select("time_zone")
+          .eq("user_id", user.id)
+          .maybeSingle();
+        const tz = profile?.time_zone || "America/New_York";
+        try {
+          await upsertWhoopUnifiedFromApiJson(
+            supabase,
+            user.id,
+            tz,
+            recData,
+            sleepData,
+            cycleData
+          );
+        } catch (e) {
+          console.warn("[whoop/recovery] unified upsert skipped", e?.message || e);
+        }
       }
-      const newTokens = await refreshWhoopTokens(refresh);
-      if (!newTokens.access_token) {
-        return res.status(401).json({ error: "whoop_reconnect_required", reconnect: true });
-      }
-      access = newTokens.access_token;
-      const refreshedToken = newTokens.refresh_token || newTokens.refreshToken || refresh;
-      if (!refreshedToken) {
-        return res.status(401).json({ error: "whoop_reconnect_required" });
-      }
-      setWhoopCookieHeader(res, access, refreshedToken);
-      ({ recRes, sleepRes, cycleRes } = await fetchWhoopV2(access));
     }
 
-    if (recRes.status === 401 || sleepRes.status === 401 || cycleRes.status === 401) {
-      return res.status(401).json({ error: "whoop_reconnect_required", reconnect: true });
-    }
-
-    const [recData, sleepData, cycleData] = await Promise.all([
-      recRes.json(),
-      sleepRes.json(),
-      cycleRes.json(),
-    ]);
-
-    return res.status(200).json(formatResponse(recData, sleepData, cycleData));
+    return res.status(200).json(body);
   } catch (err) {
     console.error("[whoop/recovery]", err);
     return res.status(500).json({ error: "fetch_failed", details: err.message });
