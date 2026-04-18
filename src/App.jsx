@@ -4482,6 +4482,40 @@ export default function App() {
         );
       })()}
 
+      {/* TEMP DEBUG — remove before beta */}
+      {nav === "today" && (
+        <button
+          type="button"
+          onClick={async () => {
+            const {
+              data: { session: s },
+            } = await supabase.auth.getSession();
+            const res = await fetch("/api/metrics/today", {
+              headers: { Authorization: `Bearer ${s?.access_token}` },
+            });
+            const data = await res.json();
+            alert(JSON.stringify(data, null, 2));
+          }}
+          style={{
+            position: "fixed",
+            bottom: 90,
+            right: 16,
+            background: "rgba(201,168,117,0.15)",
+            border: "1px solid rgba(201,168,117,0.3)",
+            borderRadius: 20,
+            padding: "8px 14px",
+            fontSize: 10,
+            fontWeight: 600,
+            color: "#C9A875",
+            letterSpacing: "1px",
+            cursor: "pointer",
+            zIndex: 999,
+          }}
+        >
+          TEST METRICS
+        </button>
+      )}
+
       {nav === "plan" && planLoading && (
         <div style={{ display:"flex", alignItems:"center", justifyContent:"center", padding:60 }}>
           <div style={{ fontFamily:C.ff, fontSize:16, color:C.muted, letterSpacing:4 }}>LOADING PLAN...</div>
