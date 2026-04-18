@@ -31,18 +31,27 @@ const getSecondsInZ2Stream = (hrData = [], lower = 133, upper = 148) => {
 const formatDateLabel = (isoString) =>
   new Date(isoString).toLocaleDateString("en-US", { month: "short", day: "numeric" });
 
-function z2SecondsFromHeartrateZones(zonesJson) {
+function stravaHeaders(accessToken) {
+  return { Authorization: `Bearer ${accessToken}` };
+}
+
+/** Z1–Z5 seconds from Strava heartrate distribution_buckets (index 0 = Z1, …). */
+function zoneSecondsFromHeartrateBuckets(zonesJson) {
   if (!Array.isArray(zonesJson)) return null;
   const hrZones = zonesJson.find((z) => z.type === "heartrate");
   const buckets = hrZones?.distribution_buckets;
   if (!Array.isArray(buckets) || buckets.length < 2) return null;
-  const z2 = Number(buckets[1]?.time ?? 0) || 0;
-  if (!Number.isFinite(z2) || z2 < 0) return null;
-  return z2;
-}
-
-function stravaHeaders(accessToken) {
-  return { Authorization: `Bearer ${accessToken}` };
+  const pick = (i) => {
+    const t = Number(buckets[i]?.time ?? 0);
+    return Number.isFinite(t) && t > 0 ? t : 0;
+  };
+  return {
+    z1: pick(0),
+    z2: pick(1),
+    z3: pick(2),
+    z4: pick(3),
+    z5: pick(4),
+  };
 }
 
 async function readZ2CacheRow(userId) {
@@ -81,9 +90,41 @@ async function writeZ2Cache(userId, weeklyZ2Minutes) {
     .eq("user_id", userId);
   if (error) {
     console.warn("[strava/weekly-z2] cache write:", error.message);
-  } else {
-    console.log("[weekly-z2] cached:", weeklyZ2Minutes, "for user:", userId);
   }
+}
+
+async function patchStravaLastSync(userId) {
+  const { data: prof, error: readErr } = await supabase
+    .from("user_profiles")
+    .select("connected_sources")
+    .eq("user_id", userId)
+    .maybeSingle();
+  if (readErr) {
+    console.warn("[strava/weekly-z2] connected_sources read:", readErr.message);
+    return;
+  }
+  const cs =
+    typeof prof?.connected_sources === "object" && prof?.connected_sources
+      ? prof.connected_sources
+      : {};
+  const strava = {
+    ...(typeof cs.strava === "object" && cs.strava ? cs.strava : {}),
+    connected: true,
+    last_sync: new Date().toISOString(),
+  };
+  const { error } = await supabase
+    .from("user_profiles")
+    .update({ connected_sources: { ...cs, strava } })
+    .eq("user_id", userId);
+  if (error) {
+    console.warn("[strava/weekly-z2] connected_sources update:", error.message);
+  }
+}
+
+function activityLocalYmd(activity) {
+  const raw = activity?.start_date_local || activity?.start_date || "";
+  const s = String(raw).slice(0, 10);
+  return /^\d{4}-\d{2}-\d{2}$/.test(s) ? s : null;
 }
 
 async function respondRateLimited(res, fallbackMinutes) {
@@ -135,49 +176,75 @@ async function fetchHrStream(accessToken, activityId) {
   return { rateLimited: false, stream };
 }
 
-async function z2SecondsForActivity(accessToken, activity) {
+/**
+ * Z1–Z5 seconds for one activity (zones API first, then HR stream for Z2 only).
+ * @returns {{ z1: number, z2: number, z3: number, z4: number, z5: number, rateLimited: boolean }}
+ */
+async function zoneMetricsForActivity(accessToken, activity) {
   const id = activity?.id;
-  const label = `${activity?.name || "?"} (${activity?.type || "?"}) id=${id}`;
   if (!id) {
-    console.log("[weekly-z2] skip (no id):", label);
-    return { seconds: 0, rateLimited: false };
-  }
-  if (!activity?.has_heartrate) {
-    console.log("[weekly-z2] skip (no HR):", label);
-    return { seconds: 0, rateLimited: false };
+    return { z1: 0, z2: 0, z3: 0, z4: 0, z5: 0, rateLimited: false };
   }
 
   const zonesRes = await fetch(STRAVA_ACTIVITY_ZONES(id), { headers: stravaHeaders(accessToken) });
-  console.log("[weekly-z2] zones status for", activity?.name || id, ":", zonesRes.status);
-  if (zonesRes.status === 429) return { seconds: 0, rateLimited: true };
+  if (zonesRes.status === 429) {
+    return { z1: 0, z2: 0, z3: 0, z4: 0, z5: 0, rateLimited: true };
+  }
   if (zonesRes.ok) {
     const zonesJson = await zonesRes.json().catch(() => null);
-    const hrZones = Array.isArray(zonesJson) ? zonesJson.find((z) => z.type === "heartrate") : null;
-    const bucketLen = hrZones?.distribution_buckets?.length;
-    console.log(
-      "[weekly-z2] hrZones found:",
-      !!hrZones,
-      "buckets:",
-      bucketLen,
-      "| raw types:",
-      Array.isArray(zonesJson) ? zonesJson.map((z) => z?.type).join(",") : typeof zonesJson
-    );
-    const fromZones = z2SecondsFromHeartrateZones(zonesJson);
-    if (fromZones != null) {
-      console.log("[weekly-z2] Z2 seconds (zones) for", activity?.name || id, ":", fromZones);
-      return { seconds: fromZones, rateLimited: false };
+    const packed = zoneSecondsFromHeartrateBuckets(zonesJson);
+    if (packed) {
+      return { ...packed, rateLimited: false };
     }
   }
 
+  if (!activity?.has_heartrate) {
+    return { z1: 0, z2: 0, z3: 0, z4: 0, z5: 0, rateLimited: false };
+  }
+
   const { rateLimited, stream } = await fetchHrStream(accessToken, id);
-  if (rateLimited) return { seconds: 0, rateLimited: true };
+  if (rateLimited) return { z1: 0, z2: 0, z3: 0, z4: 0, z5: 0, rateLimited: true };
   const hrArray = stream?.heartrate?.data;
-  const hrLen = Array.isArray(hrArray) ? hrArray.length : 0;
-  console.log("[weekly-z2] stream HR samples for", activity?.name || id, ":", hrLen);
-  if (!Array.isArray(hrArray) || hrArray.length === 0) return { seconds: 0, rateLimited: false };
-  const streamSecs = getSecondsInZ2Stream(hrArray, 133, 148);
-  console.log("[weekly-z2] Z2 seconds (stream) for", activity?.name || id, ":", streamSecs);
-  return { seconds: streamSecs, rateLimited: false };
+  if (!Array.isArray(hrArray) || hrArray.length === 0) {
+    return { z1: 0, z2: 0, z3: 0, z4: 0, z5: 0, rateLimited: false };
+  }
+  const z2 = getSecondsInZ2Stream(hrArray, 133, 148);
+  return { z1: 0, z2, z3: 0, z4: 0, z5: 0, rateLimited: false };
+}
+
+async function upsertStravaUnifiedDays(supabase, userId, byDate) {
+  const entries = [...byDate.entries()].sort((a, b) => a[0].localeCompare(b[0]));
+  for (const [date, agg] of entries) {
+    const payload = {
+      user_id: userId,
+      date,
+      source: "strava",
+      total_activity_min: agg.total_activity_min,
+      z2_minutes: agg.z2_minutes,
+      z3_minutes: agg.z3_minutes,
+      z4_plus_minutes: agg.z4_plus_minutes,
+      raw_payload: { activities: agg.activities },
+      updated_at: new Date().toISOString(),
+    };
+    const { data: existing, error: readErr } = await supabase
+      .from("unified_metrics")
+      .select("*")
+      .eq("user_id", userId)
+      .eq("date", date)
+      .eq("source", "strava")
+      .maybeSingle();
+    if (readErr) {
+      console.error("[strava/weekly-z2] unified read", date, readErr);
+      continue;
+    }
+    const merged = { ...(existing || {}), ...payload, user_id: userId, date, source: "strava" };
+    const { error: upErr } = await supabase
+      .from("unified_metrics")
+      .upsert(merged, { onConflict: "user_id,date,source" });
+    if (upErr) {
+      console.error("[strava/weekly-z2] unified upsert", date, upErr);
+    }
+  }
 }
 
 export default async function handler(req, res) {
@@ -201,9 +268,6 @@ export default async function handler(req, res) {
     cachedRow = await readZ2CacheRow(appUserId);
     cachedMinutes = normalizedCachedMinutes(cachedRow);
     const ageMin = cacheAgeMinutes(cachedRow);
-    if (cachedMinutes != null) {
-      console.log("[weekly-z2] cache age:", Math.round(ageMin), "min, value:", cachedMinutes);
-    }
     if (cachedMinutes != null && ageMin < 15) {
       return res.status(200).json({
         weeklyZ2Minutes: cachedMinutes,
@@ -246,9 +310,9 @@ export default async function handler(req, res) {
     }
 
     const activities = Array.isArray(activitiesRes.activities) ? activitiesRes.activities : [];
-    const withHr = activities.filter((a) => a?.has_heartrate);
-    console.log("[weekly-z2] activities this week:", activities.length);
-    console.log("[weekly-z2] activities with HR:", withHr.length);
+
+    /** @type {Map<string, { total_activity_min: number, z2_minutes: number, z3_minutes: number, z4_plus_minutes: number, activities: object[] }>} */
+    const byDate = new Map();
 
     let totalZ2Seconds = 0;
     const summary = [];
@@ -256,39 +320,79 @@ export default async function handler(req, res) {
     for (let i = 0; i < activities.length; i += chunk) {
       const slice = activities.slice(i, i + chunk);
       const results = await Promise.all(
-        slice.map((a) => z2SecondsForActivity(accessToken, a))
+        slice.map((a) => zoneMetricsForActivity(accessToken, a))
       );
       for (let j = 0; j < slice.length; j += 1) {
         const a = slice[j];
-        const { seconds: secs, rateLimited } = results[j] || { seconds: 0, rateLimited: false };
-        if (rateLimited) {
+        const metrics = results[j] || {
+          z1: 0,
+          z2: 0,
+          z3: 0,
+          z4: 0,
+          z5: 0,
+          rateLimited: false,
+        };
+        if (metrics.rateLimited) {
           console.warn("[weekly-z2] rate limited (zones), returning cache:", cachedMinutes);
           return respondRateLimited(res, cachedMinutes);
         }
-        if (secs <= 0) continue;
-        totalZ2Seconds += secs;
-        summary.push({
-          name: a.name || "Activity",
-          type: a.type || "Workout",
-          date: formatDateLabel(a.start_date_local || a.start_date),
-          z2Minutes: Math.round(secs / 60),
-        });
+
+        const date = activityLocalYmd(a);
+        if (date) {
+          const movingSec = Number(a.moving_time) || 0;
+          const movingMin = Math.round(movingSec / 60);
+          const z2Min = Math.round(metrics.z2 / 60);
+          const z3Min = Math.round(metrics.z3 / 60);
+          const z4PlusMin = Math.round((metrics.z4 + metrics.z5) / 60);
+
+          if (!byDate.has(date)) {
+            byDate.set(date, {
+              total_activity_min: 0,
+              z2_minutes: 0,
+              z3_minutes: 0,
+              z4_plus_minutes: 0,
+              activities: [],
+            });
+          }
+          const agg = byDate.get(date);
+          agg.total_activity_min += movingMin;
+          agg.z2_minutes += z2Min;
+          agg.z3_minutes += z3Min;
+          agg.z4_plus_minutes += z4PlusMin;
+          agg.activities.push({
+            activity_id: a.id,
+            name: a.name,
+            type: a.type,
+            distance_m: a.distance,
+            avg_hr: a.average_heartrate,
+            moving_min: movingMin,
+            z2_minutes: z2Min,
+            z3_minutes: z3Min,
+            z4_plus_minutes: z4PlusMin,
+          });
+        }
+
+        const secs = metrics.z2;
+        if (secs > 0) {
+          totalZ2Seconds += secs;
+          summary.push({
+            name: a.name || "Activity",
+            type: a.type || "Workout",
+            date: formatDateLabel(a.start_date_local || a.start_date),
+            z2Minutes: Math.round(secs / 60),
+          });
+        }
       }
     }
 
     const weeklyZ2Minutes = Math.round(totalZ2Seconds / 60);
     const weeklyZ2Hours = (totalZ2Seconds / 3600).toFixed(1);
-    console.log(
-      "[weekly-z2] total Z2 seconds:",
-      totalZ2Seconds,
-      "= minutes:",
-      weeklyZ2Minutes
-    );
+
+    await upsertStravaUnifiedDays(supabase, appUserId, byDate);
+    await patchStravaLastSync(appUserId);
 
     if (weeklyZ2Minutes > 0) {
       await writeZ2Cache(appUserId, weeklyZ2Minutes);
-    } else {
-      console.warn("[weekly-z2] not writing Supabase cache for 0 minutes (preserve last good cache)");
     }
 
     return res.status(200).json({

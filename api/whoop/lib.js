@@ -292,9 +292,7 @@ export async function upsertWhoopUnifiedFromApiJson(
   cycleData
 ) {
   const payload = buildUnifiedWhoopPayload(userId, timeZone, recData, sleepData, cycleData);
-  console.log("[whoop/lib] buildUnifiedWhoopPayload:", payload ? JSON.stringify({ ...payload, raw_payload: "[omitted]" }) : null);
   if (!payload) {
-    console.log("[whoop/lib] NO PAYLOAD (no recovery record) — skip upsert");
     return null;
   }
 
@@ -306,22 +304,10 @@ export async function upsertWhoopUnifiedFromApiJson(
     .eq("source", "whoop")
     .maybeSingle();
 
-  console.log("[whoop/lib] existing row for upsert:", Boolean(existing), "date:", payload.date);
-
   const merged = mergeUnifiedRow(existing, payload);
-  const { data: upsertRows, error: upErr } = await supabase
+  const { error: upErr } = await supabase
     .from("unified_metrics")
-    .upsert(merged, { onConflict: "user_id,date,source" })
-    .select("id, user_id, date, source, readiness_score");
-
-  console.log(
-    "[whoop/lib] upsert result:",
-    Array.isArray(upsertRows) ? upsertRows.length : 0,
-    "rows, err:",
-    upErr?.message,
-    upErr?.code,
-    upErr?.details
-  );
+    .upsert(merged, { onConflict: "user_id,date,source" });
 
   if (upErr) {
     console.error("[whoop/lib] unified_metrics upsert", upErr);
@@ -329,7 +315,6 @@ export async function upsertWhoopUnifiedFromApiJson(
   }
 
   await patchWhoopLastSync(supabase, userId);
-  console.log("[whoop/lib] patchWhoopLastSync OK user:", userId);
   return formatClientWhoopResponse(recData, sleepData, cycleData);
 }
 
