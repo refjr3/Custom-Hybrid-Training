@@ -1,29 +1,6 @@
 import { createClient } from "@supabase/supabase-js";
 import { resolveMetricsRange } from "./resolver.js";
-
-function parseCookieHeader(header) {
-  const cookies = {};
-  if (!header || typeof header !== "string") return cookies;
-  for (const part of header.split(";")) {
-    const idx = part.indexOf("=");
-    if (idx === -1) continue;
-    const k = part.slice(0, idx).trim();
-    const v = part.slice(idx + 1).trim();
-    try {
-      cookies[k] = decodeURIComponent(v);
-    } catch {
-      cookies[k] = v;
-    }
-  }
-  return cookies;
-}
-
-function getBearerOrSessionCookie(req) {
-  const raw = (req.headers.authorization || "").replace(/^Bearer\s+/i, "").trim();
-  if (raw) return raw;
-  const cookies = parseCookieHeader(req.headers?.cookie || "");
-  return cookies.triad_session || "";
-}
+import { getAccessTokenFromRequest } from "../lib/sessionToken.js";
 
 function isIsoYmd(s) {
   if (!s || typeof s !== "string") return false;
@@ -37,7 +14,7 @@ export default async function handler(req, res) {
   }
 
   try {
-    const token = getBearerOrSessionCookie(req);
+    const token = getAccessTokenFromRequest(req);
     if (!token) return res.status(401).json({ error: "no_auth" });
 
     const start = typeof req.query?.start === "string" ? req.query.start.trim() : "";
