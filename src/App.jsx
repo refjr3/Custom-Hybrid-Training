@@ -5376,6 +5376,40 @@ export default function App() {
         );
       })()}
 
+      {/* TEMP DEBUG Phase 3B — remove after verification */}
+      {nav === "today" && (
+        <button
+          type="button"
+          onClick={async () => {
+            const {
+              data: { session: s },
+            } = await supabase.auth.getSession();
+            const res = await fetch("/api/metrics/today", {
+              headers: { Authorization: `Bearer ${s?.access_token}` },
+            });
+            const data = await res.json();
+            alert(JSON.stringify(data, null, 2));
+          }}
+          style={{
+            position: "fixed",
+            bottom: 90,
+            right: 16,
+            background: "rgba(201,168,117,0.15)",
+            border: "1px solid rgba(201,168,117,0.3)",
+            borderRadius: 20,
+            padding: "8px 14px",
+            fontSize: 10,
+            fontWeight: 600,
+            color: "#C9A875",
+            letterSpacing: "1px",
+            cursor: "pointer",
+            zIndex: 999,
+          }}
+        >
+          TEST METRICS
+        </button>
+      )}
+
       <div style={{ position:"fixed", bottom:0, left:0, right:0, maxWidth:480, margin:"0 auto", background:"rgba(255,255,255,0.032)", backdropFilter:"blur(24px)", WebkitBackdropFilter:"blur(24px)", borderTop:"1px solid rgba(255,255,255,0.09)", display:"flex", justifyContent:"space-around", padding:"12px 16px 28px", zIndex:100 }}>
         <div style={{ position:"absolute", top:0, left:"5%", right:"5%", height:1, background:"linear-gradient(90deg,transparent,rgba(255,255,255,0.2) 40%,rgba(255,255,255,0.2) 60%,transparent)", pointerEvents:"none" }} />
         {[
