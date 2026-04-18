@@ -137,21 +137,47 @@ async function fetchHrStream(accessToken, activityId) {
 
 async function z2SecondsForActivity(accessToken, activity) {
   const id = activity?.id;
-  if (!id || !activity?.has_heartrate) return { seconds: 0, rateLimited: false };
+  const label = `${activity?.name || "?"} (${activity?.type || "?"}) id=${id}`;
+  if (!id) {
+    console.log("[weekly-z2] skip (no id):", label);
+    return { seconds: 0, rateLimited: false };
+  }
+  if (!activity?.has_heartrate) {
+    console.log("[weekly-z2] skip (no HR):", label);
+    return { seconds: 0, rateLimited: false };
+  }
 
   const zonesRes = await fetch(STRAVA_ACTIVITY_ZONES(id), { headers: stravaHeaders(accessToken) });
+  console.log("[weekly-z2] zones status for", activity?.name || id, ":", zonesRes.status);
   if (zonesRes.status === 429) return { seconds: 0, rateLimited: true };
   if (zonesRes.ok) {
     const zonesJson = await zonesRes.json().catch(() => null);
+    const hrZones = Array.isArray(zonesJson) ? zonesJson.find((z) => z.type === "heartrate") : null;
+    const bucketLen = hrZones?.distribution_buckets?.length;
+    console.log(
+      "[weekly-z2] hrZones found:",
+      !!hrZones,
+      "buckets:",
+      bucketLen,
+      "| raw types:",
+      Array.isArray(zonesJson) ? zonesJson.map((z) => z?.type).join(",") : typeof zonesJson
+    );
     const fromZones = z2SecondsFromHeartrateZones(zonesJson);
-    if (fromZones != null) return { seconds: fromZones, rateLimited: false };
+    if (fromZones != null) {
+      console.log("[weekly-z2] Z2 seconds (zones) for", activity?.name || id, ":", fromZones);
+      return { seconds: fromZones, rateLimited: false };
+    }
   }
 
   const { rateLimited, stream } = await fetchHrStream(accessToken, id);
   if (rateLimited) return { seconds: 0, rateLimited: true };
   const hrArray = stream?.heartrate?.data;
+  const hrLen = Array.isArray(hrArray) ? hrArray.length : 0;
+  console.log("[weekly-z2] stream HR samples for", activity?.name || id, ":", hrLen);
   if (!Array.isArray(hrArray) || hrArray.length === 0) return { seconds: 0, rateLimited: false };
-  return { seconds: getSecondsInZ2Stream(hrArray, 133, 148), rateLimited: false };
+  const streamSecs = getSecondsInZ2Stream(hrArray, 133, 148);
+  console.log("[weekly-z2] Z2 seconds (stream) for", activity?.name || id, ":", streamSecs);
+  return { seconds: streamSecs, rateLimited: false };
 }
 
 export default async function handler(req, res) {
@@ -220,6 +246,9 @@ export default async function handler(req, res) {
     }
 
     const activities = Array.isArray(activitiesRes.activities) ? activitiesRes.activities : [];
+    const withHr = activities.filter((a) => a?.has_heartrate);
+    console.log("[weekly-z2] activities this week:", activities.length);
+    console.log("[weekly-z2] activities with HR:", withHr.length);
 
     let totalZ2Seconds = 0;
     const summary = [];
@@ -249,8 +278,18 @@ export default async function handler(req, res) {
 
     const weeklyZ2Minutes = Math.round(totalZ2Seconds / 60);
     const weeklyZ2Hours = (totalZ2Seconds / 3600).toFixed(1);
+    console.log(
+      "[weekly-z2] total Z2 seconds:",
+      totalZ2Seconds,
+      "= minutes:",
+      weeklyZ2Minutes
+    );
 
-    await writeZ2Cache(appUserId, weeklyZ2Minutes);
+    if (weeklyZ2Minutes > 0) {
+      await writeZ2Cache(appUserId, weeklyZ2Minutes);
+    } else {
+      console.warn("[weekly-z2] not writing Supabase cache for 0 minutes (preserve last good cache)");
+    }
 
     return res.status(200).json({
       weeklyZ2Minutes,

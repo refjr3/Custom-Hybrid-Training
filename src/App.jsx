@@ -3076,10 +3076,12 @@ export default function App() {
     if (!session?.access_token) return;
     const uid = session.user?.id;
     const lsKey = z2WeeklyLocalKey(uid);
+    let hadPositiveLocal = false;
     if (lsKey) {
       try {
         const raw = localStorage.getItem(lsKey);
         const n = parseInt(raw, 10);
+        if (Number.isFinite(n) && n > 0) hadPositiveLocal = true;
         if (Number.isFinite(n) && n >= 0) setStravaWeeklyZ2Minutes(n);
       } catch (_) {}
     }
@@ -3106,25 +3108,43 @@ export default function App() {
       }
       if (!res.ok) {
         setStravaWeeklyZ2Error(String(data.error || "Failed loading Strava Z2"));
-        setStravaWeeklyZ2Minutes(0);
+        if (!hadPositiveLocal) setStravaWeeklyZ2Minutes(0);
         return;
       }
       const mins = data.weeklyZ2Minutes ?? data.totalMinutes;
       if (typeof mins === "number" && Number.isFinite(mins)) {
         const m = Math.max(0, mins);
-        setStravaWeeklyZ2Minutes(m);
-        setStravaConnected(true);
-        if (lsKey) {
-          try {
-            localStorage.setItem(lsKey, String(m));
-          } catch (_) {}
+        const fromCache = data.fromCache === true;
+        if (m > 0 || fromCache) {
+          setStravaWeeklyZ2Minutes(m);
+          setStravaConnected(true);
+          if (lsKey) {
+            try {
+              localStorage.setItem(lsKey, String(m));
+            } catch (_) {}
+          }
+        } else {
+          console.warn(
+            "[Z2] API returned 0 (live Strava), keeping last value if any. Error:",
+            data.error,
+            "rateLimited:",
+            data.rateLimited
+          );
+          if (!hadPositiveLocal) {
+            const raw = lsKey ? localStorage.getItem(lsKey) : null;
+            const prev = raw != null ? parseInt(raw, 10) : NaN;
+            if (!Number.isFinite(prev) || prev <= 0) {
+              setStravaWeeklyZ2Minutes(0);
+              setStravaConnected(true);
+            }
+          }
         }
-      } else {
+      } else if (!hadPositiveLocal) {
         setStravaWeeklyZ2Minutes(0);
       }
     } catch (e) {
       setStravaWeeklyZ2Error(e?.message || "Failed loading Strava Z2");
-      setStravaWeeklyZ2Minutes(0);
+      if (!hadPositiveLocal) setStravaWeeklyZ2Minutes(0);
     } finally {
       setStravaWeeklyZ2Loading(false);
     }
