@@ -262,13 +262,16 @@ export default async function handler(req, res) {
     console.warn("[strava/weekly-z2] x-user-id header does not match JWT user", { headerUid, appUserId });
   }
 
+  const forceFresh =
+    typeof req.query?.force === "string" && req.query.force === "1";
+
   let cachedRow = null;
   let cachedMinutes = null;
   try {
     cachedRow = await readZ2CacheRow(appUserId);
     cachedMinutes = normalizedCachedMinutes(cachedRow);
     const ageMin = cacheAgeMinutes(cachedRow);
-    if (cachedMinutes != null && ageMin < 15) {
+    if (!forceFresh && cachedMinutes != null && ageMin < 15) {
       return res.status(200).json({
         weeklyZ2Minutes: cachedMinutes,
         fromCache: true,
