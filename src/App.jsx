@@ -8,7 +8,6 @@ import AuthScreen from "./AuthScreen";
 import Onboarding from "./Onboarding";
 import OnboardingFlow from "./features/onboarding/OnboardingFlow.jsx";
 import Step3Sport from "./features/onboarding/Step3Sport.jsx";
-import OnboardingShell from "./features/onboarding/shared/OnboardingShell.jsx";
 import PlanBuilder from "./PlanBuilder";
 import TodayDrawer from "./TodayDrawer.jsx";
 
@@ -2707,35 +2706,28 @@ const STEP3_PREVIEW_FOCUS = new Set(["competing", "performance", "composition", 
 
 /** Temporary QA — remove before beta. */
 function Step3SportPreview({ focus }) {
-  const [value, setValue] = useState({});
-  const primaryFocus = STEP3_PREVIEW_FOCUS.has(focus) ? focus : "competing";
-  const sampleDob = "1990-06-01";
+  const safeFocus = STEP3_PREVIEW_FOCUS.has(focus) ? focus : "competing";
+  const mockProfile = {
+    primary_focus: safeFocus,
+    date_of_birth: "1994-10-15",
+    target_race_date: "2026-09-05",
+  };
+  const [value, setValue] = useState(() => ({ ...mockProfile }));
 
   return (
-    <OnboardingShell
-      stepIndex={2}
-      stepTotal={9}
-      title="Step 3 preview"
-      subtitle={`focus=${primaryFocus} · temporary`}
-      onBack={() => {
-        window.location.href = "/";
+    <Step3Sport
+      profile={mockProfile}
+      value={value}
+      onChange={(v) => {
+        console.log("Step3 onChange:", v);
+        setValue(v);
       }}
-    >
-      <Step3Sport
-        primaryFocus={primaryFocus}
-        dateOfBirth={sampleDob}
-        value={value}
-        onChange={(v) => {
-          console.log("Step3 value:", v);
-          setValue(v);
-        }}
-        onNext={() => {
-          alert("NEXT clicked");
-        }}
-        saving={false}
-        error=""
-      />
-    </OnboardingShell>
+      onNext={() => alert("NEXT tapped — step 3 complete")}
+      onBack={() => {
+        window.history.replaceState({}, "", "/");
+        window.location.reload();
+      }}
+    />
   );
 }
 
@@ -3774,6 +3766,13 @@ export default function App() {
     );
   }
   if (!session) return <AuthScreen supabase={supabase} />;
+
+  const urlParams = new URLSearchParams(typeof window !== "undefined" ? window.location.search : "");
+  if (urlParams.get("preview") === "step3") {
+    const focus = urlParams.get("focus") || "competing";
+    return <Step3SportPreview focus={focus} />;
+  }
+
   if (!profile) return <Onboarding supabase={supabase} session={session} onComplete={(p) => { setShowEntrance(true); setTimeout(() => setShowEntrance(false), 2800); setProfile(p); }} />;
   if (profile && !profile.onboarding_completed) {
     return (
@@ -3999,12 +3998,6 @@ export default function App() {
       {showNoPlanState ? <NoPlanState /> : null}
     </div>
   );
-
-  const urlParams = new URLSearchParams(typeof window !== "undefined" ? window.location.search : "");
-  if (urlParams.get("preview") === "step3") {
-    const focus = urlParams.get("focus") || "competing";
-    return <Step3SportPreview focus={focus} />;
-  }
 
   return (
     <div style={{ minHeight:"100vh", background:C.bg, color:C.text, fontFamily:C.fs, maxWidth:480, margin:"0 auto", paddingBottom:88 }}>

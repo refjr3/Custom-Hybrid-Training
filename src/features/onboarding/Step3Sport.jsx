@@ -157,36 +157,49 @@ function returnValid(v) {
   return true;
 }
 
-export default function Step3Sport({ primaryFocus, dateOfBirth, value, onChange, onNext, saving, error }) {
-  const set = (patch) => onChange({ ...value, ...patch });
+export default function Step3Sport({
+  profile = null,
+  primaryFocus: primaryFocusProp,
+  dateOfBirth: dateOfBirthProp,
+  value,
+  onChange,
+  onNext,
+  saving = false,
+  error = "",
+  onBack = null,
+}) {
+  const primaryFocus = primaryFocusProp ?? profile?.primary_focus ?? "competing";
+  const dateOfBirth = dateOfBirthProp ?? profile?.date_of_birth ?? profile?.dob ?? null;
+
+  const v = value && typeof value === "object" ? value : {};
+  const set = (patch) => onChange({ ...v, ...patch });
 
   const pickCompetingSport = (id) => {
-    onChange({ ...value, ...emptyCompetingDetail(), primary_sport: id });
+    onChange({ ...v, ...emptyCompetingDetail(), primary_sport: id });
   };
 
   const handleNext = () => {
-    if (primaryFocus === "competing" && !competingValid(value)) return;
-    if (primaryFocus === "performance" && !performanceValid(value)) return;
-    if (primaryFocus === "composition" && !compositionValid(value)) return;
-    if (primaryFocus === "return" && !returnValid(value)) return;
-    onNext(value);
+    if (primaryFocus === "competing" && !competingValid(v)) return;
+    if (primaryFocus === "performance" && !performanceValid(v)) return;
+    if (primaryFocus === "composition" && !compositionValid(v)) return;
+    if (primaryFocus === "return" && !returnValid(v)) return;
+    onNext(v);
   };
 
   const canNext =
     primaryFocus === "competing"
-      ? competingValid(value)
+      ? competingValid(v)
       : primaryFocus === "performance"
-        ? performanceValid(value)
+        ? performanceValid(v)
         : primaryFocus === "composition"
-          ? compositionValid(value)
+          ? compositionValid(v)
           : primaryFocus === "return"
-            ? returnValid(value)
+            ? returnValid(v)
             : false;
 
-  const v = value || {};
-  const raceDate = v.target_race_date || null;
+  const raceDate = v.target_race_date || profile?.target_race_date || null;
 
-  return (
+  const card = (
     <GlassCard style={{ display: "flex", flexDirection: "column", gap: 16 }}>
       {primaryFocus === "competing" ? (
         <>
@@ -735,5 +748,42 @@ export default function Step3Sport({ primaryFocus, dateOfBirth, value, onChange,
         {saving ? "Saving…" : "NEXT"}
       </PrimaryButton>
     </GlassCard>
+  );
+
+  if (!onBack) return card;
+
+  return (
+    <div
+      style={{
+        minHeight: "100vh",
+        background: "#0D0E10",
+        color: "#fff",
+        maxWidth: 480,
+        margin: "0 auto",
+        padding: "24px 22px 40px",
+        boxSizing: "border-box",
+        fontFamily: "'DM Sans', sans-serif",
+      }}
+    >
+      <button
+        type="button"
+        onClick={onBack}
+        style={{
+          display: "block",
+          marginBottom: 16,
+          background: "none",
+          border: "none",
+          color: "rgba(255,255,255,0.35)",
+          fontSize: 13,
+          letterSpacing: "0.5px",
+          cursor: "pointer",
+          padding: "6px 0",
+          fontFamily: "'DM Sans', sans-serif",
+        }}
+      >
+        ‹ Back
+      </button>
+      {card}
+    </div>
   );
 }

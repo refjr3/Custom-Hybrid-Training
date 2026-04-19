@@ -2,7 +2,7 @@
 
 ## Fresh Supabase provisioning
 
-Run the SQL files in **`migrations/`** in **lexicographic filename order** (000, 001, 002, …). That order matches numeric sequence: **`000_bootstrap.sql` first**, then `001` … through `027`.
+Run the SQL files in **`migrations/`** in **lexicographic filename order** (000, 001, 002, …). That order matches numeric sequence: **`000_bootstrap.sql` first**, then `001` … through `028`.
 
 **000** creates `training_blocks`, `training_weeks`, `training_days`, `garmin_activities`, and `ai_messages` with RLS enabled and **service_role–only** policies so the schema exists before **001** attaches permissive policies and **003** installs user-scoped policies.
 
@@ -51,6 +51,7 @@ Previously, multiple files shared the same numeric prefix (`005`, `006`, `009`, 
 | 25 | `025_onboarding_devices_jsonb.sql` | Adds `onboarding_devices` jsonb on `user_profiles` (Phase 4 tiered onboarding). |
 | 26 | `026_onboarding_step_default_profile.sql` | Sets `onboarding_step` default to `profile` for new signups. |
 | 27 | `027_onboarding_profile_fields.sql` | Sport-agnostic onboarding columns: demographics, focus, sport detail, capacity, equipment, secondary goals. |
+| 28 | `028_missing_profile_columns.sql` | Ensures `hyrox_division`, `hyrox_format`, `bodybuilding_stage_status` on `user_profiles` if missing (drawer + onboarding). |
 
 ## Optional scripts (`supabase/`)
 
