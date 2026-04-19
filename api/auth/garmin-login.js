@@ -1,4 +1,5 @@
 export default function handler(req, res) {
+  console.warn("[DEPRECATED] /api/auth/garmin-login — Garmin consumer API deferred; route retained.");
   const clientId = process.env.GARMIN_CLIENT_ID;
   const redirectUri = "https://custom-hybrid-training.vercel.app/api/auth/garmin-callback";
   const userId = typeof req.query?.user_id === "string" ? req.query.user_id : "";

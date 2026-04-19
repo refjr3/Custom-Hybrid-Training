@@ -37,6 +37,7 @@ async function refreshGarminToken(refreshToken) {
 }
 
 export default async function handler(req, res) {
+  console.warn("[DEPRECATED] /api/garmin/activities — Garmin consumer API deferred; route retained.");
   const token = req.headers.authorization?.replace("Bearer ", "");
   if (!token) return res.status(401).json({ error: "Unauthorized" });
 

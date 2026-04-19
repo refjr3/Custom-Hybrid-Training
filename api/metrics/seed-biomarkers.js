@@ -67,6 +67,7 @@ const blood = [
 ];
 
 export default async function handler(req, res) {
+  console.warn("[DEPRECATED] /api/metrics/seed-biomarkers — secret-gated demo seed; not for production users.");
   if (req.method !== "GET") return res.status(405).json({ error: "Method not allowed" });
   if (req.query?.secret !== REQUIRED_SECRET) return res.status(403).json({ error: "Forbidden" });
 

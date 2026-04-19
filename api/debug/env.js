@@ -1,4 +1,5 @@
 export default function handler(req, res) {
+  console.warn("[DEPRECATED] /api/debug/env — debug-only; remove or protect in production.");
   res.status(200).json({
     intervals_key_present: !!process.env.INTERVALS_API_KEY,
     intervals_key_length: process.env.INTERVALS_API_KEY?.length || 0,

@@ -1,4 +1,5 @@
 export default function handler(req, res) {
+  console.warn("[DEPRECATED] /api/debug/strava-env — debug-only; remove or protect in production.");
   res.status(200).json({
     has_client_id: !!process.env.STRAVA_CLIENT_ID,
     has_client_secret: !!process.env.STRAVA_CLIENT_SECRET,

@@ -6,6 +6,7 @@ const supabase = createClient(
 );
 
 export default async function handler(req, res) {
+  console.warn("[DEPRECATED] /api/auth/garmin-callback — Garmin consumer API deferred; route retained.");
   const { code, state } = req.query;
   const clientId = process.env.GARMIN_CLIENT_ID;
   const clientSecret = process.env.GARMIN_CLIENT_SECRET;

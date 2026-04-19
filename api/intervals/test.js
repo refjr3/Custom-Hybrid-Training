@@ -6,6 +6,7 @@
  * protect this route after debugging.
  */
 export default async function handler(req, res) {
+  console.warn("[DEPRECATED] /api/intervals/test — debug-only; remove or protect in production.");
   if (req.method !== "GET") {
     return res.status(405).json({ error: "Method not allowed" });
   }
