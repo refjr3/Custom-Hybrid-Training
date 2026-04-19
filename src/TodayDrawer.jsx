@@ -347,13 +347,64 @@ function DrawerProfile({ profile, session, setDrawerSection, supabase, setProfil
 function DrawerConnections({
   setDrawerSection,
   whoopConnected,
-  garminConnected,
+  garminConnected: _garminConnected,
   stravaConnected,
   session,
 }) {
   const uid = session?.user?.id;
   const stravaHref = uid ? `/api/strava/login?uid=${encodeURIComponent(uid)}` : "/api/strava/login";
-  const garminHref = uid ? `/api/auth/garmin-login?user_id=${encodeURIComponent(uid)}` : "/api/auth/garmin-login";
+
+  const connectCardStyle = {
+    background: "rgba(255,255,255,0.04)",
+    border: "1px solid rgba(255,255,255,0.08)",
+    borderRadius: 18,
+    padding: "16px 18px",
+  };
+
+  const renderConnectCard = (c) => (
+    <div key={c.name} style={connectCardStyle}>
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 6 }}>
+        <div style={{ fontSize: 15, fontWeight: 600, color: "#fff" }}>{c.name}</div>
+        <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+          <span
+            style={{
+              width: 6,
+              height: 6,
+              borderRadius: "50%",
+              background: c.status ? c.color : "rgba(255,255,255,0.2)",
+            }}
+          />
+          <span
+            style={{
+              fontSize: 10,
+              fontWeight: 600,
+              color: c.status ? c.color : "rgba(255,255,255,0.3)",
+              letterSpacing: "1px",
+            }}
+          >
+            {c.status ? "CONNECTED" : "NOT CONNECTED"}
+          </span>
+        </div>
+      </div>
+      <div style={{ fontSize: 11, color: "rgba(255,255,255,0.3)", marginBottom: 12 }}>{c.desc}</div>
+      <a
+        href={c.connectUrl}
+        style={{
+          display: "inline-block",
+          background: "rgba(255,255,255,0.06)",
+          border: "1px solid rgba(255,255,255,0.1)",
+          borderRadius: 10,
+          padding: "7px 14px",
+          fontSize: 11,
+          fontWeight: 600,
+          color: "rgba(255,255,255,0.5)",
+          textDecoration: "none",
+        }}
+      >
+        {c.status ? "Manage / reconnect →" : "Connect →"}
+      </a>
+    </div>
+  );
 
   return (
     <div>
@@ -375,80 +426,43 @@ function DrawerConnections({
         <div style={{ fontSize: 16, fontWeight: 600, color: "#fff", letterSpacing: "-0.3px" }}>Connections</div>
       </div>
       <div style={{ padding: "0 20px", display: "flex", flexDirection: "column", gap: 10 }}>
-        {[
-          {
-            name: "WHOOP",
-            status: whoopConnected,
-            connectUrl: "/api/auth/login",
-            color: "#5dffa0",
-            desc: "Recovery, HRV, sleep data",
-          },
-          {
-            name: "Garmin",
-            status: garminConnected,
-            connectUrl: garminHref,
-            color: "#4da6ff",
-            desc: "Activities, VO2 Max, structured workouts",
-          },
-          {
-            name: "Strava",
-            status: stravaConnected,
-            connectUrl: stravaHref,
-            color: "#FC4C02",
-            desc: "Running PRs, best efforts, segments",
-          },
-        ].map((c) => (
-          <div
-            key={c.name}
-            style={{
-              background: "rgba(255,255,255,0.04)",
-              border: "1px solid rgba(255,255,255,0.08)",
-              borderRadius: 18,
-              padding: "16px 18px",
-            }}
-          >
-            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 6 }}>
-              <div style={{ fontSize: 15, fontWeight: 600, color: "#fff" }}>{c.name}</div>
-              <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
-                <span
-                  style={{
-                    width: 6,
-                    height: 6,
-                    borderRadius: "50%",
-                    background: c.status ? c.color : "rgba(255,255,255,0.2)",
-                  }}
-                />
-                <span
-                  style={{
-                    fontSize: 10,
-                    fontWeight: 600,
-                    color: c.status ? c.color : "rgba(255,255,255,0.3)",
-                    letterSpacing: "1px",
-                  }}
-                >
-                  {c.status ? "CONNECTED" : "NOT CONNECTED"}
-                </span>
-              </div>
-            </div>
-            <div style={{ fontSize: 11, color: "rgba(255,255,255,0.3)", marginBottom: 12 }}>{c.desc}</div>
-            <a
-              href={c.connectUrl}
+        {renderConnectCard({
+          name: "WHOOP",
+          status: whoopConnected,
+          connectUrl: "/api/auth/login",
+          color: "#5dffa0",
+          desc: "Recovery, HRV, sleep data",
+        })}
+        {/* Garmin — coming soon (developer API not accepting new apps) */}
+        <div style={{ ...connectCardStyle, opacity: 0.5 }}>
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 6 }}>
+            <div style={{ fontSize: 15, fontWeight: 600, color: "#fff" }}>Garmin</div>
+            <div
               style={{
-                display: "inline-block",
+                fontSize: 9,
+                fontWeight: 600,
+                color: "rgba(255,255,255,0.3)",
+                letterSpacing: "1px",
                 background: "rgba(255,255,255,0.06)",
                 border: "1px solid rgba(255,255,255,0.1)",
-                borderRadius: 10,
-                padding: "7px 14px",
-                fontSize: 11,
-                fontWeight: 600,
-                color: "rgba(255,255,255,0.5)",
-                textDecoration: "none",
+                borderRadius: 20,
+                padding: "3px 10px",
               }}
             >
-              {c.status ? "Manage / reconnect →" : "Connect →"}
-            </a>
+              COMING SOON
+            </div>
           </div>
-        ))}
+          <div style={{ fontSize: 11, color: "rgba(255,255,255,0.3)" }}>
+            Activities, VO2 Max, structured workouts. Available when Garmin opens their API.
+          </div>
+        </div>
+        {renderConnectCard({
+          name: "Strava",
+          status: stravaConnected,
+          connectUrl: stravaHref,
+          color: "#FC4C02",
+          desc: "Running PRs, best efforts, segments",
+        })}
         <div style={{ fontSize: 10, color: "rgba(255,255,255,0.15)", padding: "8px 0", lineHeight: 1.6 }}>
           Your data is never shared or sold. Connections are used only to power your training insights.
         </div>

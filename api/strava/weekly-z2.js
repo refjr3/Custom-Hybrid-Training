@@ -226,11 +226,6 @@ async function upsertStravaUnifiedDays(supabase, userId, byDate) {
       raw_payload: { activities: agg.activities },
       updated_at: new Date().toISOString(),
     };
-    const payloadLog = {
-      ...payload,
-      raw_payload: { activities_count: agg.activities?.length ?? 0 },
-    };
-    console.log("[strava/weekly-z2] upserting day:", date, "payload:", JSON.stringify(payloadLog));
     const { data: existing, error: readErr } = await supabase
       .from("unified_metrics")
       .select("*")
@@ -243,19 +238,9 @@ async function upsertStravaUnifiedDays(supabase, userId, byDate) {
       continue;
     }
     const merged = { ...(existing || {}), ...payload, user_id: userId, date, source: "strava" };
-    const { data: upRows, error: upErr } = await supabase
+    const { error: upErr } = await supabase
       .from("unified_metrics")
-      .upsert(merged, { onConflict: "user_id,date,source" })
-      .select("id, user_id, date, source, z2_minutes, total_activity_min");
-    console.log(
-      "[strava/weekly-z2] upsert result:",
-      date,
-      Array.isArray(upRows) ? upRows.length : 0,
-      "rows, err:",
-      upErr?.message,
-      upErr?.code,
-      upErr?.details
-    );
+      .upsert(merged, { onConflict: "user_id,date,source" });
     if (upErr) {
       console.error("[strava/weekly-z2] unified upsert", date, upErr);
     }
@@ -277,31 +262,13 @@ export default async function handler(req, res) {
     console.warn("[strava/weekly-z2] x-user-id header does not match JWT user", { headerUid, appUserId });
   }
 
-  const forceFresh =
-    typeof req.query?.force === "string" && req.query.force === "1";
-
-  console.log(
-    "[strava/weekly-z2] START user:",
-    appUserId,
-    "forceFresh:",
-    forceFresh,
-    "fromCache check…"
-  );
-
   let cachedRow = null;
   let cachedMinutes = null;
   try {
     cachedRow = await readZ2CacheRow(appUserId);
     cachedMinutes = normalizedCachedMinutes(cachedRow);
     const ageMin = cacheAgeMinutes(cachedRow);
-    if (!forceFresh && cachedMinutes != null && ageMin < 60) {
-      console.log(
-        "[strava/weekly-z2] RETURNING FROM CACHE — no unified write (ageMin:",
-        Math.round(ageMin * 10) / 10,
-        "cachedMinutes:",
-        cachedMinutes,
-        ")"
-      );
+    if (cachedMinutes != null && ageMin < 60) {
       return res.status(200).json({
         weeklyZ2Minutes: cachedMinutes,
         fromCache: true,
@@ -313,7 +280,6 @@ export default async function handler(req, res) {
 
   const accessToken = await getStravaAccessForRequest(req, res, supabase, appUserId);
   if (!accessToken) {
-    console.log("[strava/weekly-z2] no Strava access token; strava_not_connected or cache fallback");
     if (cachedMinutes != null) {
       return res.status(200).json({
         weeklyZ2Minutes: cachedMinutes,
@@ -329,15 +295,6 @@ export default async function handler(req, res) {
     const afterEpoch = Math.floor(weekStart.getTime() / 1000);
     const beforeEpoch = Math.floor(now.getTime() / 1000) + 2;
 
-    console.log(
-      "[strava/weekly-z2] week window epoch:",
-      afterEpoch,
-      "→",
-      beforeEpoch,
-      "local Monday:",
-      weekStart.toISOString()
-    );
-
     const activitiesRes = await fetchActivitiesInRange(accessToken, afterEpoch, beforeEpoch);
 
     if (activitiesRes.status === 429) {
@@ -345,11 +302,6 @@ export default async function handler(req, res) {
       return respondRateLimited(res, cachedMinutes);
     }
     if (!activitiesRes.ok) {
-      console.log(
-        "[strava/weekly-z2] activities fetch not ok, status:",
-        activitiesRes.status,
-        "— no unified write"
-      );
       return res.status(200).json({
         weeklyZ2Minutes: cachedMinutes ?? 0,
         error: "strava_fetch_failed",
@@ -358,11 +310,6 @@ export default async function handler(req, res) {
     }
 
     const activities = Array.isArray(activitiesRes.activities) ? activitiesRes.activities : [];
-    console.log("[strava/weekly-z2] activities fetched:", activities.length);
-    console.log(
-      "[strava/weekly-z2] activities with HR:",
-      activities.filter((a) => a?.has_heartrate).length
-    );
 
     /** @type {Map<string, { total_activity_min: number, z2_minutes: number, z3_minutes: number, z4_plus_minutes: number, activities: object[] }>} */
     const byDate = new Map();
@@ -423,29 +370,6 @@ export default async function handler(req, res) {
             z3_minutes: z3Min,
             z4_plus_minutes: z4PlusMin,
           });
-          console.log(
-            "[strava/weekly-z2] adding to byDate:",
-            date,
-            "activity id:",
-            a.id,
-            "z2 min:",
-            z2Min,
-            "moving min:",
-            movingMin,
-            "agg totals z2/total min:",
-            agg.z2_minutes,
-            "/",
-            agg.total_activity_min
-          );
-        } else {
-          console.log(
-            "[strava/weekly-z2] skip byDate (no local YMD): id",
-            a?.id,
-            "start_date_local:",
-            a?.start_date_local,
-            "start_date:",
-            a?.start_date
-          );
         }
 
         const secs = metrics.z2;
@@ -463,9 +387,6 @@ export default async function handler(req, res) {
 
     const weeklyZ2Minutes = Math.round(totalZ2Seconds / 60);
     const weeklyZ2Hours = (totalZ2Seconds / 3600).toFixed(1);
-
-    console.log("[strava/weekly-z2] byDate keys:", Array.from(byDate.keys()));
-    console.log("[strava/weekly-z2] about to upsert", byDate.size, "days");
 
     await upsertStravaUnifiedDays(supabase, appUserId, byDate);
     await patchStravaLastSync(appUserId);
