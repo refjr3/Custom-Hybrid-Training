@@ -12,16 +12,17 @@ async function persistConnectStep(supabase, userId) {
   await supabase.from("user_profiles").update({ onboarding_step: "connect" }).eq("user_id", userId);
 }
 
-export default function StepConnect({ profile, user, supabase, selectedDevices, onContinue, saving, error }) {
+export default function StepConnect({ profile, user, supabase, selectedDevices, onContinue, saving, error, oauthWhoop, oauthStrava }) {
   const uid = user?.id;
   const stravaHref = uid ? `/api/strava/login?uid=${encodeURIComponent(uid)}` : "/api/strava/login";
 
   const cw = profile?.connected_wearables || {};
-  const whoopDone = Boolean(cw.whoop);
+  const whoopDone = Boolean(cw.whoop || oauthWhoop);
   const stravaDone =
     Boolean(cw.strava) ||
     Boolean(profile?.strava_access_token) ||
-    Boolean(cw.strava_access_token);
+    Boolean(cw.strava_access_token) ||
+    Boolean(oauthStrava);
 
   const wantWhoop = selectedDevices.includes("whoop");
   const wantStrava = selectedDevices.includes("strava");

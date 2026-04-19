@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, useCallback } from "react";
 import { createClient } from "@supabase/supabase-js";
 import {
   getLocalToday,
@@ -6,6 +6,7 @@ import {
 } from "../lib/getLocalToday.js";
 import AuthScreen from "./AuthScreen";
 import Onboarding from "./Onboarding";
+import OnboardingFlow from "./features/onboarding/OnboardingFlow.jsx";
 import PlanBuilder from "./PlanBuilder";
 import TodayDrawer from "./TodayDrawer.jsx";
 
@@ -2771,6 +2772,12 @@ export default function App() {
   /** After OAuth, session may load after URL is cleaned — refetch Strava once JWT exists. */
   const stravaOAuthReturnRef = useRef(false);
 
+  const refreshProfile = useCallback(async () => {
+    if (!session?.user?.id) return;
+    const { data } = await supabase.from("user_profiles").select("*").eq("user_id", session.user.id).single();
+    if (data) setProfile(data);
+  }, [session?.user?.id]);
+
   useEffect(() => {
     const t1 = setTimeout(() => setSplashPhase("logo-in"), 300);
     const t2 = setTimeout(() => setSplashPhase("tagline"), 1100);
@@ -3730,6 +3737,20 @@ export default function App() {
   }
   if (!session) return <AuthScreen supabase={supabase} />;
   if (!profile) return <Onboarding supabase={supabase} session={session} onComplete={(p) => { setShowEntrance(true); setTimeout(() => setShowEntrance(false), 2800); setProfile(p); }} />;
+  if (profile && !profile.onboarding_completed) {
+    return (
+      <OnboardingFlow
+        profile={profile}
+        supabase={supabase}
+        user={session.user}
+        onProfileRefresh={refreshProfile}
+        onComplete={async () => {
+          dataFetched.current = false;
+          await refreshProfile();
+        }}
+      />
+    );
+  }
 
   const sortedBlocks = [...planBlocks].sort(
     (a, b) => Number(a?.order ?? Number.MAX_SAFE_INTEGER) - Number(b?.order ?? Number.MAX_SAFE_INTEGER)

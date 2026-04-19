@@ -49,6 +49,7 @@ Previously, multiple files shared the same numeric prefix (`005`, `006`, `009`, 
 | 23 | `023_training_days_session_blocks.sql` | Adds `am_session_blocks` / `pm_session_blocks` on `training_days` (no-op if 000 already applied them). |
 | 24 | `024_garmin_activities_name.sql` | Adds `name` on `garmin_activities` (no-op if 000 already applied it). |
 | 25 | `025_onboarding_devices_jsonb.sql` | Adds `onboarding_devices` jsonb on `user_profiles` (Phase 4 tiered onboarding). |
+| 26 | `026_onboarding_step_default_profile.sql` | Sets `onboarding_step` default to `profile` for new signups. |
 
 ## Optional scripts (`supabase/`)
 
