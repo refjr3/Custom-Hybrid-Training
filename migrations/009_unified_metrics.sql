@@ -1,5 +1,5 @@
 -- Lab Phase 1: unified_metrics lab columns + profile fields for resolver / onboarding.
--- Run in Supabase SQL Editor after migration 008 (and 013–017 if applicable).
+-- Run in Supabase SQL Editor after 008_unified_metrics.sql (safe after 013–017 if those already ran).
 -- Safe to re-run: uses IF NOT EXISTS / DROP POLICY IF EXISTS.
 --
 -- Note: unified_metrics was originally created in 008_unified_metrics.sql with a

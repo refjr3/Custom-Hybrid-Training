@@ -283,7 +283,7 @@ export default async function handler(req, res) {
           || /column "name"/i.test(msg)
           || (errMsg.includes("'name'") && !errMsg.includes("activity_name"));
         if (missingName) {
-          console.warn("[intervals/sync] retrying garmin_activities upsert without name (run migrations/018_garmin_activities_name.sql)");
+          console.warn("[intervals/sync] retrying garmin_activities upsert without name (run migrations/024_garmin_activities_name.sql)");
         }
         const stripped = activityPayloads.map((row) => {
           const next = { ...row };

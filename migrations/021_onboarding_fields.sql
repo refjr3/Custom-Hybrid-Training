@@ -1,4 +1,4 @@
--- Migration 005: Extended onboarding fields + replace age with dob
+-- Migration 021: Extended onboarding fields + replace age with dob
 -- Run in Supabase Dashboard → SQL Editor → New Query.
 -- Safe to run multiple times — all statements use IF NOT EXISTS / IF EXISTS guards.
 
