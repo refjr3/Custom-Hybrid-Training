@@ -99,7 +99,7 @@ export default function OnboardingFlow({ profile, supabase, user, onComplete, on
     weight_kg: profile?.weight_kg != null ? String(profile.weight_kg) : "",
     weight_lbs: profile?.weight_lbs != null ? String(profile.weight_lbs) : "",
     hyrox_division: profile?.hyrox_division || "",
-    training_experience: profile?.training_experience || profile?.experience_level || "",
+    training_experience: profile?.training_experience || "",
   }));
 
   const [goalsForm, setGoalsForm] = useState(() => ({
@@ -157,7 +157,6 @@ export default function OnboardingFlow({ profile, supabase, user, onComplete, on
         weight_lbs,
         hyrox_division: nextForm.hyrox_division || null,
         training_experience: nextForm.training_experience || null,
-        experience_level: nextForm.training_experience || null,
         onboarding_step: "goals",
       });
       setProfileForm(nextForm);

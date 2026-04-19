@@ -185,7 +185,7 @@ function DrawerProfile({ profile, session, setDrawerSection, supabase, setProfil
             : "",
       target_race_date: profile.target_race_date || "",
       hyrox_division: profile.hyrox_division || "",
-      training_experience: profile.training_experience || profile.experience_level || "",
+      training_experience: profile.training_experience || "",
     });
   }, [profile, session?.user?.email]);
 
@@ -207,7 +207,6 @@ function DrawerProfile({ profile, session, setDrawerSection, supabase, setProfil
       target_race_date: form.target_race_date || null,
       hyrox_division: form.hyrox_division || null,
       training_experience: form.training_experience || null,
-      experience_level: form.training_experience || profile?.experience_level || null,
     };
     const { data, error } = await supabase.from("user_profiles").update(payload).eq("user_id", session.user.id).select().single();
     setSaving(false);
