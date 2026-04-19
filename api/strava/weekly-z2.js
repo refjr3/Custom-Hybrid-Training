@@ -294,7 +294,7 @@ export default async function handler(req, res) {
     cachedRow = await readZ2CacheRow(appUserId);
     cachedMinutes = normalizedCachedMinutes(cachedRow);
     const ageMin = cacheAgeMinutes(cachedRow);
-    if (!forceFresh && cachedMinutes != null && ageMin < 15) {
+    if (!forceFresh && cachedMinutes != null && ageMin < 60) {
       console.log(
         "[strava/weekly-z2] RETURNING FROM CACHE — no unified write (ageMin:",
         Math.round(ageMin * 10) / 10,

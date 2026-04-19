@@ -3097,20 +3097,47 @@ export default function App() {
   };
 
   const z2WeeklyLocalKey = (uid) => (uid ? `lab:z2_weekly_minutes:${uid}` : null);
+  const z2WeeklyFetchAtKey = (uid) => (uid ? `lab:z2_weekly_fetch_at:${uid}` : null);
 
   const fetchStravaWeeklyZ2 = async () => {
     if (!session?.access_token) return;
     const uid = session.user?.id;
     const lsKey = z2WeeklyLocalKey(uid);
+    const fetchAtKey = z2WeeklyFetchAtKey(uid);
     let hadPositiveLocal = false;
+    let rawMinutes = null;
     if (lsKey) {
       try {
-        const raw = localStorage.getItem(lsKey);
-        const n = parseInt(raw, 10);
+        rawMinutes = localStorage.getItem(lsKey);
+        const n = parseInt(rawMinutes, 10);
         if (Number.isFinite(n) && n > 0) hadPositiveLocal = true;
         if (Number.isFinite(n) && n >= 0) setStravaWeeklyZ2Minutes(n);
       } catch (_) {}
     }
+
+    let lastFetch = 0;
+    if (fetchAtKey) {
+      try {
+        lastFetch = parseInt(localStorage.getItem(fetchAtKey) || "0", 10);
+      } catch (_) {
+        lastFetch = 0;
+      }
+    }
+    const ageMin = (Date.now() - (Number.isFinite(lastFetch) && lastFetch > 0 ? lastFetch : 0)) / 1000 / 60;
+    if (
+      fetchAtKey &&
+      lsKey &&
+      rawMinutes != null &&
+      rawMinutes !== "" &&
+      ageMin < 60 &&
+      Number.isFinite(parseInt(rawMinutes, 10))
+    ) {
+      if (import.meta.env.DEV) {
+        console.log("[z2] using local cache, skipping fetch", { ageMin: Math.round(ageMin * 10) / 10 });
+      }
+      return;
+    }
+
     setStravaWeeklyZ2Loading(true);
     setStravaWeeklyZ2Error("");
     try {
@@ -3122,12 +3149,27 @@ export default function App() {
         credentials: "include",
       });
       const data = await res.json().catch(() => ({}));
+      if (
+        res.ok &&
+        fetchAtKey &&
+        data.error !== "strava_not_connected" &&
+        data.error !== "strava_reconnect_required"
+      ) {
+        try {
+          localStorage.setItem(fetchAtKey, String(Date.now()));
+        } catch (_) {}
+      }
       if (data.error === "strava_not_connected" || data.error === "strava_reconnect_required") {
         setStravaConnected(false);
         setStravaWeeklyZ2Minutes(0);
         if (lsKey) {
           try {
             localStorage.removeItem(lsKey);
+          } catch (_) {}
+        }
+        if (fetchAtKey) {
+          try {
+            localStorage.removeItem(fetchAtKey);
           } catch (_) {}
         }
         return;
