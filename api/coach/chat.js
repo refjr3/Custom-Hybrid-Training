@@ -297,7 +297,7 @@ export default async function handler(req, res) {
 
 ATHLETE PROFILE:
 - Name: ${athleteName} | Age: ${ageYears ?? "N/A"} | Weight: ${p?.weight_lbs ? `${p.weight_lbs} lbs` : "N/A"} | Height: ${heightStr}
-- Sports: ${sportsDisplay}${p?.experience_level ? ` | Level: ${p.experience_level}` : ""}${p?.weekly_training_hours ? ` | Volume: ${p.weekly_training_hours}h/wk` : ""}
+- Sports: ${sportsDisplay}${p?.training_experience ? ` | Level: ${p.training_experience}` : ""}${p?.weekly_training_hours ? ` | Volume: ${p.weekly_training_hours}h/wk` : ""}
 - LTHR: ${lthr ?? "N/A"} bpm | Z2 Target: ${z2Min}–${z2Max} bpm | Threshold: ${threshMin}–${threshMax} bpm
 - Race Goal: ${raceGoal}
 
