@@ -19,27 +19,52 @@ function normalizeBaselinesPayload(json) {
 export const Z2DeepDive = ({ open, onClose, supabase, dataSources }) => {
   const [metrics, setMetrics] = useState([]);
   const [baselines, setBaselines] = useState(null);
+  const [loading, setLoading] = useState(true);
+  const [currentWeekMinutes, setCurrentWeekMinutes] = useState(null);
+  const [currentWeekActivities, setCurrentWeekActivities] = useState([]);
 
   useEffect(() => {
     if (!open) return;
     (async () => {
-      const {
-        data: { session },
-      } = await supabase.auth.getSession();
-      const headers = { Authorization: `Bearer ${session?.access_token}` };
-      const end = new Date().toISOString().slice(0, 10);
-      const startD = new Date();
-      startD.setDate(startD.getDate() - 27);
-      const start = startD.toISOString().slice(0, 10);
+      setLoading(true);
+      try {
+        const {
+          data: { session },
+        } = await supabase.auth.getSession();
+        const headers = {
+          Authorization: `Bearer ${session?.access_token}`,
+          ...(session?.user?.id ? { "x-user-id": session.user.id } : {}),
+        };
+        const end = new Date().toISOString().slice(0, 10);
+        const startD = new Date();
+        startD.setDate(startD.getDate() - 27);
+        const start = startD.toISOString().slice(0, 10);
 
-      const [metricsRes, baselinesRes] = await Promise.all([
-        fetch(`/api/metrics/range?start=${start}&end=${end}`, { headers }),
-        fetch("/api/metrics/baselines", { headers }),
-      ]);
-      const metricsData = await metricsRes.json();
-      const baselinesData = await baselinesRes.json();
-      setMetrics(Array.isArray(metricsData) ? metricsData : []);
-      setBaselines(normalizeBaselinesPayload(baselinesData));
+        const [metricsRes, baselinesRes, currentWeekRes] = await Promise.all([
+          fetch(`/api/metrics/range?start=${start}&end=${end}`, { headers }),
+          fetch("/api/metrics/baselines", { headers }),
+          fetch("/api/strava/weekly-z2", { headers, credentials: "include" }),
+        ]);
+
+        const metricsData = await metricsRes.json();
+        const baselinesData = await baselinesRes.json();
+        const currentWeekData = await currentWeekRes.json().catch(() => ({}));
+
+        setMetrics(Array.isArray(metricsData) ? metricsData : []);
+        setBaselines(normalizeBaselinesPayload(baselinesData));
+        setCurrentWeekMinutes(
+          currentWeekData?.weeklyZ2Minutes != null && Number.isFinite(Number(currentWeekData.weeklyZ2Minutes))
+            ? Math.round(Number(currentWeekData.weeklyZ2Minutes))
+            : null
+        );
+        setCurrentWeekActivities(Array.isArray(currentWeekData?.activities) ? currentWeekData.activities : []);
+      } catch (e) {
+        console.error("[z2 deep dive]", e);
+        setCurrentWeekMinutes(null);
+        setCurrentWeekActivities([]);
+      } finally {
+        setLoading(false);
+      }
     })();
   }, [open, supabase]);
 
@@ -66,7 +91,13 @@ export const Z2DeepDive = ({ open, onClose, supabase, dataSources }) => {
     });
   }
 
-  const currentWeek = weeks[3] || { value: 0, metrics: [] };
+  if (currentWeekMinutes != null && weeks.length > 0) {
+    weeks[weeks.length - 1].value = currentWeekMinutes;
+    weeks[weeks.length - 1].activities = currentWeekActivities;
+  }
+
+  const currentWeek = weeks[3] || { value: 0, metrics: [], activities: [] };
+  const heroValue = currentWeekMinutes ?? currentWeek.value ?? 0;
   const bestWeek = weeks.length ? weeks.reduce((max, w) => (w.value > max.value ? w : max), weeks[0]) : { value: 0 };
   const avgWeek = weeks.length ? weeks.reduce((sum, w) => sum + w.value, 0) / weeks.length : 0;
   const target = 240;
@@ -74,6 +105,10 @@ export const Z2DeepDive = ({ open, onClose, supabase, dataSources }) => {
 
   const dow = now.getDay();
   const dayIdx = dow === 0 ? 7 : dow;
+
+  const sessionRowsFromStrava = Array.isArray(currentWeekActivities) ? currentWeekActivities : [];
+  const sessionRowsFromMetrics = (currentWeek.metrics || []).filter((m) => m.z2_minutes > 0);
+  const useStravaSessions = sessionRowsFromStrava.length > 0;
 
   return (
     <DeepDiveModal
@@ -83,6 +118,10 @@ export const Z2DeepDive = ({ open, onClose, supabase, dataSources }) => {
       title="Zone 2 Training"
       sourceLabel={dataSources?.primaryActivitySource}
     >
+      {loading ? (
+        <div style={{ fontSize: 12, color: "rgba(255,255,255,0.35)", marginBottom: 12 }}>Loading Z2 data…</div>
+      ) : null}
+
       <div
         style={{
           textAlign: "center",
@@ -98,7 +137,7 @@ export const Z2DeepDive = ({ open, onClose, supabase, dataSources }) => {
             letterSpacing: "-3px",
           }}
         >
-          {currentWeek.value}
+          {heroValue}
         </div>
         <div
           style={{
@@ -115,12 +154,12 @@ export const Z2DeepDive = ({ open, onClose, supabase, dataSources }) => {
         <div
           style={{
             fontSize: 10,
-            color: currentWeek.value >= target ? "#5dffa0" : "rgba(255,255,255,0.3)",
+            color: heroValue >= target ? "#5dffa0" : "rgba(255,255,255,0.3)",
             marginTop: 4,
             fontWeight: 500,
           }}
         >
-          {currentWeek.value >= target ? `✓ Target hit · +${currentWeek.value - target} min` : `${target - currentWeek.value} min to target`}
+          {heroValue >= target ? `✓ Target hit · +${heroValue - target} min` : `${target - heroValue} min to target`}
         </div>
         {dayIdx <= 2 ? (
           <div
@@ -161,7 +200,41 @@ export const Z2DeepDive = ({ open, onClose, supabase, dataSources }) => {
           overflow: "hidden",
         }}
       >
-        {currentWeek.metrics.filter((m) => m.z2_minutes > 0).length === 0 ? (
+        {useStravaSessions ? (
+          sessionRowsFromStrava.map((a, i, arr) => (
+            <div
+              key={`${a.name}-${a.date}-${i}`}
+              style={{
+                display: "flex",
+                justifyContent: "space-between",
+                alignItems: "center",
+                padding: "12px 16px",
+                borderBottom: i < arr.length - 1 ? "1px solid rgba(255,255,255,0.05)" : "none",
+              }}
+            >
+              <div>
+                <div style={{ fontSize: 12, fontWeight: 600, color: "rgba(255,255,255,0.7)" }}>
+                  {a.name || "Activity"}
+                </div>
+                <div style={{ fontSize: 10, color: "rgba(255,255,255,0.25)", marginTop: 2 }}>
+                  {a.type || "Workout"} · {a.date || ""}
+                </div>
+              </div>
+              <div
+                style={{
+                  fontFamily: "'DM Serif Display', serif",
+                  fontSize: 18,
+                  color: "#C9A875",
+                }}
+              >
+                {a.z2Minutes ?? 0}{" "}
+                <span style={{ fontSize: 10, fontFamily: "'DM Sans', sans-serif", color: "rgba(255,255,255,0.3)" }}>
+                  min Z2
+                </span>
+              </div>
+            </div>
+          ))
+        ) : sessionRowsFromMetrics.length === 0 ? (
           <div
             style={{
               padding: 20,
@@ -173,45 +246,43 @@ export const Z2DeepDive = ({ open, onClose, supabase, dataSources }) => {
             No Z2 activities logged this week yet
           </div>
         ) : (
-          currentWeek.metrics
-            .filter((m) => m.z2_minutes > 0)
-            .map((m, i, arr) => {
-              const d = new Date(m.date);
-              const dayName = d.toLocaleDateString("en-US", { weekday: "short" });
-              return (
-                <div
-                  key={m.date}
-                  style={{
-                    display: "flex",
-                    justifyContent: "space-between",
-                    alignItems: "center",
-                    padding: "12px 16px",
-                    borderBottom: i < arr.length - 1 ? "1px solid rgba(255,255,255,0.05)" : "none",
-                  }}
-                >
-                  <div>
-                    <div style={{ fontSize: 12, fontWeight: 600, color: "rgba(255,255,255,0.7)" }}>
-                      {dayName} · {d.toLocaleDateString("en-US", { month: "short", day: "numeric" })}
-                    </div>
-                    <div style={{ fontSize: 10, color: "rgba(255,255,255,0.25)", marginTop: 2 }}>
-                      {m.total_activity_min || 0} min total activity
-                    </div>
+          sessionRowsFromMetrics.map((m, i, arr) => {
+            const d = new Date(m.date);
+            const dayName = d.toLocaleDateString("en-US", { weekday: "short" });
+            return (
+              <div
+                key={m.date}
+                style={{
+                  display: "flex",
+                  justifyContent: "space-between",
+                  alignItems: "center",
+                  padding: "12px 16px",
+                  borderBottom: i < arr.length - 1 ? "1px solid rgba(255,255,255,0.05)" : "none",
+                }}
+              >
+                <div>
+                  <div style={{ fontSize: 12, fontWeight: 600, color: "rgba(255,255,255,0.7)" }}>
+                    {dayName} · {d.toLocaleDateString("en-US", { month: "short", day: "numeric" })}
                   </div>
-                  <div
-                    style={{
-                      fontFamily: "'DM Serif Display', serif",
-                      fontSize: 18,
-                      color: "#C9A875",
-                    }}
-                  >
-                    {m.z2_minutes}{" "}
-                    <span style={{ fontSize: 10, fontFamily: "'DM Sans', sans-serif", color: "rgba(255,255,255,0.3)" }}>
-                      min Z2
-                    </span>
+                  <div style={{ fontSize: 10, color: "rgba(255,255,255,0.25)", marginTop: 2 }}>
+                    {m.total_activity_min || 0} min total activity
                   </div>
                 </div>
-              );
-            })
+                <div
+                  style={{
+                    fontFamily: "'DM Serif Display', serif",
+                    fontSize: 18,
+                    color: "#C9A875",
+                  }}
+                >
+                  {m.z2_minutes}{" "}
+                  <span style={{ fontSize: 10, fontFamily: "'DM Sans', sans-serif", color: "rgba(255,255,255,0.3)" }}>
+                    min Z2
+                  </span>
+                </div>
+              </div>
+            );
+          })
         )}
       </div>
 
