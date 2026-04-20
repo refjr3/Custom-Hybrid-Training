@@ -10,6 +10,9 @@ import PlanBuilder from "./PlanBuilder";
 import TodayDrawer from "./TodayDrawer.jsx";
 import { useDataSources } from "./features/today/useDataSources.js";
 import { ConnectPrompt } from "./features/today/ConnectPrompt.jsx";
+import { RecoveryDeepDive } from "./features/today/RecoveryDeepDive.jsx";
+import { Z2DeepDive } from "./features/today/Z2DeepDive.jsx";
+import { SleepDeepDive } from "./features/today/SleepDeepDive.jsx";
 
 const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
 const supabaseKey = import.meta.env.VITE_SUPABASE_ANON_KEY;
@@ -2806,6 +2809,9 @@ export default function App() {
   const [labSessionId, setLabSessionId] = useState(createSessionId);
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [drawerSection, setDrawerSection] = useState("menu");
+  const [recoveryModalOpen, setRecoveryModalOpen] = useState(false);
+  const [z2ModalOpen, setZ2ModalOpen] = useState(false);
+  const [sleepModalOpen, setSleepModalOpen] = useState(false);
   // Auth state is declared with the rest of top-level hooks to keep hook order stable.
   const [session, setSession]       = useState(null);
   const [profile, setProfile]       = useState(null);
@@ -4390,7 +4396,7 @@ export default function App() {
               count, {profile?.name?.split(" ")[0] || "Rafael"}.
             </div>
             {dataSources.hasRecoverySource ? (
-              <div style={creamCard}>
+              <div onClick={() => setRecoveryModalOpen(true)} style={{ ...creamCard, cursor: "pointer" }}>
                 <div style={{ position: "absolute", top: 0, left: "5%", right: "5%", height: 1, background: "linear-gradient(90deg,transparent,rgba(255,255,255,0.9) 50%,transparent)", pointerEvents: "none" }} />
                 <div style={{ position: "absolute", top: -30, right: -30, width: 160, height: 130, background: "radial-gradient(ellipse at top right, rgba(255,255,255,0.4) 0%, transparent 65%)", pointerEvents: "none" }} />
                 <div style={{ padding: "22px 22px 18px", position: "relative", zIndex: 1 }}>
@@ -4442,7 +4448,7 @@ export default function App() {
             )}
 
             {dataSources.hasActivitySource ? (
-            <div style={glassCard}>
+            <div onClick={() => setZ2ModalOpen(true)} style={{ ...glassCard, cursor: "pointer" }}>
               <div style={specularTop()} />
               <div style={{ position: "absolute", top: -20, right: -20, width: 120, height: 120, background: "radial-gradient(circle,rgba(210,190,155,0.10) 0%,transparent 70%)", pointerEvents: "none" }} />
               <div style={{ padding: "16px 20px 18px", position: "relative", zIndex: 1 }}>
@@ -4675,7 +4681,7 @@ export default function App() {
 
             {dataSources.hasSleepSource ? (
               whoopData?.sleep && (inBedMs > 0 || whoopData.sleep.score > 0) ? (
-                <div style={glassCard}>
+                <div onClick={() => setSleepModalOpen(true)} style={{ ...glassCard, cursor: "pointer" }}>
                   <div style={specularTop()} />
                   <div style={{ position: "absolute", top: -20, right: -20, width: 120, height: 120, background: "radial-gradient(circle,rgba(210,190,155,0.1) 0%,transparent 70%)", pointerEvents: "none" }} />
                   <div style={{ padding: "20px 22px 16px", position: "relative", zIndex: 1 }}>
@@ -4752,6 +4758,25 @@ export default function App() {
           </div>
         );
       })()}
+
+      <RecoveryDeepDive
+        open={recoveryModalOpen}
+        onClose={() => setRecoveryModalOpen(false)}
+        supabase={supabase}
+        dataSources={dataSources}
+      />
+      <Z2DeepDive
+        open={z2ModalOpen}
+        onClose={() => setZ2ModalOpen(false)}
+        supabase={supabase}
+        dataSources={dataSources}
+      />
+      <SleepDeepDive
+        open={sleepModalOpen}
+        onClose={() => setSleepModalOpen(false)}
+        supabase={supabase}
+        dataSources={dataSources}
+      />
 
       {nav === "plan" && planLoading && (
         <div style={{ display:"flex", alignItems:"center", justifyContent:"center", padding:60 }}>
