@@ -339,15 +339,12 @@ function DrawerProfile({ profile, session, setDrawerSection, supabase, setProfil
   );
 }
 
-const RAFAEL_USER_ID = "5285440e-a3dd-4f29-9b09-29715f0a04fc";
-
 function DrawerConnections({
   setDrawerSection,
   whoopConnected,
   garminConnected: _garminConnected,
   stravaConnected,
   session,
-  supabase,
 }) {
   const uid = session?.user?.id;
   const stravaHref = uid ? `/api/strava/login?uid=${encodeURIComponent(uid)}` : "/api/strava/login";
@@ -424,84 +421,6 @@ function DrawerConnections({
         <div style={{ fontSize: 16, fontWeight: 600, color: "#fff", letterSpacing: "-0.3px" }}>Connections</div>
       </div>
       <div style={{ padding: "0 20px", display: "flex", flexDirection: "column", gap: 10 }}>
-        {session?.user?.id === RAFAEL_USER_ID && (
-          <div
-            style={{
-              background: "rgba(255,170,68,0.06)",
-              border: "1px solid rgba(255,170,68,0.15)",
-              borderRadius: 14,
-              padding: "14px",
-              marginBottom: 16,
-            }}
-          >
-            <div
-              style={{
-                fontSize: 9,
-                fontWeight: 600,
-                color: "rgba(255,170,68,0.6)",
-                letterSpacing: "2px",
-                textTransform: "uppercase",
-                marginBottom: 8,
-              }}
-            >
-              Rafael Only · Testing
-            </div>
-            <div style={{ display: "flex", gap: 8 }}>
-              <button
-                type="button"
-                onClick={async () => {
-                  const {
-                    data: { session: s },
-                  } = await supabase.auth.getSession();
-                  await fetch("/api/debug/reset-onboarding", {
-                    method: "POST",
-                    headers: { Authorization: `Bearer ${s?.access_token}` },
-                  });
-                  window.location.reload();
-                }}
-                style={{
-                  flex: 1,
-                  background: "rgba(255,170,68,0.15)",
-                  border: "1px solid rgba(255,170,68,0.3)",
-                  borderRadius: 10,
-                  padding: "9px",
-                  fontSize: 11,
-                  fontWeight: 600,
-                  color: "rgba(255,170,68,0.9)",
-                  cursor: "pointer",
-                }}
-              >
-                Start Onboarding
-              </button>
-              <button
-                type="button"
-                onClick={async () => {
-                  const {
-                    data: { session: s },
-                  } = await supabase.auth.getSession();
-                  await fetch("/api/debug/complete-onboarding", {
-                    method: "POST",
-                    headers: { Authorization: `Bearer ${s?.access_token}` },
-                  });
-                  window.location.reload();
-                }}
-                style={{
-                  flex: 1,
-                  background: "rgba(93,255,160,0.12)",
-                  border: "1px solid rgba(93,255,160,0.25)",
-                  borderRadius: 10,
-                  padding: "9px",
-                  fontSize: 11,
-                  fontWeight: 600,
-                  color: "rgba(93,255,160,0.85)",
-                  cursor: "pointer",
-                }}
-              >
-                Skip Onboarding
-              </button>
-            </div>
-          </div>
-        )}
         {renderConnectCard({
           name: "WHOOP",
           status: whoopConnected,
@@ -1146,7 +1065,6 @@ export default function TodayDrawer({
             garminConnected={garminConnected}
             stravaConnected={stravaConnected}
             session={session}
-            supabase={supabase}
           />
         )}
         {section === "ai" && (
