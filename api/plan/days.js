@@ -17,7 +17,6 @@ export default async function handler(req, res) {
   const { data: { user }, error: authErr } = await supabase.auth.getUser(token);
   if (authErr || !user) return res.status(401).json({ error: "Invalid token" });
   const userId = user.id;
-  console.log("[plan/days] userId:", userId);
 
   const { data: blockRows, error: blocksErr } = await supabase
     .from("training_blocks")
@@ -25,10 +24,9 @@ export default async function handler(req, res) {
     .eq("user_id", userId)
     .order("block_order", { ascending: true });
 
-  console.log("[plan/days] blocks count:", blockRows?.length, "| blocksErr:", blocksErr?.message);
   if (blocksErr) return res.status(500).json({ error: blocksErr.message });
   if (!blockRows || blockRows.length === 0) {
-    console.log("[plan/days] WARNING: 0 blocks found for userId:", userId);
+    console.warn("[plan/days] 0 blocks for userId:", userId);
     return res.status(404).json({ error: "No training blocks found for this user. Check that the plan was seeded with the correct user_id." });
   }
 
@@ -40,13 +38,12 @@ export default async function handler(req, res) {
     .in("block_id", blockIds)
     .order("week_order", { ascending: true });
 
-  console.log("[plan/days] weeks count:", weeks?.length, "| weeksErr:", weeksErr?.message);
   if (weeksErr) return res.status(500).json({ error: weeksErr.message });
 
   // Fix #4: surface a clear error instead of returning an empty block list that
   // silently causes the client to fall back to hardcoded BLOCKS.
   if (!weeks || weeks.length === 0) {
-    console.log("[plan/days] WARNING: 0 weeks found for userId:", userId, "— seed may have used a different user_id");
+    console.warn("[plan/days] 0 weeks for userId:", userId);
     return res.status(404).json({ error: "No training weeks found for this user. Check that the plan was seeded with the correct user_id." });
   }
 
@@ -57,11 +54,10 @@ export default async function handler(req, res) {
     .eq("user_id", userId)
     .in("week_id", weekIds);
 
-  console.log("[plan/days] days count:", days?.length, "| daysErr:", daysErr?.message);
   if (daysErr) return res.status(500).json({ error: daysErr.message });
 
   if (!days || days.length === 0) {
-    console.log("[plan/days] WARNING: 0 days found for userId:", userId);
+    console.warn("[plan/days] 0 days for userId:", userId);
     return res.status(404).json({ error: "No training days found for this user. Check that the plan was seeded with the correct user_id." });
   }
 

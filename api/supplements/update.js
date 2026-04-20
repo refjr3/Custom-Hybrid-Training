@@ -53,11 +53,10 @@ export default async function handler(req, res) {
         .single();
 
       if (error) {
-        console.log("[supplements/update] insert error:", error.message);
+        console.warn("[supplements/update] insert error:", error.message);
         return res.status(500).json({ error: error.message });
       }
 
-      console.log("[supplements/update] added supplement:", JSON.stringify(data));
       return res.status(200).json({ success: true, supplement: data });
     }
 
@@ -71,11 +70,10 @@ export default async function handler(req, res) {
         .eq("user_id", userId);
 
       if (error) {
-        console.log("[supplements/update] delete error:", error.message);
+        console.warn("[supplements/update] delete error:", error.message);
         return res.status(500).json({ error: error.message });
       }
 
-      console.log("[supplements/update] removed supplement:", supplement_id);
       return res.status(200).json({ success: true });
     }
 

@@ -246,16 +246,6 @@ function buildComplianceWeek(currentWeekDays, activities, todayIso) {
   const rows = (currentWeekDays || []).map((day) => {
     const date_iso = dateLabelToIso(day.date_label);
     const planned = isPlannedTrainingDay(day);
-    console.log(
-      "[metrics/trends][compliance] day:",
-      day.day_name,
-      "| date_label:",
-      day.date_label,
-      "| date_iso:",
-      date_iso,
-      "| today_local_iso:",
-      today
-    );
     const dayForMatch = { planned, date_iso, planned_label: plannedLabel(day) || null };
     const activity = matchingCompletedActivity(dayForMatch, activities);
     const completed = isCompleted(dayForMatch, activities);

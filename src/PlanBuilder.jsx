@@ -136,7 +136,6 @@ export default function PlanBuilder({ open, onGenerated, onClose }) {
         body: JSON.stringify({ sports, races: payloadRaces, days_per_week: daysPerWeek, no_race: noRaceYet }),
       });
       clearTimeout(timeout);
-      console.log("[PlanBuilder] generate response status:", res.status);
       if (!res.ok) {
         const errorData = await res.json().catch(() => ({ error: res.statusText }));
         setError(`Generation failed: ${errorData.error || res.status}`);

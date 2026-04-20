@@ -80,15 +80,10 @@ export default async function handler(req, res) {
       };
       const normalizedDay = DAY_MAP[day.toLowerCase()] || day.toUpperCase().slice(0, 3);
 
-      console.log("[plan/update] received:", JSON.stringify({ type, week_id, day: normalizedDay, changes, description }));
-
       const weekRow = await resolveWeek(week_id);
       if (!weekRow) {
-        console.log("[plan/update] week not found for userId:", userId, "week_id value:", week_id);
         return res.status(404).json({ error: `Week not found: ${week_id}` });
       }
-
-      console.log("[plan/update] week:", weekRow.id, "slug:", weekRow.week_id);
 
       // Apply the field changes to the training_days row.
       // Accept both the exact DB column names and short legacy aliases.
@@ -117,7 +112,6 @@ export default async function handler(req, res) {
       // am_session_custom / pm_session_custom are freeform text — skip validation.
       for (const field of ["am_session", "pm_session"]) {
         if (field in updatePayload && updatePayload[field] !== null && !VALID_WORKOUT_KEYS.has(updatePayload[field])) {
-          console.log(`[plan/update] rejected invalid ${field}:`, updatePayload[field]);
           return res.status(400).json({ error: `Invalid ${field} value. Must be an exact workout name from the known list.`, rejected: updatePayload[field] });
         }
       }
@@ -132,11 +126,8 @@ export default async function handler(req, res) {
       const mutableFields = ["am_session", "pm_session", "am_session_blocks", "pm_session_blocks", "am_session_custom", "pm_session_custom", "note", "is_race_day", "ai_modification_note"];
       const hasChange = mutableFields.some((f) => f in updatePayload);
       if (!hasChange) {
-        console.log("[plan/update] no valid fields in changes:", changes);
         return res.status(400).json({ error: "No valid fields to update" });
       }
-
-      console.log("[plan/update] updating training_days where week_id =", weekRow.week_id, "day =", normalizedDay, "payload:", JSON.stringify(updatePayload));
 
       const { data: updated, error: updateErr, count } = await supabase
         .from("training_days")
@@ -147,11 +138,9 @@ export default async function handler(req, res) {
         .select();
 
       if (updateErr) {
-        console.log("[plan/update] supabase error:", updateErr.message);
+        console.error("[plan/update] supabase error:", updateErr.message);
         return res.status(500).json({ error: updateErr.message });
       }
-
-      console.log("[plan/update] rows updated:", updated?.length ?? count, JSON.stringify(updated));
 
       return res.status(200).json({ success: true, description, updated });
     }
@@ -224,7 +213,6 @@ export default async function handler(req, res) {
       }
 
       const totalUpdated = Object.values(weeksUpdated).reduce((sum, n) => sum + n, 0);
-      console.log(`[plan/update] remap_week: ${totalUpdated} rows updated`, JSON.stringify({ weeksUpdated, results }));
       return res.status(200).json({
         success: true,
         description,

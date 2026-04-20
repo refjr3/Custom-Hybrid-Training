@@ -1921,7 +1921,6 @@ const AIChat = ({ whoopData, currentWeek, recentActivities, onPlanChange, userNa
   const handlePlanChange = async (planChange, action) => {
     if (action === "accept") {
       setMessages(prev => prev.map(m => m.planChange === planChange ? { ...m, planChangeStatus:"applying" } : m));
-      console.log("[AIChat] APPLY TO PLAN — sending to onPlanChange:", JSON.stringify(planChange));
       try {
         const result = await onPlanChange(planChange);
         const count = result?.modifiedCount ?? (planChange.type === "remap_week" ? (planChange.days?.length || 0) : 1);
@@ -2959,9 +2958,6 @@ export default function App() {
           setWhoopLoading(false);
           return;
         }
-        if (import.meta.env.DEV) {
-          console.log("[WHOOP sync]", JSON.stringify(data, null, 2));
-        }
         const { throttled: _t, ...rest } = data;
         setWhoopData(rest);
         setWhoopConnected(true);
@@ -2977,9 +2973,6 @@ export default function App() {
         return;
       }
       const data = await res.json();
-      if (import.meta.env.DEV) {
-        console.log("[WHOOP data]", JSON.stringify(data, null, 2));
-      }
       setWhoopData(data);
       setWhoopConnected(true);
     } catch (e) {
@@ -3049,7 +3042,6 @@ export default function App() {
         },
       });
       const data = await res.json().catch(() => ({}));
-      console.log("[sync] result:", data);
       if (!res.ok) {
         throw new Error(data.details || data.error || "Intervals sync failed");
       }
@@ -3133,9 +3125,6 @@ export default function App() {
       ageMin < 60 &&
       Number.isFinite(parseInt(rawMinutes, 10))
     ) {
-      if (import.meta.env.DEV) {
-        console.log("[z2] using local cache, skipping fetch", { ageMin: Math.round(ageMin * 10) / 10 });
-      }
       return;
     }
 
@@ -3277,22 +3266,12 @@ export default function App() {
   // avoids stale-closure reads of session?.access_token captured at definition time.
   const fetchPlan = async (token) => {
     try {
-      console.log("[fetchPlan] token present:", !!token, "| token prefix:", token?.slice(0,20));
       const res = await fetch("/api/plan/days", {
         headers: token ? { "Authorization": `Bearer ${token}` } : {},
       });
-      console.log("[fetchPlan] status:", res.status);
       const data = await res.json().catch(() => ({}));
-      console.log("[fetchPlan] response:", JSON.stringify({
-        blocks: data.blocks?.length,
-        firstBlock: data.blocks?.[0]?.label,
-        firstBlockWeeks: data.blocks?.[0]?.weeks?.length,
-        firstWeekDays: data.blocks?.[0]?.weeks?.[0]?.days?.length,
-        error: data.error,
-      }));
       const normalizedBlocks = normalizePlanBlocks(data.blocks || []);
       const hasDays = normalizedBlocks?.some(b => b.weeks?.some(w => w.days?.length > 0));
-      console.log("[fetchPlan] hasDays:", hasDays, "| res.ok:", res.ok, "| will update state:", res.ok && hasDays);
       if (res.ok && hasDays) {
         setPlanBlocks(normalizedBlocks);
         const hasCurrentSelection = normalizedBlocks.some(
@@ -3306,9 +3285,8 @@ export default function App() {
           }
         }
       }
-      console.log("[fetchPlan] planBlocks.length after fetch:", data.blocks?.length ?? 0);
     } catch (e) {
-      console.log("[fetchPlan] caught error:", e.message);
+      console.error("[fetchPlan]", e);
     } finally {
       setPlanLoading(false);
     }
@@ -3558,7 +3536,6 @@ export default function App() {
     };
     try {
       if (planChange.type === "add_supplement") {
-        console.log("[handlePlanChange] add_supplement:", JSON.stringify(planChange));
         const res = await fetch("/api/supplements/update", {
           method: "POST",
           headers: {
@@ -3568,15 +3545,12 @@ export default function App() {
           body: JSON.stringify(planChange),
         });
         const body = await res.json().catch(() => ({}));
-        console.log("[handlePlanChange] supplement update status:", res.status, "| body:", JSON.stringify(body));
         if (!res.ok) throw new Error(body.error || "Supplement update failed — tap to retry");
         if (res.ok) await fetchSupplements();
         return { modifiedCount: 1 };
       }
 
       // modify_day — existing plan update logic
-      console.log("[handlePlanChange] sending:", JSON.stringify(planChange));
-      console.log("[handlePlanChange] token present:", !!token, "| token prefix:", token?.slice(0,20));
       const res = await fetch("/api/plan/update", {
         method: "POST",
         headers: {
@@ -3586,7 +3560,6 @@ export default function App() {
         body: JSON.stringify(planChange),
       });
       const body = await res.json().catch(() => ({}));
-      console.log("[handlePlanChange] update status:", res.status, "| body:", JSON.stringify(body));
 
       if (!res.ok) throw new Error(body.error || "Plan update failed — tap to retry");
 
@@ -3623,12 +3596,10 @@ export default function App() {
         }
       }
 
-      console.log("[handlePlanChange] update confirmed — calling fetchPlan");
       await fetchPlan(token);
-      console.log("[handlePlanChange] fetchPlan complete");
       return { modifiedCount, weeksUpdated: confirmedWeeksUpdated };
     } catch (e) {
-      console.log("[handlePlanChange] caught error:", e.message);
+      console.error("[handlePlanChange]", e);
       throw e;
     }
   };

@@ -448,8 +448,6 @@ SCENARIO MODE RULES (when message starts with [SCENARIO MODE]):
 4. Every exercise must match available equipment or regenerate`;
 
   try {
-    console.log(`[coach/chat] user=${resolvedUserId?.slice(0,8) || "anon"} session=${session_id.slice(0,8)} history=${historyMessages.length} msgs`);
-
     const now = new Date();
     const dayNames = ["Sunday","Monday","Tuesday","Wednesday","Thursday","Friday","Saturday"];
     const monthNames = ["January","February","March","April","May","June","July","August","September","October","November","December"];
@@ -538,8 +536,6 @@ User message: ${message || "(see attached file)"}`;
       ]);
       if (insertErr) {
         console.error("[coach/chat] failed to save messages:", insertErr.message);
-      } else {
-        console.log("[coach/chat] saved 2 messages for user", resolvedUserId.slice(0,8));
       }
     } else {
       console.warn("[coach/chat] no resolvedUserId — messages NOT saved (no auth token?)");

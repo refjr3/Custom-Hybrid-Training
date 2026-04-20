@@ -44,7 +44,6 @@ export default async function handler(req, res) {
     });
 
     const tokens = await tokenRes.json().catch(() => ({}));
-    console.log("[strava/callback] token response:", tokens?.token_type, tokens?.expires_at);
 
     if (!tokenRes.ok || !tokens?.access_token) {
       console.error("[strava/callback] no access_token:", tokens);

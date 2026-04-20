@@ -7,10 +7,6 @@ export default function handler(req, res) {
   const clientId = process.env.STRAVA_CLIENT_ID;
   if (!clientId) return res.redirect(302, `${appOrigin}/?error=strava_missing_env`);
 
-  console.log("[strava/login] appOrigin:", appOrigin);
-  console.log("[strava/login] redirectUri:", redirectUri);
-  console.log("[strava/login] clientId first3:", clientId.slice(0, 3));
-
   const state = `${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 12)}`;
   const requestedUid = typeof req.query?.uid === "string" ? req.query.uid.trim() : "";
   const debug = req.query?.debug === "1" || req.query?.debug === "true";
@@ -25,7 +21,6 @@ export default function handler(req, res) {
   });
 
   const authUrl = `https://www.strava.com/oauth/authorize?${params}`;
-  console.log("[strava/login] full auth URL:", authUrl);
 
   if (debug) {
     return res.status(200).json({ authUrl, redirectUri, appOrigin });

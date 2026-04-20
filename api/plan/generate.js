@@ -253,7 +253,6 @@ function buildBlocksFromWeeks(weeksArray, phaseStructure) {
 // ── Handler ───────────────────────────────────────────────────────────────────
 
 export default async function handler(req, res) {
-  console.log("[generate] called with:", JSON.stringify(req.body).slice(0, 200));
   if (req.method !== "POST") return res.status(405).json({ error: "Method not allowed" });
   try {
     const token = req.headers.authorization?.replace("Bearer ", "");
@@ -318,7 +317,6 @@ export default async function handler(req, res) {
       .eq("user_id", userId);
 
     if (count > 0) {
-      console.log("[plan/generate] plan already complete for", userId, "— skipping");
       return res.status(200).json({ success: true, message: "Plan already exists", weeks_created: 0 });
     }
     // Status says complete but rows are gone — fall through and regenerate
@@ -326,8 +324,6 @@ export default async function handler(req, res) {
 
     if (genStatus === "in_progress" || genStatus === "failed") {
     // Previous attempt was interrupted or failed — clear partial data and retry
-    console.log(`[plan/generate] status=${genStatus} for ${userId} — clearing partial data and retrying`);
-
     const [{ error: delDaysErr }, { error: delWeeksErr }, { error: delBlocksErr }] = await Promise.all([
       supabase.from("training_days").delete().eq("user_id", userId),
       supabase.from("training_weeks").delete().eq("user_id", userId),
@@ -517,7 +513,6 @@ export default async function handler(req, res) {
       .update({ generation_status: "complete" })
       .eq("user_id", userId);
 
-    console.log(`[plan/generate] created ${weeksCreated} weeks for user ${userId}`);
     return res.status(200).json({ success: true, weeks_created: weeksCreated });
 
     } catch (err) {

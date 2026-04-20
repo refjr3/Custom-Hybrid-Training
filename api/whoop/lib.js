@@ -255,14 +255,6 @@ export function formatClientWhoopResponse(recData, sleepData, cycleData) {
     rec?.hrv?.rmssd_milli;
   const rhrRaw = score.resting_heart_rate ?? rec?.resting_heart_rate ?? score.rhr;
 
-  if (process.env.WHOOP_DEBUG_RECOVERY === "1") {
-    try {
-      console.log("[WHOOP recovery raw]", JSON.stringify(recData?.records?.[0] ?? null, null, 2));
-    } catch (_) {
-      /* ignore */
-    }
-  }
-
   const hrvRounded =
     hrvMilli != null && Number.isFinite(Number(hrvMilli)) ? Math.round(Number(hrvMilli)) : null;
   const rhrRounded =
