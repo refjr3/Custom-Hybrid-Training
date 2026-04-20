@@ -23,6 +23,21 @@ const supabase = createClient(
   supabaseKey || "placeholder"
 );
 
+function getSyncStatus(lastSync) {
+  if (!lastSync) return "gray";
+  const ageMin = (Date.now() - new Date(lastSync).getTime()) / 60000;
+  if (ageMin < 360) return "green";
+  if (ageMin < 1440) return "amber";
+  return "red";
+}
+
+const syncColors = {
+  green: "#5dffa0",
+  amber: "#ffaa44",
+  red: "#FF3B30",
+  gray: "rgba(255,255,255,0.15)",
+};
+
 /** Load or insert a minimal `user_profiles` row (replaces legacy Onboarding.jsx). */
 async function fetchOrCreateUserProfile(supabaseClient, sessionUser) {
   const { data: existing, error: selErr } = await supabaseClient
@@ -4245,6 +4260,22 @@ export default function App() {
           setDrawerSection("connections");
           setDrawerOpen(true);
         };
+        const connectedSources = profile?.connected_sources || {};
+        const recoveryLastSync = dataSources.primaryRecoverySource === "WHOOP"
+          ? connectedSources?.whoop?.last_sync
+          : dataSources.primaryRecoverySource === "Oura"
+            ? connectedSources?.oura?.last_sync
+            : connectedSources?.garmin?.last_sync;
+        const activityLastSync = dataSources.primaryActivitySource === "Garmin"
+          ? connectedSources?.garmin?.last_sync
+          : dataSources.primaryActivitySource === "Strava"
+            ? connectedSources?.strava?.last_sync
+            : connectedSources?.apple_health?.last_sync;
+        const sleepLastSync = dataSources.primarySleepSource === "Oura"
+          ? connectedSources?.oura?.last_sync
+          : dataSources.primarySleepSource === "WHOOP"
+            ? connectedSources?.whoop?.last_sync
+            : connectedSources?.garmin?.last_sync || connectedSources?.apple_health?.last_sync;
 
         return (
           <div style={{ padding: "12px 16px 20px", display: "flex", flexDirection: "column", gap: 14, overflowX: "hidden" }}>
@@ -4363,7 +4394,23 @@ export default function App() {
                 <div style={{ position: "absolute", top: 0, left: "5%", right: "5%", height: 1, background: "linear-gradient(90deg,transparent,rgba(255,255,255,0.9) 50%,transparent)", pointerEvents: "none" }} />
                 <div style={{ position: "absolute", top: -30, right: -30, width: 160, height: 130, background: "radial-gradient(ellipse at top right, rgba(255,255,255,0.4) 0%, transparent 65%)", pointerEvents: "none" }} />
                 <div style={{ padding: "22px 22px 18px", position: "relative", zIndex: 1 }}>
-                  <div style={{ fontSize: 9, fontWeight: 600, color: "rgba(13,14,16,0.3)", letterSpacing: "2.5px", textTransform: "uppercase", marginBottom: 12, fontFamily: C.fs }}>Recovery</div>
+                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12 }}>
+                    <div style={{ fontSize: 9, fontWeight: 600, color: "rgba(13,14,16,0.3)", letterSpacing: "2.5px", textTransform: "uppercase", fontFamily: C.fs }}>Recovery</div>
+                    <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+                      <div style={{ fontSize: 8, fontWeight: 600, color: "rgba(13,14,16,0.3)", letterSpacing: "1.5px", textTransform: "uppercase" }}>
+                        via {dataSources.primaryRecoverySource}
+                      </div>
+                      <div
+                        style={{
+                          width: 6,
+                          height: 6,
+                          borderRadius: "50%",
+                          background: syncColors[getSyncStatus(recoveryLastSync)],
+                          flexShrink: 0,
+                        }}
+                      />
+                    </div>
+                  </div>
                   <div style={{ display: "flex", alignItems: "flex-end", justifyContent: "space-between", marginBottom: 16 }}>
                     <div style={{ fontFamily: C.serif, fontSize: 76, color: DS.base, lineHeight: 1, letterSpacing: "-3px", fontWeight: 400 }}>{recDisp}</div>
                     <div style={{ textAlign: "right", paddingBottom: 10 }}>
@@ -4401,7 +4448,23 @@ export default function App() {
               <div style={{ padding: "16px 20px 18px", position: "relative", zIndex: 1 }}>
                 <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 12, gap: 8 }}>
                   <div style={{ fontSize: 9, fontWeight: 600, color: "rgba(255,255,255,0.22)", letterSpacing: "2.5px", textTransform: "uppercase", fontFamily: C.fs }}>Weekly Z2 Time</div>
-                  <div style={{ fontSize: 12, fontWeight: 600, color: DS.gold, fontFamily: C.fs, flexShrink: 0 }}>{z2HeaderDone} / {TARGET_Z2_MIN} min</div>
+                  <div style={{ display: "flex", flexDirection: "column", alignItems: "flex-end", gap: 4, flexShrink: 0 }}>
+                    <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+                      <div style={{ fontSize: 8, fontWeight: 600, color: "rgba(255,255,255,0.18)", letterSpacing: "1.5px", textTransform: "uppercase" }}>
+                        via {dataSources.primaryActivitySource}
+                      </div>
+                      <div
+                        style={{
+                          width: 6,
+                          height: 6,
+                          borderRadius: "50%",
+                          background: syncColors[getSyncStatus(activityLastSync)],
+                          flexShrink: 0,
+                        }}
+                      />
+                    </div>
+                    <div style={{ fontSize: 12, fontWeight: 600, color: DS.gold, fontFamily: C.fs }}>{z2HeaderDone} / {TARGET_Z2_MIN} min</div>
+                  </div>
                 </div>
                 {stravaConnected && stravaWeeklyZ2Error ? (
                   <div style={{ marginBottom: 10 }}>
@@ -4627,7 +4690,21 @@ export default function App() {
                           <span style={{ fontSize: 20 }}>m</span>
                         </div>
                       </div>
-                      <div style={{ textAlign: "right", paddingTop: 20 }}>
+                      <div style={{ textAlign: "right", paddingTop: 8 }}>
+                        <div style={{ display: "flex", justifyContent: "flex-end", alignItems: "center", gap: 6, marginBottom: 8 }}>
+                          <div style={{ fontSize: 8, fontWeight: 600, color: "rgba(255,255,255,0.18)", letterSpacing: "1.5px", textTransform: "uppercase" }}>
+                            via {dataSources.primarySleepSource}
+                          </div>
+                          <div
+                            style={{
+                              width: 6,
+                              height: 6,
+                              borderRadius: "50%",
+                              background: syncColors[getSyncStatus(sleepLastSync)],
+                              flexShrink: 0,
+                            }}
+                          />
+                        </div>
                         <div style={{ fontFamily: "'DM Serif Display',serif", fontSize: 28, color: "#C9A875", letterSpacing: "-1px", lineHeight: 1 }}>{whoopData.sleep.score ?? "—"}</div>
                         <div style={{ fontSize: 8, color: "rgba(255,255,255,0.3)", letterSpacing: "1.5px", textTransform: "uppercase", marginTop: 2 }}>Score</div>
                       </div>
