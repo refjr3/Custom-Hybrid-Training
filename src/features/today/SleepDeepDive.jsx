@@ -37,15 +37,22 @@ export const SleepDeepDive = ({ open, onClose, supabase, dataSources }) => {
   const today = metrics[metrics.length - 1];
   const hours = today?.sleep_total_min ? today.sleep_total_min / 60 : null;
 
-  const last7 = metrics.slice(-7).map((m) => ({
-    label: new Date(m.date).toLocaleDateString("en-US", { weekday: "narrow" }),
-    value: m.sleep_total_min ? m.sleep_total_min / 60 : 0,
-    isCurrent: false,
-  }));
-  if (last7.length > 0) last7[last7.length - 1].isCurrent = true;
+  const last7 = [];
+  for (let i = 6; i >= 0; i--) {
+    const d = new Date();
+    d.setHours(0, 0, 0, 0);
+    d.setDate(d.getDate() - i);
+    const iso = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+    const match = metrics.find((m) => String(m.date || "").slice(0, 10) === iso);
+    last7.push({
+      label: d.toLocaleDateString("en-US", { weekday: "narrow" }),
+      value: match?.sleep_total_min ? match.sleep_total_min / 60 : 0,
+      isCurrent: i === 0,
+      date: iso,
+    });
+  }
 
-  const last7Minutes = last7.map((n) => ({ ...n, value: n.value * 60 }));
-  const last7Max = Math.max(600, ...last7Minutes.map((n) => n.value || 0), 420);
+  const last7Max = Math.max(10, 7, ...last7.map((n) => n.value || 0));
 
   const scoreDots = metrics.map((m) => ({
     date: m.date,
@@ -211,12 +218,13 @@ export const SleepDeepDive = ({ open, onClose, supabase, dataSources }) => {
 
       <SectionLabel>Last 7 Nights</SectionLabel>
       <WeeklyBars
-        data={last7Minutes}
+        data={last7}
         maxValue={last7Max}
-        targetValue={420}
-        unit="min"
+        targetValue={7}
+        targetLabel="TARGET 7h"
+        unit="h"
         accentColor="#9B8FD1"
-        showValues={false}
+        showValues
       />
       <div
         style={{

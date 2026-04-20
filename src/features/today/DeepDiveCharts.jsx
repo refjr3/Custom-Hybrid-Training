@@ -341,6 +341,7 @@ export const WeeklyBars = ({
   unit = "min",
   accentColor = "#C9A875",
   targetValue = null,
+  targetLabel = null,
   baselineValue = null,
   showValues = true,
 }) => {
@@ -360,7 +361,7 @@ export const WeeklyBars = ({
           color: "rgba(255,255,255,0.25)",
         }}
       >
-        {Math.round(max)}
+        {unit === "h" ? Number(max).toFixed(1) : Math.round(max)}
         {unit}
       </div>
 
@@ -435,7 +436,7 @@ export const WeeklyBars = ({
                 borderRadius: 3,
               }}
             >
-              TARGET {targetValue}
+              {targetLabel || `TARGET ${targetValue}`}
             </div>
           </>
         ) : null}
@@ -465,7 +466,7 @@ export const WeeklyBars = ({
                     fontFamily: "'DM Serif Display', serif",
                   }}
                 >
-                  {Math.round(d.value)}
+                  {unit === "h" ? Number(d.value).toFixed(1) : Math.round(d.value)}
                 </div>
               ) : null}
               <div
