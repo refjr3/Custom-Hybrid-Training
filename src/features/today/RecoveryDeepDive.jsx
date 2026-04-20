@@ -44,7 +44,15 @@ export const RecoveryDeepDive = ({ open, onClose, supabase, dataSources }) => {
     load();
   }, [open, supabase]);
 
-  const today = metrics[metrics.length - 1];
+  const sortedMetrics = [...metrics].sort((a, b) => String(a.date || "").localeCompare(String(b.date || "")));
+  const chartRows = sortedMetrics.filter((m) => m.readiness_score != null && !Number.isNaN(Number(m.readiness_score)));
+  const validCount = chartRows.length;
+  const recoverySubtitle =
+    validCount >= 10 ? "30-Day Trend" : validCount >= 7 ? `Last ${validCount} days` : "Building history…";
+  const recoverySectionLabel =
+    validCount >= 20 ? "30-Day Recovery" : validCount >= 7 ? `Last ${validCount} days` : "Building history…";
+
+  const today = sortedMetrics[sortedMetrics.length - 1];
   const todayScore = today?.readiness_score;
   const todayColor = today?.readiness_color || "gray";
 
@@ -55,29 +63,29 @@ export const RecoveryDeepDive = ({ open, onClose, supabase, dataSources }) => {
     gray: "rgba(255,255,255,0.2)",
   };
 
-  const recoveryDots = metrics.map((m) => ({
+  const recoveryDots = chartRows.map((m) => ({
     date: m.date,
     value: m.readiness_score,
     color: colorMap[m.readiness_color] || colorMap.gray,
   }));
 
-  const hrvDots = metrics.map((m) => ({
+  const hrvDots = chartRows.map((m) => ({
     date: m.date,
     value: m.hrv_rmssd,
     color: "#C9A875",
   }));
 
-  const rhrDots = metrics.map((m) => ({
+  const rhrDots = chartRows.map((m) => ({
     date: m.date,
     value: m.resting_hr,
     color: "#4db8ff",
   }));
 
-  const greenDays = metrics.filter((m) => m.readiness_color === "green").length;
-  const yellowDays = metrics.filter((m) => m.readiness_color === "yellow").length;
-  const redDays = metrics.filter((m) => m.readiness_color === "red").length;
+  const greenDays = sortedMetrics.filter((m) => m.readiness_color === "green").length;
+  const yellowDays = sortedMetrics.filter((m) => m.readiness_color === "yellow").length;
+  const redDays = sortedMetrics.filter((m) => m.readiness_color === "red").length;
 
-  const hrvValues = metrics.filter((m) => m.hrv_rmssd).map((m) => m.hrv_rmssd);
+  const hrvValues = chartRows.filter((m) => m.hrv_rmssd).map((m) => m.hrv_rmssd);
   const firstHalf = hrvValues.slice(0, Math.floor(hrvValues.length / 2));
   const lastHalf = hrvValues.slice(Math.floor(hrvValues.length / 2));
   const firstAvg = firstHalf.reduce((a, b) => a + b, 0) / (firstHalf.length || 1);
@@ -85,11 +93,11 @@ export const RecoveryDeepDive = ({ open, onClose, supabase, dataSources }) => {
   const hrvTrend = lastAvg > firstAvg + 2 ? "up" : lastAvg < firstAvg - 2 ? "down" : "flat";
 
   const recoveryAnnotation = (() => {
-    const lastFive = metrics.slice(-5).map((m) => m.readiness_score).filter((v) => v != null && !Number.isNaN(Number(v)));
+    const lastFive = chartRows.slice(-5).map((m) => m.readiness_score).filter((v) => v != null && !Number.isNaN(Number(v)));
     const trending =
       lastFive.length >= 3 && Number(lastFive[lastFive.length - 1]) > Number(lastFive[0]) + 10;
     if (trending) return "↑ Trending up last 5 days";
-    const greens = metrics.filter((m) => m.readiness_color === "green").length;
+    const greens = sortedMetrics.filter((m) => m.readiness_color === "green").length;
     return `${greens} green days this month`;
   })();
 
@@ -108,7 +116,7 @@ export const RecoveryDeepDive = ({ open, onClose, supabase, dataSources }) => {
     <DeepDiveModal
       open={open}
       onClose={onClose}
-      subtitle="30-Day Trend"
+      subtitle={recoverySubtitle}
       title="Recovery"
       sourceLabel={dataSources?.primaryRecoverySource}
     >
@@ -149,16 +157,36 @@ export const RecoveryDeepDive = ({ open, onClose, supabase, dataSources }) => {
         <div style={{ fontSize: 12, color: "rgba(255,255,255,0.35)" }}>Loading recovery history...</div>
       ) : null}
 
-      <SectionLabel>30-Day Recovery</SectionLabel>
-      <TrendDots
-        data={recoveryDots}
-        heightBand={80}
-        unit=""
-        yMin={0}
-        yMax={100}
-        baseline={baselines?.baseline_recovery_score}
-        annotation={recoveryAnnotation}
-      />
+      {validCount < 3 && !loading ? (
+        <div
+          style={{
+            marginBottom: 20,
+            padding: "16px 14px",
+            borderRadius: 14,
+            background: "rgba(255,255,255,0.04)",
+            border: "1px solid rgba(255,255,255,0.08)",
+            fontSize: 12,
+            lineHeight: 1.5,
+            color: "rgba(255,255,255,0.45)",
+            textAlign: "center",
+          }}
+        >
+          Recovery history will build as WHOOP syncs. Check back in a few days.
+        </div>
+      ) : null}
+
+      <SectionLabel>{recoverySectionLabel}</SectionLabel>
+      {validCount >= 3 ? (
+        <TrendDots
+          data={recoveryDots}
+          heightBand={80}
+          unit=""
+          yMin={0}
+          yMax={100}
+          baseline={baselines?.baseline_recovery_score}
+          annotation={recoveryAnnotation}
+        />
+      ) : null}
 
       <div style={{ display: "flex", gap: 8, marginTop: 16 }}>
         <StatTile label="Green" value={greenDays} unit="days" accent="#5dffa0" />
@@ -166,7 +194,7 @@ export const RecoveryDeepDive = ({ open, onClose, supabase, dataSources }) => {
         <StatTile label="Red" value={redDays} unit="days" accent="#FF6B6B" />
       </div>
 
-      <SectionLabel>HRV · 30 Days</SectionLabel>
+      <SectionLabel>{validCount >= 10 ? "HRV · 30 Days" : validCount >= 7 ? `HRV · last ${validCount} days` : "HRV"}</SectionLabel>
       <TrendDots
         data={hrvDots}
         heightBand={70}

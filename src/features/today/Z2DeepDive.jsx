@@ -68,6 +68,14 @@ export const Z2DeepDive = ({ open, onClose, supabase, dataSources }) => {
     })();
   }, [open, supabase]);
 
+  const sortedMetrics = [...metrics].sort((a, b) => String(a.date || "").localeCompare(String(b.date || "")));
+  const z2DayRows = sortedMetrics.filter((m) => m.z2_minutes != null && Number(m.z2_minutes) > 0);
+  const validCount = z2DayRows.length;
+  const z2Subtitle =
+    validCount >= 10 ? "Weekly Progress" : validCount >= 7 ? `Last ${validCount} days` : "Building history…";
+  const z2WeeksSectionLabel =
+    validCount >= 20 ? "Last 4 Weeks" : validCount >= 7 ? `Last ${validCount} days` : "Building history…";
+
   const now = new Date();
   const currentWeekStart = startOfIsoWeek(now);
   const weeks = [];
@@ -114,12 +122,30 @@ export const Z2DeepDive = ({ open, onClose, supabase, dataSources }) => {
     <DeepDiveModal
       open={open}
       onClose={onClose}
-      subtitle="Weekly Progress"
+      subtitle={z2Subtitle}
       title="Zone 2 Training"
       sourceLabel={dataSources?.primaryActivitySource}
     >
       {loading ? (
         <div style={{ fontSize: 12, color: "rgba(255,255,255,0.35)", marginBottom: 12 }}>Loading Z2 data…</div>
+      ) : null}
+
+      {validCount < 3 && !loading ? (
+        <div
+          style={{
+            marginBottom: 16,
+            padding: "16px 14px",
+            borderRadius: 14,
+            background: "rgba(255,255,255,0.04)",
+            border: "1px solid rgba(255,255,255,0.08)",
+            fontSize: 12,
+            lineHeight: 1.5,
+            color: "rgba(255,255,255,0.45)",
+            textAlign: "center",
+          }}
+        >
+          Z2 history will build as Strava syncs. Check back in a few days.
+        </div>
       ) : null}
 
       <div
@@ -175,7 +201,7 @@ export const Z2DeepDive = ({ open, onClose, supabase, dataSources }) => {
         ) : null}
       </div>
 
-      <SectionLabel>Last 4 Weeks</SectionLabel>
+      <SectionLabel>{z2WeeksSectionLabel}</SectionLabel>
       <WeeklyBars
         data={weeks}
         maxValue={Math.max(target, baselineWeeklyZ2 || 0, ...weeks.map((w) => w.value))}

@@ -10,31 +10,51 @@ function normalizeBaselinesPayload(json) {
 export const SleepDeepDive = ({ open, onClose, supabase, dataSources }) => {
   const [metrics, setMetrics] = useState([]);
   const [baselines, setBaselines] = useState(null);
+  const [loading, setLoading] = useState(false);
 
   useEffect(() => {
     if (!open) return;
     (async () => {
-      const {
-        data: { session },
-      } = await supabase.auth.getSession();
-      const headers = { Authorization: `Bearer ${session?.access_token}` };
-      const end = new Date().toISOString().slice(0, 10);
-      const startD = new Date();
-      startD.setDate(startD.getDate() - 29);
-      const start = startD.toISOString().slice(0, 10);
+      setLoading(true);
+      try {
+        const {
+          data: { session },
+        } = await supabase.auth.getSession();
+        const headers = { Authorization: `Bearer ${session?.access_token}` };
+        const end = new Date().toISOString().slice(0, 10);
+        const startD = new Date();
+        startD.setDate(startD.getDate() - 29);
+        const start = startD.toISOString().slice(0, 10);
 
-      const [metricsRes, baselinesRes] = await Promise.all([
-        fetch(`/api/metrics/range?start=${start}&end=${end}`, { headers }),
-        fetch("/api/metrics/baselines", { headers }),
-      ]);
-      const metricsData = await metricsRes.json();
-      const baselinesData = await baselinesRes.json();
-      setMetrics(Array.isArray(metricsData) ? metricsData : []);
-      setBaselines(normalizeBaselinesPayload(baselinesData));
+        const [metricsRes, baselinesRes] = await Promise.all([
+          fetch(`/api/metrics/range?start=${start}&end=${end}`, { headers }),
+          fetch("/api/metrics/baselines", { headers }),
+        ]);
+        const metricsData = await metricsRes.json();
+        const baselinesData = await baselinesRes.json();
+        setMetrics(Array.isArray(metricsData) ? metricsData : []);
+        setBaselines(normalizeBaselinesPayload(baselinesData));
+      } finally {
+        setLoading(false);
+      }
     })();
   }, [open, supabase]);
 
-  const today = metrics[metrics.length - 1];
+  const sortedMetrics = [...metrics].sort((a, b) => String(a.date || "").localeCompare(String(b.date || "")));
+  const sleepScoreRows = sortedMetrics.filter(
+    (m) => m.sleep_score != null && !Number.isNaN(Number(m.sleep_score)),
+  );
+  const sleepScoreValidCount = sleepScoreRows.length;
+  const sleepTrendSubtitle =
+    sleepScoreValidCount >= 10 ? "30-night window" : sleepScoreValidCount >= 7 ? `Last ${sleepScoreValidCount} nights` : "Building history…";
+  const sleepScoreSectionLabel =
+    sleepScoreValidCount >= 20
+      ? "Sleep Score · 30 Days"
+      : sleepScoreValidCount >= 7
+        ? `Sleep Score · last ${sleepScoreValidCount} days`
+        : "Sleep Score";
+
+  const today = sortedMetrics[sortedMetrics.length - 1];
   const hours = today?.sleep_total_min ? today.sleep_total_min / 60 : null;
 
   const last7 = [];
@@ -43,7 +63,7 @@ export const SleepDeepDive = ({ open, onClose, supabase, dataSources }) => {
     d.setHours(0, 0, 0, 0);
     d.setDate(d.getDate() - i);
     const iso = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
-    const match = metrics.find((m) => String(m.date || "").slice(0, 10) === iso);
+    const match = sortedMetrics.find((m) => String(m.date || "").slice(0, 10) === iso);
     last7.push({
       label: d.toLocaleDateString("en-US", { weekday: "narrow" }),
       value: match?.sleep_total_min ? match.sleep_total_min / 60 : 0,
@@ -54,20 +74,20 @@ export const SleepDeepDive = ({ open, onClose, supabase, dataSources }) => {
 
   const last7Max = Math.max(10, 7, ...last7.map((n) => n.value || 0));
 
-  const scoreDots = metrics.map((m) => ({
+  const scoreDots = sleepScoreRows.map((m) => ({
     date: m.date,
     value: m.sleep_score,
     color: "#9B8FD1",
   }));
 
-  const sleepValues = metrics.filter((m) => m.sleep_total_min).map((m) => m.sleep_total_min);
+  const sleepValues = sortedMetrics.filter((m) => m.sleep_total_min).map((m) => m.sleep_total_min);
   const avgMin = sleepValues.length ? sleepValues.reduce((a, b) => a + b, 0) / sleepValues.length : 0;
   const avgDeep =
-    metrics.filter((m) => m.sleep_deep_min).reduce((sum, m) => sum + m.sleep_deep_min, 0) /
-    (metrics.filter((m) => m.sleep_deep_min).length || 1);
+    sortedMetrics.filter((m) => m.sleep_deep_min).reduce((sum, m) => sum + m.sleep_deep_min, 0) /
+    (sortedMetrics.filter((m) => m.sleep_deep_min).length || 1);
   const avgRem =
-    metrics.filter((m) => m.sleep_rem_min).reduce((sum, m) => sum + m.sleep_rem_min, 0) /
-    (metrics.filter((m) => m.sleep_rem_min).length || 1);
+    sortedMetrics.filter((m) => m.sleep_rem_min).reduce((sum, m) => sum + m.sleep_rem_min, 0) /
+    (sortedMetrics.filter((m) => m.sleep_rem_min).length || 1);
 
   const totalMin = today?.sleep_total_min || 0;
   const deepPct = totalMin ? ((today?.sleep_deep_min || 0) / totalMin) * 100 : 0;
@@ -98,12 +118,14 @@ export const SleepDeepDive = ({ open, onClose, supabase, dataSources }) => {
     return { color: "green", text: "Normal" };
   })();
 
-  const scoreValues = metrics.map((m) => m.sleep_score).filter((v) => v != null && !Number.isNaN(Number(v)));
+  const scoreValues = sleepScoreRows.map((m) => m.sleep_score).filter((v) => v != null && !Number.isNaN(Number(v)));
   const scoreAvg = scoreValues.length
     ? Math.round(scoreValues.reduce((a, b) => a + Number(b), 0) / scoreValues.length)
     : null;
   const scoreAnnotation =
-    scoreAvg != null ? `30-night avg score ${scoreAvg}` : "Wear your ring or strap consistently for a score trend.";
+    scoreAvg != null
+      ? `${sleepScoreValidCount >= 20 ? "30-night" : `${sleepScoreValidCount}-night`} avg score ${scoreAvg}`
+      : "Wear your ring or strap consistently for a score trend.";
 
   const last7Annotation =
     hours != null && hours < 7
@@ -114,7 +136,7 @@ export const SleepDeepDive = ({ open, onClose, supabase, dataSources }) => {
     <DeepDiveModal
       open={open}
       onClose={onClose}
-      subtitle="Last Night"
+      subtitle={sleepScoreValidCount >= 10 ? "Last Night" : sleepTrendSubtitle}
       title="Sleep"
       sourceLabel={dataSources?.primarySleepSource}
     >
@@ -133,12 +155,18 @@ export const SleepDeepDive = ({ open, onClose, supabase, dataSources }) => {
             letterSpacing: "-3px",
           }}
         >
-          {hours ? Math.floor(hours) : "—"}
-          {hours ? <span style={{ fontSize: 32, color: "rgba(155,143,209,0.5)" }}>h</span> : null}
-          {hours ? (
-            <span style={{ fontFamily: "'DM Sans', sans-serif", fontSize: 24 }}>{Math.round((hours % 1) * 60)}</span>
-          ) : null}
-          {hours ? <span style={{ fontSize: 18, color: "rgba(155,143,209,0.5)" }}>m</span> : null}
+          {loading ? (
+            <span style={{ fontSize: 14, color: "rgba(255,255,255,0.35)" }}>Loading…</span>
+          ) : hours ? (
+            <>
+              {Math.floor(hours)}
+              <span style={{ fontSize: 32, color: "rgba(155,143,209,0.5)" }}>h</span>
+              <span style={{ fontFamily: "'DM Sans', sans-serif", fontSize: 24 }}>{Math.round((hours % 1) * 60)}</span>
+              <span style={{ fontSize: 18, color: "rgba(155,143,209,0.5)" }}>m</span>
+            </>
+          ) : (
+            "—"
+          )}
         </div>
         {today?.sleep_score ? (
           <div
@@ -243,15 +271,35 @@ export const SleepDeepDive = ({ open, onClose, supabase, dataSources }) => {
         <StatTile label="Avg REM" value={Math.round(avgRem)} unit="min" />
       </div>
 
-      <SectionLabel>Sleep Score · 30 Days</SectionLabel>
-      <TrendDots
-        data={scoreDots}
-        heightBand={70}
-        yMin={0}
-        yMax={100}
-        baseline={baselines?.baseline_sleep_score}
-        annotation={scoreAnnotation}
-      />
+      {sleepScoreValidCount < 3 && !loading ? (
+        <div
+          style={{
+            marginBottom: 16,
+            padding: "16px 14px",
+            borderRadius: 14,
+            background: "rgba(255,255,255,0.04)",
+            border: "1px solid rgba(255,255,255,0.08)",
+            fontSize: 12,
+            lineHeight: 1.5,
+            color: "rgba(255,255,255,0.45)",
+            textAlign: "center",
+          }}
+        >
+          Sleep history will build as WHOOP syncs. Check back in a few days.
+        </div>
+      ) : null}
+
+      <SectionLabel>{sleepScoreSectionLabel}</SectionLabel>
+      {sleepScoreValidCount >= 3 ? (
+        <TrendDots
+          data={scoreDots}
+          heightBand={70}
+          yMin={0}
+          yMax={100}
+          baseline={baselines?.baseline_sleep_score}
+          annotation={scoreAnnotation}
+        />
+      ) : null}
 
       <InsightCard>
         Sleep consistency matters more than any single night. Athletes who average 7+ hours with regular bed times recover 20% faster between hard sessions.
