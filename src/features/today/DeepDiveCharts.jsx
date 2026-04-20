@@ -344,6 +344,8 @@ export const WeeklyBars = ({
   targetLabel = null,
   baselineValue = null,
   showValues = true,
+  onBarClick = null,
+  selectedIndex = null,
 }) => {
   const max = maxValue || Math.max(...data.map((d) => d.value || 0), targetValue || 0, baselineValue || 0, 1);
   const targetY = targetValue != null ? 100 - (targetValue / max) * 100 : null;
@@ -444,25 +446,32 @@ export const WeeklyBars = ({
         {data.map((d, i) => {
           const pct = ((d.value || 0) / max) * 100;
           const isHit = targetValue != null && d.value >= targetValue;
-          return (
-            <div
-              key={i}
-              style={{
-                flex: 1,
-                display: "flex",
-                flexDirection: "column",
-                alignItems: "center",
-                gap: 6,
-                height: "100%",
-                justifyContent: "flex-end",
-              }}
-            >
+          const isSelected =
+            typeof onBarClick === "function" && selectedIndex != null ? i === selectedIndex : Boolean(d.isCurrent);
+          const colStyles = {
+            flex: 1,
+            display: "flex",
+            flexDirection: "column",
+            alignItems: "center",
+            gap: 6,
+            height: "100%",
+            justifyContent: "flex-end",
+            border: "none",
+            background: "transparent",
+            padding: 0,
+            cursor: typeof onBarClick === "function" ? "pointer" : "default",
+            font: "inherit",
+            color: "inherit",
+            minWidth: 0,
+          };
+          const inner = (
+            <>
               {showValues && d.value > 0 ? (
                 <div
                   style={{
                     fontSize: 10,
                     fontWeight: 600,
-                    color: d.isCurrent ? accentColor : "rgba(255,255,255,0.45)",
+                    color: isSelected ? accentColor : "rgba(255,255,255,0.45)",
                     fontFamily: "'DM Serif Display', serif",
                   }}
                 >
@@ -474,24 +483,36 @@ export const WeeklyBars = ({
                   width: "100%",
                   height: `${pct}%`,
                   minHeight: d.value > 0 ? 3 : 0,
-                  background: d.isCurrent ? accentColor : `${accentColor}40`,
+                  background: isSelected ? accentColor : `${accentColor}40`,
                   borderRadius: "4px 4px 2px 2px",
-                  transition: "height 0.4s ease",
-                  boxShadow: d.isCurrent ? `0 0 12px ${accentColor}60` : "none",
-                  border: isHit && !d.isCurrent ? `1px solid ${accentColor}80` : "none",
+                  transition: "height 0.4s ease, background 0.2s ease, box-shadow 0.2s ease",
+                  boxShadow: isSelected ? `0 0 12px ${accentColor}60` : "none",
+                  border: isHit && !isSelected ? `1px solid ${accentColor}80` : "none",
                 }}
               />
               <div
                 style={{
                   fontSize: 9,
                   fontWeight: 600,
-                  color: d.isCurrent ? "rgba(255,255,255,0.7)" : "rgba(255,255,255,0.3)",
+                  color: isSelected ? "rgba(255,255,255,0.7)" : "rgba(255,255,255,0.3)",
                   letterSpacing: "0.5px",
                   textAlign: "center",
                 }}
               >
                 {d.label}
               </div>
+            </>
+          );
+          if (typeof onBarClick === "function") {
+            return (
+              <button key={i} type="button" onClick={() => onBarClick(i)} style={colStyles}>
+                {inner}
+              </button>
+            );
+          }
+          return (
+            <div key={i} style={colStyles}>
+              {inner}
             </div>
           );
         })}

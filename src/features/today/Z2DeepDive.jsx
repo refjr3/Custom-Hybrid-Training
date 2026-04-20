@@ -22,6 +22,11 @@ export const Z2DeepDive = ({ open, onClose, supabase, dataSources }) => {
   const [loading, setLoading] = useState(true);
   const [currentWeekMinutes, setCurrentWeekMinutes] = useState(null);
   const [currentWeekActivities, setCurrentWeekActivities] = useState([]);
+  const [selectedWeekIndex, setSelectedWeekIndex] = useState(3);
+
+  useEffect(() => {
+    if (open) setSelectedWeekIndex(3);
+  }, [open]);
 
   useEffect(() => {
     if (!open) return;
@@ -84,6 +89,8 @@ export const Z2DeepDive = ({ open, onClose, supabase, dataSources }) => {
     weekStart.setDate(currentWeekStart.getDate() - (3 - w) * 7);
     const weekEnd = new Date(weekStart);
     weekEnd.setDate(weekEnd.getDate() + 6);
+    const fmtShort = (d) => d.toLocaleDateString("en-US", { month: "short", day: "numeric" });
+    const rangeLabel = `${fmtShort(weekStart)} – ${fmtShort(weekEnd)}`;
     const weekMetrics = metrics.filter((m) => {
       const d = new Date(m.date);
       d.setHours(0, 0, 0, 0);
@@ -96,12 +103,12 @@ export const Z2DeepDive = ({ open, onClose, supabase, dataSources }) => {
       value: total,
       isCurrent: w === 3,
       metrics: weekMetrics,
+      rangeLabel,
     });
   }
 
   if (currentWeekMinutes != null && weeks.length > 0) {
     weeks[weeks.length - 1].value = currentWeekMinutes;
-    weeks[weeks.length - 1].activities = currentWeekActivities;
   }
 
   const currentWeek = weeks[3] || { value: 0, metrics: [], activities: [] };
@@ -114,9 +121,28 @@ export const Z2DeepDive = ({ open, onClose, supabase, dataSources }) => {
   const dow = now.getDay();
   const dayIdx = dow === 0 ? 7 : dow;
 
+  const selectedWeek = weeks[selectedWeekIndex] || currentWeek;
+  const isCurrentWeekSelected = selectedWeekIndex === 3;
+
   const sessionRowsFromStrava = Array.isArray(currentWeekActivities) ? currentWeekActivities : [];
-  const sessionRowsFromMetrics = (currentWeek.metrics || []).filter((m) => m.z2_minutes > 0);
-  const useStravaSessions = sessionRowsFromStrava.length > 0;
+  const sessionRowsFromMetrics = (currentWeek.metrics || []).filter((m) => (m.z2_minutes || 0) > 0);
+  const pastWeekDayRows = !isCurrentWeekSelected
+    ? [...(selectedWeek.metrics || [])]
+        .filter((m) => (m.z2_minutes || 0) > 0)
+        .sort((a, b) => String(a.date || "").localeCompare(String(b.date || "")))
+    : [];
+
+  const useStravaSessions = isCurrentWeekSelected && sessionRowsFromStrava.length > 0;
+  const useDayRollupRows =
+    !useStravaSessions &&
+    (isCurrentWeekSelected ? sessionRowsFromMetrics.length > 0 : pastWeekDayRows.length > 0);
+  const dayRollupList = isCurrentWeekSelected ? sessionRowsFromMetrics : pastWeekDayRows;
+
+  const sessionsSectionLabel = isCurrentWeekSelected
+    ? "This Week's Sessions"
+    : selectedWeek.rangeLabel
+      ? `Week of ${selectedWeek.rangeLabel}`
+      : "Sessions";
 
   return (
     <DeepDiveModal
@@ -209,6 +235,8 @@ export const Z2DeepDive = ({ open, onClose, supabase, dataSources }) => {
         baselineValue={baselineWeeklyZ2 != null ? Math.round(Number(baselineWeeklyZ2)) : null}
         accentColor="#C9A875"
         showValues
+        onBarClick={(i) => setSelectedWeekIndex(i)}
+        selectedIndex={selectedWeekIndex}
       />
 
       <div style={{ display: "flex", gap: 8, marginTop: 16 }}>
@@ -217,7 +245,7 @@ export const Z2DeepDive = ({ open, onClose, supabase, dataSources }) => {
         <StatTile label="Target" value={target} unit="min" accent="#C9A875" />
       </div>
 
-      <SectionLabel>{"This Week's Sessions"}</SectionLabel>
+      <SectionLabel>{sessionsSectionLabel}</SectionLabel>
       <div
         style={{
           background: "rgba(255,255,255,0.03)",
@@ -229,21 +257,24 @@ export const Z2DeepDive = ({ open, onClose, supabase, dataSources }) => {
         {useStravaSessions ? (
           sessionRowsFromStrava.map((a, i, arr) => (
             <div
-              key={`${a.name}-${a.date}-${i}`}
+              key={`${a.name}-${a.dateYmd || a.date}-${i}`}
               style={{
                 display: "flex",
                 justifyContent: "space-between",
-                alignItems: "center",
+                alignItems: "flex-start",
+                gap: 12,
                 padding: "12px 16px",
                 borderBottom: i < arr.length - 1 ? "1px solid rgba(255,255,255,0.05)" : "none",
               }}
             >
-              <div>
+              <div style={{ flex: 1, minWidth: 0 }}>
                 <div style={{ fontSize: 12, fontWeight: 600, color: "rgba(255,255,255,0.7)" }}>
+                  {a.dateHeading ? `${a.dateHeading} · ` : ""}
                   {a.name || "Activity"}
                 </div>
                 <div style={{ fontSize: 10, color: "rgba(255,255,255,0.25)", marginTop: 2 }}>
-                  {a.type || "Workout"} · {a.date || ""}
+                  {a.type || "Workout"}
+                  {typeof a.distance_mi === "number" && a.distance_mi > 0 ? ` · ${a.distance_mi} mi` : ""}
                 </div>
               </div>
               <div
@@ -251,16 +282,29 @@ export const Z2DeepDive = ({ open, onClose, supabase, dataSources }) => {
                   fontFamily: "'DM Serif Display', serif",
                   fontSize: 18,
                   color: "#C9A875",
+                  flexShrink: 0,
+                  textAlign: "right",
+                  lineHeight: 1.2,
                 }}
               >
-                {a.z2Minutes ?? 0}{" "}
-                <span style={{ fontSize: 10, fontFamily: "'DM Sans', sans-serif", color: "rgba(255,255,255,0.3)" }}>
-                  min Z2
-                </span>
+                {a.z2Minutes ?? 0}m Z2
+                {a.total_min != null && Number(a.total_min) > 0 ? (
+                  <div
+                    style={{
+                      fontSize: 9,
+                      fontFamily: "'DM Sans', sans-serif",
+                      color: "rgba(255,255,255,0.28)",
+                      fontWeight: 500,
+                      marginTop: 2,
+                    }}
+                  >
+                    {a.total_min} min total
+                  </div>
+                ) : null}
               </div>
             </div>
           ))
-        ) : sessionRowsFromMetrics.length === 0 ? (
+        ) : !useDayRollupRows ? (
           <div
             style={{
               padding: 20,
@@ -269,42 +313,34 @@ export const Z2DeepDive = ({ open, onClose, supabase, dataSources }) => {
               color: "rgba(255,255,255,0.3)",
             }}
           >
-            No Z2 activities logged this week yet
+            {isCurrentWeekSelected
+              ? "No Z2 activities logged this week yet"
+              : "No Z2 in this week (from synced totals)"}
           </div>
         ) : (
-          sessionRowsFromMetrics.map((m, i, arr) => {
-            const d = new Date(m.date);
+          dayRollupList.map((m, i, arr) => {
+            const d = new Date(`${String(m.date).slice(0, 10)}T12:00:00`);
             const dayName = d.toLocaleDateString("en-US", { weekday: "short" });
+            const cal = d.toLocaleDateString("en-US", { month: "short", day: "numeric" });
             return (
               <div
                 key={m.date}
                 style={{
                   display: "flex",
                   justifyContent: "space-between",
-                  alignItems: "center",
+                  alignItems: "flex-start",
+                  gap: 12,
                   padding: "12px 16px",
                   borderBottom: i < arr.length - 1 ? "1px solid rgba(255,255,255,0.05)" : "none",
                 }}
               >
-                <div>
+                <div style={{ flex: 1, minWidth: 0 }}>
                   <div style={{ fontSize: 12, fontWeight: 600, color: "rgba(255,255,255,0.7)" }}>
-                    {dayName} · {d.toLocaleDateString("en-US", { month: "short", day: "numeric" })}
+                    {dayName} {cal} · {m.z2_minutes} min Z2
                   </div>
                   <div style={{ fontSize: 10, color: "rgba(255,255,255,0.25)", marginTop: 2 }}>
                     {m.total_activity_min || 0} min total activity
                   </div>
-                </div>
-                <div
-                  style={{
-                    fontFamily: "'DM Serif Display', serif",
-                    fontSize: 18,
-                    color: "#C9A875",
-                  }}
-                >
-                  {m.z2_minutes}{" "}
-                  <span style={{ fontSize: 10, fontFamily: "'DM Sans', sans-serif", color: "rgba(255,255,255,0.3)" }}>
-                    min Z2
-                  </span>
                 </div>
               </div>
             );
