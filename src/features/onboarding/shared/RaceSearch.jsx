@@ -1,7 +1,12 @@
 import { useEffect, useRef, useState } from "react";
 import { GlassInput } from "./Inputs.jsx";
 
-export default function RaceSearch({ supabase, sport, placeholder, onSelectRace }) {
+/**
+ * @param {(race: { name: string; race_date?: string | null; sport?: string; city?: string; country?: string }) => void} [onSelect]
+ * @param {(race: object) => void} [onSelectRace] — alias for onSelect
+ */
+export default function RaceSearch({ supabase, sport, placeholder, onSelect, onSelectRace }) {
+  const notify = onSelect || onSelectRace;
   const [q, setQ] = useState("");
   const [results, setResults] = useState([]);
   const [loading, setLoading] = useState(false);
@@ -42,6 +47,17 @@ export default function RaceSearch({ supabase, sport, placeholder, onSelectRace 
     };
   }, [q, sport, supabase]);
 
+  const pickRace = (race) => {
+    if (!notify) return;
+    notify({
+      target_race_name: race.name,
+      target_race_date: race.race_date ?? "",
+      primary_sport: race.sport || undefined,
+    });
+    setQ(race.name || "");
+    setResults([]);
+  };
+
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
       <GlassInput value={q} onChange={(e) => setQ(e.target.value)} placeholder={placeholder || "Search races…"} />
@@ -58,9 +74,10 @@ export default function RaceSearch({ supabase, sport, placeholder, onSelectRace 
         >
           {results.map((r) => (
             <button
-              key={r.id}
+              key={r.id || `${r.name}-${r.race_date}-${r.city}`}
               type="button"
-              onClick={() => onSelectRace(r)}
+              onMouseDown={(e) => e.preventDefault()}
+              onClick={() => pickRace(r)}
               style={{
                 display: "block",
                 width: "100%",

@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useRef, useEffect } from "react";
 import { GlassInput, GlassSelect, PrimaryButton, SecondaryButton, GlassCard } from "./shared/Inputs.jsx";
 import RaceSearch from "./shared/RaceSearch.jsx";
 import { getHyroxAgeBracket, getStandardAgeGroup } from "./shared/ageBrackets.js";
@@ -21,13 +21,18 @@ function dobFromProfile(profile) {
 
 export default function Step4RaceSearch({ profile, supabase, value, onChange, onNext, saving, error }) {
   const v = value || {};
+  const vRef = useRef(v);
+  useEffect(() => {
+    vRef.current = v;
+  }, [v]);
+
   const [manual, setManual] = useState(false);
   const cat = CATEGORIES.find((c) => c.id === v.event_category) || null;
   const sportFilter = cat?.sport || "";
   const dob = dobFromProfile(profile);
   const raceDate = v.target_race_date || null;
 
-  const set = (patch) => onChange({ ...v, ...patch });
+  const set = (patch) => onChange({ ...vRef.current, ...patch });
 
   const canNext = () => {
     if (!v.event_category) return false;
@@ -38,14 +43,18 @@ export default function Step4RaceSearch({ profile, supabase, value, onChange, on
     return true;
   };
 
-  const handlePick = (row) => {
-    set({
-      target_race_name: row.name,
-      target_race_date: row.race_date || v.target_race_date || "",
-      primary_sport: row.sport || v.event_category,
+  const handleRaceSelect = (raceData) => {
+    const cur = vRef.current;
+    onChange({
+      ...cur,
+      ...raceData,
+      primary_sport: raceData.primary_sport || cur.primary_sport || cur.event_category,
     });
     setManual(false);
   };
+
+  const showSelectedCard =
+    Boolean(String(v.target_race_name || "").trim()) && !manual && v.event_category && v.event_category !== "other";
 
   return (
     <GlassCard style={{ display: "flex", flexDirection: "column", gap: 14 }}>
@@ -70,8 +79,29 @@ export default function Step4RaceSearch({ profile, supabase, value, onChange, on
             supabase={supabase}
             sport={sportFilter || undefined}
             placeholder={`Search ${cat?.label || ""} races…`}
-            onSelectRace={handlePick}
+            onSelect={handleRaceSelect}
           />
+          {showSelectedCard ? (
+            <div
+              style={{
+                fontSize: 13,
+                lineHeight: 1.45,
+                color: "rgba(201,168,117,0.95)",
+                padding: "12px 14px",
+                borderRadius: 12,
+                background: "rgba(201,168,117,0.1)",
+                border: "1px solid rgba(201,168,117,0.28)",
+              }}
+            >
+              <div style={{ fontSize: 10, letterSpacing: "0.6px", color: "rgba(255,255,255,0.45)", textTransform: "uppercase", marginBottom: 4 }}>Selected</div>
+              <strong style={{ fontWeight: 600 }}>{v.target_race_name}</strong>
+              {v.target_race_date ? (
+                <span style={{ color: "rgba(255,255,255,0.55)" }}>{` on ${v.target_race_date}`}</span>
+              ) : (
+                <span style={{ color: "rgba(255,255,255,0.45)" }}> · date TBD</span>
+              )}
+            </div>
+          ) : null}
         </>
       ) : null}
 
@@ -194,7 +224,13 @@ export default function Step4RaceSearch({ profile, supabase, value, onChange, on
       ) : null}
 
       {error ? <div style={{ fontSize: 12, color: "#ff6b6b" }}>{error}</div> : null}
-      <PrimaryButton onClick={() => canNext() && onNext(v)} disabled={!canNext() || saving}>
+      <PrimaryButton
+        onClick={() => {
+          if (!canNext()) return;
+          onNext({ ...vRef.current });
+        }}
+        disabled={!canNext() || saving}
+      >
         {saving ? "Saving…" : "NEXT"}
       </PrimaryButton>
     </GlassCard>
