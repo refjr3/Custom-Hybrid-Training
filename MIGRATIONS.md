@@ -62,6 +62,7 @@ Not part of the numbered sequence above:
 |------|-------------|
 | `supabase/migrate_custom_sessions.sql` | Same logical change as `004_custom_sessions.sql` (duplicate copy for manual runs). |
 | `supabase/seed_supplements.sql` | Creates `supplements` table + example `INSERT` rows (includes a fixed demo `user_id`). |
+| `supabase/seed_races.sql` | Manual seed for `races_catalog` after **029** (HYROX, triathlon, marathons, OCR, CrossFit, etc.). |
 
 ## Audit notes (2026-04)
 
