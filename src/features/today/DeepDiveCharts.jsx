@@ -54,15 +54,44 @@ export const TrendDots = ({
   const tappedDot = tappedIndex != null ? data[tappedIndex] : null;
   const xDenom = Math.max(data.length - 1, 1);
 
-  const polylinePoints = data
-    .map((d, i) => {
-      if (d.value == null || Number.isNaN(Number(d.value))) return null;
+  const segments = [];
+  let currentSegment = [];
+  data.forEach((d, i) => {
+    const ok = d.value != null && !Number.isNaN(Number(d.value));
+    if (ok) {
       const x = (i / xDenom) * 100;
       const y = 100 - ((Number(d.value) - min) / range) * 100;
-      return `${x},${y}`;
-    })
-    .filter(Boolean)
-    .join(" ");
+      currentSegment.push(`${x},${y}`);
+    } else {
+      if (currentSegment.length > 1) segments.push(currentSegment.join(" "));
+      currentSegment = [];
+    }
+  });
+  if (currentSegment.length > 1) segments.push(currentSegment.join(" "));
+
+  const gapSegments = [];
+  let gapStart = null;
+  let gapCount = 0;
+  data.forEach((d, i) => {
+    const invalid = d.value == null || Number.isNaN(Number(d.value));
+    if (invalid) {
+      if (gapStart === null) gapStart = i;
+      gapCount += 1;
+    } else {
+      if (gapCount >= 3 && gapStart != null && gapStart > 0) {
+        const startX = ((gapStart - 1) / xDenom) * 100;
+        const endX = (i / xDenom) * 100;
+        gapSegments.push({ startX, endX });
+      }
+      gapStart = null;
+      gapCount = 0;
+    }
+  });
+  if (gapCount >= 3 && gapStart != null && gapStart > 0) {
+    const startX = ((gapStart - 1) / xDenom) * 100;
+    const endX = 100;
+    gapSegments.push({ startX, endX });
+  }
 
   return (
     <div style={{ position: "relative", marginTop: 20 }}>
@@ -132,15 +161,17 @@ export const TrendDots = ({
             <div
               style={{
                 position: "absolute",
-                right: -2,
-                top: `calc(${baselineY}% - 8px)`,
+                right: 4,
+                top: `calc(${baselineY}% - 10px)`,
                 fontSize: 8,
                 fontWeight: 600,
                 color: "rgba(201,168,117,0.55)",
                 letterSpacing: "1px",
-                background: "rgba(13,14,16,0.7)",
-                padding: "1px 5px",
+                background: "rgba(13,14,16,0.9)",
+                padding: "2px 6px",
                 borderRadius: 3,
+                zIndex: 5,
+                pointerEvents: "none",
               }}
             >
               BASE
@@ -158,17 +189,33 @@ export const TrendDots = ({
             pointerEvents: "none",
           }}
         >
-          {polylinePoints ? (
+          {segments.map((pts, segI) => (
             <polyline
-              points={polylinePoints}
+              key={segI}
+              points={pts}
               fill="none"
               stroke="rgba(201,168,117,0.35)"
               strokeWidth="1.5"
               vectorEffect="non-scaling-stroke"
               preserveAspectRatio="none"
             />
-          ) : null}
+          ))}
         </svg>
+
+        {gapSegments.map((g, gi) => (
+          <div
+            key={`gap-${gi}`}
+            style={{
+              position: "absolute",
+              left: `${g.startX}%`,
+              width: `${Math.max(g.endX - g.startX, 0.5)}%`,
+              bottom: -4,
+              height: 2,
+              background: "repeating-linear-gradient(90deg, rgba(255,255,255,0.15) 0 3px, transparent 3px 6px)",
+              pointerEvents: "none",
+            }}
+          />
+        ))}
 
         {data.map((d, i) => {
           if (d.value == null || Number.isNaN(Number(d.value))) return null;
