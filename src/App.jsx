@@ -13,6 +13,7 @@ import { ConnectPrompt } from "./features/today/ConnectPrompt.jsx";
 import { RecoveryDeepDive } from "./features/today/RecoveryDeepDive.jsx";
 import { Z2DeepDive } from "./features/today/Z2DeepDive.jsx";
 import { SleepDeepDive } from "./features/today/SleepDeepDive.jsx";
+
 const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
 const supabaseKey = import.meta.env.VITE_SUPABASE_ANON_KEY;
 
@@ -655,100 +656,6 @@ function getDeviceLocalTomorrowYmd() {
   const d = new Date();
   d.setDate(d.getDate() + 1);
   return formatLocalYmd(d);
-}
-
-/** Context for POST /api/synthesis/morning { mode: "brief" } (plan + wearable aggregates). */
-function buildMorningBriefApiContext({
-  planBlocks,
-  whoopData,
-  profile,
-  garminActivities,
-  unifiedMetrics,
-  stravaConnected,
-  stravaWeeklyZ2Minutes,
-}) {
-  const perfHdr = derivePerfPlanHeader(planBlocks);
-  const recovery = whoopData?.recovery?.score ?? null;
-  const hrvMilli = whoopData?.recovery?.hrv_rmssd_milli ?? whoopData?.recovery?.hrv;
-  const hrv =
-    hrvMilli != null && Number.isFinite(Number(hrvMilli)) ? Math.round(Number(hrvMilli)) : null;
-  const sleep = whoopData?.sleep?.score ?? null;
-  const rhrRaw = whoopData?.recovery?.resting_heart_rate ?? whoopData?.recovery?.rhr;
-  const rhr =
-    rhrRaw != null && Number.isFinite(Number(rhrRaw)) ? Math.round(Number(rhrRaw)) : null;
-
-  let todaySession = null;
-  let tomorrowSession = null;
-  let complianceThisWeek = 0;
-  let weeklyZ2Minutes = 0;
-  if (stravaConnected && stravaWeeklyZ2Minutes != null && Number.isFinite(Number(stravaWeeklyZ2Minutes))) {
-    weeklyZ2Minutes = Math.max(0, Math.round(Number(stravaWeeklyZ2Minutes)));
-  }
-
-  if (!Array.isArray(planBlocks) || planBlocks.length === 0) {
-    return {
-      recovery,
-      hrv,
-      sleep,
-      rhr,
-      todaySession,
-      tomorrowSession,
-      weekNum: perfHdr?.currentWeekNum ?? 1,
-      phase: perfHdr?.currentPhase || "Training",
-      daysToRace: null,
-      weeklyZ2Minutes: Math.round(weeklyZ2Minutes),
-      complianceThisWeek,
-    };
-  }
-
-  const todayDateIso = getDeviceLocalTodayYmd();
-  const tomorrowDateIso = getDeviceLocalTomorrowYmd();
-  const PLAN_YEAR = parseInt(String(todayDateIso || "").slice(0, 4), 10) || 2026;
-  const allPlanEntries = planBlocks
-    .flatMap((b) => (b?.weeks || []).map((w) => ({ block: b, week: w })))
-    .flatMap(({ block, week }) => (week?.days || []).map((day) => ({ block, week, day })));
-  const dayLabelToIso = (label) => {
-    if (!label) return null;
-    const parsed = new Date(`${String(label).trim()} ${PLAN_YEAR}`);
-    if (Number.isNaN(parsed.getTime())) return null;
-    return formatLocalYmd(parsed);
-  };
-  const todayEntry = allPlanEntries.find(({ day }) => dayLabelToIso(day?.date || day?.date_label) === todayDateIso) || null;
-  const tomorrowEntry = allPlanEntries.find(({ day }) => dayLabelToIso(day?.date || day?.date_label) === tomorrowDateIso) || null;
-  const currentWeekDays = todayEntry?.week?.days || [];
-  const todayCardData = todayEntry?.day || null;
-  const tomorrowDayData = tomorrowEntry?.day || null;
-
-  todaySession = todayCardData?.am_session_custom ?? null;
-  tomorrowSession = tomorrowDayData?.am_session_custom ?? null;
-
-  complianceThisWeek = currentWeekDays.filter((d) => {
-    const iso = dayLabelToIso(d?.date || d?.date_label);
-    if (!iso) return false;
-    return dayHasCompletionSignal(iso, d, garminActivities, unifiedMetrics);
-  }).length;
-
-  const racesList = Array.isArray(profile?.races) ? profile.races : [];
-  const primaryRace = racesList.find((r) => r?.is_primary && r?.date) || racesList.find((r) => r?.date) || null;
-  const raceDate = primaryRace?.date || profile?.target_race_date || null;
-  const raceDateObj = raceDate ? new Date(`${raceDate}T00:00:00`) : null;
-  const todayStart = new Date();
-  todayStart.setHours(0, 0, 0, 0);
-  const daysAway = raceDateObj ? Math.max(0, Math.ceil((raceDateObj.getTime() - todayStart.getTime()) / (1000 * 60 * 60 * 24))) : null;
-
-  return {
-    recovery,
-    hrv,
-    sleep,
-    rhr,
-    todaySession,
-    tomorrowSession,
-    weekNum: perfHdr?.currentWeekNum ?? 1,
-    phase: perfHdr?.currentPhase || "Training",
-    daysToRace: daysAway,
-    weeklyZ2Minutes: Math.round(weeklyZ2Minutes),
-    complianceThisWeek,
-  };
 }
 
 function PerfIntervalsBlocks({ trends, C, glow }) {
@@ -2779,7 +2686,7 @@ export default function App() {
   const [proactiveMessages, setProactiveMessages] = useState([]);
   const [proactiveBadge, setProactiveBadge] = useState(0);
   const [weeklyReview, setWeeklyReview] = useState(null);
-  const [coachBrief, setCoachBrief] = useState("");
+  const [coachSynthesis, setCoachSynthesis] = useState(null);
   const [coachBriefLoading, setCoachBriefLoading] = useState(false);
   const [coachExpandSignal, setCoachExpandSignal] = useState(0);
   const [showReadinessBreakdown, setShowReadinessBreakdown] = useState(false);
@@ -3457,42 +3364,21 @@ export default function App() {
     (async () => {
       setCoachBriefLoading(true);
       try {
-        const ctx = buildMorningBriefApiContext({
-          planBlocks,
-          whoopData,
-          profile,
-          garminActivities,
-          unifiedMetrics,
-          stravaConnected,
-          stravaWeeklyZ2Minutes,
-        });
-        const res = await fetch("/api/synthesis/morning", {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-            Authorization: `Bearer ${session.access_token}`,
-          },
-          body: JSON.stringify({
-            mode: "brief",
-            recovery: ctx.recovery,
-            hrv: ctx.hrv,
-            sleep: ctx.sleep,
-            rhr: ctx.rhr,
-            todaySession: typeof ctx.todaySession === "string" ? ctx.todaySession.split("\n")[0] : ctx.todaySession,
-            tomorrowSession: typeof ctx.tomorrowSession === "string" ? ctx.tomorrowSession.split("\n")[0] : ctx.tomorrowSession,
-            weekNum: ctx.weekNum,
-            phase: ctx.phase,
-            daysToRace: ctx.daysToRace,
-            weeklyZ2Minutes: ctx.weeklyZ2Minutes,
-            complianceThisWeek: ctx.complianceThisWeek,
-          }),
+        const res = await fetch("/api/synthesis/daily", {
+          headers: { Authorization: `Bearer ${session.access_token}` },
         });
         const data = await res.json().catch(() => ({}));
-        if (!cancelled) {
-          setCoachBrief(typeof data.brief === "string" ? data.brief : "");
+        if (!cancelled && data?.headline) {
+          setCoachSynthesis({
+            headline: data.headline,
+            summary: typeof data.summary === "string" ? data.summary : "",
+            action: typeof data.action === "string" ? data.action : "",
+          });
+        } else if (!cancelled) {
+          setCoachSynthesis(null);
         }
       } catch {
-        if (!cancelled) setCoachBrief("");
+        if (!cancelled) setCoachSynthesis(null);
       } finally {
         if (!cancelled) setCoachBriefLoading(false);
       }
@@ -3500,16 +3386,7 @@ export default function App() {
     return () => {
       cancelled = true;
     };
-  }, [
-    session?.access_token,
-    planBlocks,
-    whoopData,
-    profile,
-    garminActivities,
-    unifiedMetrics,
-    stravaConnected,
-    stravaWeeklyZ2Minutes,
-  ]);
+  }, [session?.access_token, profile?.user_id, profile?.time_zone]);
 
   // Proactive Coaching: check HRV trend + Sunday weekly review
   useEffect(() => {
@@ -4656,16 +4533,58 @@ export default function App() {
               <div style={{ padding: "20px 22px", position: "relative", zIndex: 1 }}>
                 <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 14 }}>
                   <div style={{ fontSize: 9, fontWeight: 600, color: "rgba(255,255,255,0.22)", letterSpacing: "2.5px", textTransform: "uppercase", fontFamily: C.fs }}>AI Coach</div>
-                  <div style={{ fontSize: 9, color: "rgba(255,255,255,0.18)", letterSpacing: "1px", fontFamily: C.fs }}>Today&apos;s brief</div>
+                  <div style={{ fontSize: 9, color: "rgba(255,255,255,0.18)", letterSpacing: "1px", fontFamily: C.fs }}>{"Today's brief"}</div>
                 </div>
                 {coachBriefLoading ? (
                   <div style={{ height: 60, background: "rgba(255,255,255,0.04)", borderRadius: 10, animation: "coach-brief-pulse 2s ease-in-out infinite" }} />
                 ) : (
                   <>
-                    <div style={{ fontSize: 14, fontWeight: 400, color: "rgba(255,255,255,0.78)", lineHeight: 1.6, letterSpacing: "-0.1px", marginBottom: 16, fontFamily: C.fs }}>
-                      {coachBrief || "Your coach is reviewing your data..."}
-                    </div>
-                    <div style={{ display: "flex", gap: 8 }}>
+                    {coachSynthesis?.headline && (
+                      <div
+                        style={{
+                          marginBottom: 10,
+                          fontSize: 15,
+                          fontWeight: 600,
+                          color: "rgba(255,255,255,0.85)",
+                          letterSpacing: "-0.3px",
+                        }}
+                      >
+                        {coachSynthesis.headline}
+                      </div>
+                    )}
+                    {coachSynthesis?.summary && (
+                      <div
+                        style={{
+                          fontSize: 13,
+                          color: "rgba(255,255,255,0.55)",
+                          lineHeight: 1.55,
+                          marginBottom: coachSynthesis?.action ? 10 : 0,
+                        }}
+                      >
+                        {coachSynthesis.summary}
+                      </div>
+                    )}
+                    {coachSynthesis?.action && (
+                      <div style={{ fontSize: 12, color: "rgba(201,168,117,0.85)", lineHeight: 1.55, fontWeight: 500 }}>
+                        → {coachSynthesis.action}
+                      </div>
+                    )}
+                    {!coachSynthesis?.headline && (
+                      <div
+                        style={{
+                          fontSize: 14,
+                          fontWeight: 400,
+                          color: "rgba(255,255,255,0.78)",
+                          lineHeight: 1.6,
+                          letterSpacing: "-0.1px",
+                          marginBottom: 16,
+                          fontFamily: C.fs,
+                        }}
+                      >
+                        Your coach is reviewing your data...
+                      </div>
+                    )}
+                    <div style={{ display: "flex", gap: 8, marginTop: coachSynthesis?.headline || coachSynthesis?.summary || coachSynthesis?.action ? 14 : 0 }}>
                       <button
                         type="button"
                         onClick={() => setCoachExpandSignal((s) => s + 1)}
