@@ -2,8 +2,14 @@ import { useState, useEffect } from "react";
 import { DeepDiveModal } from "./DeepDiveModal.jsx";
 import { TrendDots, WeeklyBars, StatTile, SectionLabel, InsightCard } from "./DeepDiveCharts.jsx";
 
+function normalizeBaselinesPayload(json) {
+  if (!json || typeof json !== "object" || json.error) return null;
+  return json;
+}
+
 export const SleepDeepDive = ({ open, onClose, supabase, dataSources }) => {
   const [metrics, setMetrics] = useState([]);
+  const [baselines, setBaselines] = useState(null);
 
   useEffect(() => {
     if (!open) return;
@@ -11,15 +17,20 @@ export const SleepDeepDive = ({ open, onClose, supabase, dataSources }) => {
       const {
         data: { session },
       } = await supabase.auth.getSession();
+      const headers = { Authorization: `Bearer ${session?.access_token}` };
       const end = new Date().toISOString().slice(0, 10);
       const startD = new Date();
       startD.setDate(startD.getDate() - 29);
       const start = startD.toISOString().slice(0, 10);
-      const res = await fetch(`/api/metrics/range?start=${start}&end=${end}`, {
-        headers: { Authorization: `Bearer ${session?.access_token}` },
-      });
-      const data = await res.json();
-      setMetrics(Array.isArray(data) ? data : []);
+
+      const [metricsRes, baselinesRes] = await Promise.all([
+        fetch(`/api/metrics/range?start=${start}&end=${end}`, { headers }),
+        fetch("/api/metrics/baselines", { headers }),
+      ]);
+      const metricsData = await metricsRes.json();
+      const baselinesData = await baselinesRes.json();
+      setMetrics(Array.isArray(metricsData) ? metricsData : []);
+      setBaselines(normalizeBaselinesPayload(baselinesData));
     })();
   }, [open, supabase]);
 
@@ -33,7 +44,11 @@ export const SleepDeepDive = ({ open, onClose, supabase, dataSources }) => {
   }));
   if (last7.length > 0) last7[last7.length - 1].isCurrent = true;
 
+  const last7Minutes = last7.map((n) => ({ ...n, value: n.value * 60 }));
+  const last7Max = Math.max(600, ...last7Minutes.map((n) => n.value || 0), 420);
+
   const scoreDots = metrics.map((m) => ({
+    date: m.date,
     value: m.sleep_score,
     color: "#9B8FD1",
   }));
@@ -52,6 +67,41 @@ export const SleepDeepDive = ({ open, onClose, supabase, dataSources }) => {
   const remPct = totalMin ? ((today?.sleep_rem_min || 0) / totalMin) * 100 : 0;
   const lightPct = totalMin ? ((today?.sleep_light_min || 0) / totalMin) * 100 : 0;
   const awakePct = totalMin ? ((today?.sleep_awake_min || 0) / totalMin) * 100 : 0;
+
+  const durationThreshold = (() => {
+    if (hours == null) return null;
+    if (hours >= 7) return { color: "green", text: "Adequate" };
+    if (hours >= 6) return { color: "amber", text: "Short" };
+    return { color: "red", text: "Insufficient" };
+  })();
+
+  const deepThreshold = (() => {
+    if (!today?.sleep_deep_min || baselines?.baseline_sleep_deep_min == null) return null;
+    const delta = today.sleep_deep_min - baselines.baseline_sleep_deep_min;
+    if (delta < -10) return { color: "amber", text: `${Math.abs(Math.round(delta))}min below baseline` };
+    if (delta > 10) return { color: "green", text: `${Math.round(delta)}min above baseline` };
+    return { color: "green", text: "Typical" };
+  })();
+
+  const awakeThreshold = (() => {
+    if (today?.sleep_awake_min == null) return null;
+    const base = baselines?.baseline_sleep_awake_min ?? 20;
+    if (today.sleep_awake_min > base + 25) return { color: "red", text: "Highly disrupted" };
+    if (today.sleep_awake_min > base + 10) return { color: "amber", text: `${Math.round(today.sleep_awake_min - base)}min above baseline` };
+    return { color: "green", text: "Normal" };
+  })();
+
+  const scoreValues = metrics.map((m) => m.sleep_score).filter((v) => v != null && !Number.isNaN(Number(v)));
+  const scoreAvg = scoreValues.length
+    ? Math.round(scoreValues.reduce((a, b) => a + Number(b), 0) / scoreValues.length)
+    : null;
+  const scoreAnnotation =
+    scoreAvg != null ? `30-night avg score ${scoreAvg}` : "Wear your ring or strap consistently for a score trend.";
+
+  const last7Annotation =
+    hours != null && hours < 7
+      ? "Under 7h nights — prioritize earlier bedtimes."
+      : "Bars are total time in bed (hours). Line marks 7h target.";
 
   return (
     <DeepDiveModal
@@ -77,11 +127,13 @@ export const SleepDeepDive = ({ open, onClose, supabase, dataSources }) => {
           }}
         >
           {hours ? Math.floor(hours) : "—"}
-          {hours && <span style={{ fontSize: 32, color: "rgba(155,143,209,0.5)" }}>h</span>}
-          {hours && <span style={{ fontFamily: "'DM Sans', sans-serif", fontSize: 24 }}>{Math.round((hours % 1) * 60)}</span>}
-          {hours && <span style={{ fontSize: 18, color: "rgba(155,143,209,0.5)" }}>m</span>}
+          {hours ? <span style={{ fontSize: 32, color: "rgba(155,143,209,0.5)" }}>h</span> : null}
+          {hours ? (
+            <span style={{ fontFamily: "'DM Sans', sans-serif", fontSize: 24 }}>{Math.round((hours % 1) * 60)}</span>
+          ) : null}
+          {hours ? <span style={{ fontSize: 18, color: "rgba(155,143,209,0.5)" }}>m</span> : null}
         </div>
-        {today?.sleep_score && (
+        {today?.sleep_score ? (
           <div
             style={{
               fontSize: 11,
@@ -94,10 +146,10 @@ export const SleepDeepDive = ({ open, onClose, supabase, dataSources }) => {
           >
             Score · {today.sleep_score}
           </div>
-        )}
+        ) : null}
       </div>
 
-      {totalMin > 0 && (
+      {totalMin > 0 ? (
         <>
           <SectionLabel>Sleep Architecture</SectionLabel>
           <div
@@ -130,11 +182,52 @@ export const SleepDeepDive = ({ open, onClose, supabase, dataSources }) => {
             <div style={{ color: "rgba(200,190,232,0.7)" }}>● Light {Math.round(today.sleep_light_min)}m</div>
             <div style={{ color: "rgba(255,255,255,0.3)" }}>● Awake {Math.round(today.sleep_awake_min)}m</div>
           </div>
+
+          <div style={{ display: "flex", gap: 8, marginTop: 16 }}>
+            <StatTile
+              label="Duration"
+              value={hours != null ? hours.toFixed(1) : "—"}
+              unit="hrs"
+              accent="#9B8FD1"
+              threshold={durationThreshold}
+            />
+            <StatTile
+              label="Deep"
+              value={Math.round(today?.sleep_deep_min || 0)}
+              unit="min"
+              accent="#9B8FD1"
+              threshold={deepThreshold}
+            />
+            <StatTile
+              label="Awake"
+              value={Math.round(today?.sleep_awake_min || 0)}
+              unit="min"
+              accent="#9B8FD1"
+              threshold={awakeThreshold}
+            />
+          </div>
         </>
-      )}
+      ) : null}
 
       <SectionLabel>Last 7 Nights</SectionLabel>
-      <WeeklyBars data={last7} maxValue={10} unit="hrs" accentColor="#9B8FD1" />
+      <WeeklyBars
+        data={last7Minutes}
+        maxValue={last7Max}
+        targetValue={420}
+        unit="min"
+        accentColor="#9B8FD1"
+        showValues={false}
+      />
+      <div
+        style={{
+          marginTop: 10,
+          fontSize: 11,
+          color: "rgba(255,255,255,0.4)",
+          textAlign: "center",
+        }}
+      >
+        {last7Annotation}
+      </div>
 
       <div style={{ display: "flex", gap: 8, marginTop: 16 }}>
         <StatTile label="Avg" value={(avgMin / 60).toFixed(1)} unit="hrs" accent="#9B8FD1" />
@@ -143,7 +236,14 @@ export const SleepDeepDive = ({ open, onClose, supabase, dataSources }) => {
       </div>
 
       <SectionLabel>Sleep Score · 30 Days</SectionLabel>
-      <TrendDots data={scoreDots} heightBand={60} />
+      <TrendDots
+        data={scoreDots}
+        heightBand={70}
+        yMin={0}
+        yMax={100}
+        baseline={baselines?.baseline_sleep_score}
+        annotation={scoreAnnotation}
+      />
 
       <InsightCard>
         Sleep consistency matters more than any single night. Athletes who average 7+ hours with regular bed times recover 20% faster between hard sessions.
