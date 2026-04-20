@@ -1,16 +1,8 @@
 import { PrimaryButton, SecondaryButton, GlassCard } from "./shared/Inputs.jsx";
 
 const CONNECTABLE = [
-  {
-    id: "whoop",
-    title: "WHOOP",
-    subtitle: "Recovery, HRV, sleep, strain",
-  },
-  {
-    id: "strava",
-    title: "Strava",
-    subtitle: "Coros / Polar / Suunto / Amazfit / Other watch — connect via Strava",
-  },
+  { id: "whoop", title: "WHOOP", subtitle: "Recovery, HRV, sleep, strain" },
+  { id: "strava", title: "Strava", subtitle: "Coros / Polar / Suunto / Amazfit / Other watch — connect via Strava" },
 ];
 
 const DEMAND = [
@@ -65,7 +57,7 @@ function DeviceCard({ item, selected, muted, onToggle }) {
   );
 }
 
-export default function StepDevices({ value, onChange, onNext, saving, error }) {
+export default function Step8Devices({ value, onChange, onNext, saving, error }) {
   const selected = Array.isArray(value.selected) ? value.selected : [];
   const noWearable = Boolean(value.no_wearable);
 
@@ -87,7 +79,6 @@ export default function StepDevices({ value, onChange, onNext, saving, error }) 
           <DeviceCard key={d.id} item={d} selected={selected.includes(d.id)} muted={false} onToggle={toggle} />
         ))}
       </div>
-
       <div style={{ fontSize: 11, letterSpacing: "0.8px", color: "rgba(255,255,255,0.4)", textTransform: "uppercase", marginTop: 6 }}>
         Coming soon — tap to signal interest
       </div>
@@ -96,13 +87,10 @@ export default function StepDevices({ value, onChange, onNext, saving, error }) 
           <DeviceCard key={d.id} item={d} selected={selected.includes(d.id)} muted onToggle={toggle} />
         ))}
       </div>
-
       <SecondaryButton onClick={setNoWearable} style={{ width: "100%", marginTop: 4 }}>
         I train without a wearable
       </SecondaryButton>
-
       {error ? <div style={{ fontSize: 12, color: "#ff6b6b" }}>{error}</div> : null}
-
       <PrimaryButton onClick={() => canNext && onNext(value)} disabled={!canNext || saving}>
         {saving ? "Saving…" : "NEXT"}
       </PrimaryButton>

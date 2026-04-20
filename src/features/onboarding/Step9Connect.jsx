@@ -1,4 +1,6 @@
+import { useState } from "react";
 import { PrimaryButton, SecondaryButton, GlassCard } from "./shared/Inputs.jsx";
+import { Wordmark } from "./shared/OnboardingShell.jsx";
 
 function Check() {
   return (
@@ -8,11 +10,20 @@ function Check() {
   );
 }
 
+function CheckRow({ label, ok }) {
+  return (
+    <div style={{ display: "flex", alignItems: "center", gap: 10, fontSize: 14, color: "rgba(255,255,255,0.82)" }}>
+      <span style={{ color: ok ? "#5dffa0" : "rgba(255,255,255,0.25)", fontSize: 16 }}>{ok ? "✓" : "○"}</span>
+      {label}
+    </div>
+  );
+}
+
 async function persistConnectStep(supabase, userId) {
   await supabase.from("user_profiles").update({ onboarding_step: "connect" }).eq("user_id", userId);
 }
 
-export default function StepConnect({ profile, user, supabase, selectedDevices, onContinue, saving, error, oauthWhoop, oauthStrava }) {
+export default function Step9Connect({ profile, user, supabase, selectedDevices, oauthWhoop, oauthStrava, onBuildPlan, saving, error }) {
   const uid = user?.id;
   const stravaHref = uid ? `/api/strava/login?uid=${encodeURIComponent(uid)}` : "/api/strava/login";
 
@@ -30,6 +41,9 @@ export default function StepConnect({ profile, user, supabase, selectedDevices, 
   const wantApple = selectedDevices.includes("apple_watch");
   const wantOura = selectedDevices.includes("oura");
 
+  const [building, setBuilding] = useState(false);
+  const [planErr, setPlanErr] = useState("");
+
   const startWhoop = async () => {
     await persistConnectStep(supabase, uid);
     window.location.href = "/api/auth/login";
@@ -39,6 +53,53 @@ export default function StepConnect({ profile, user, supabase, selectedDevices, 
     await persistConnectStep(supabase, uid);
     window.location.href = stravaHref;
   };
+
+  const runBuild = async () => {
+    setPlanErr("");
+    setBuilding(true);
+    try {
+      await onBuildPlan();
+    } catch (e) {
+      setPlanErr(e?.message || "Something went wrong");
+      setBuilding(false);
+    }
+  };
+
+  if (building) {
+    return (
+      <div
+        style={{
+          position: "fixed",
+          inset: 0,
+          zIndex: 2000,
+          background: "#0D0E10",
+          display: "flex",
+          flexDirection: "column",
+          alignItems: "center",
+          justifyContent: "center",
+          padding: 24,
+        }}
+      >
+        <div
+          style={{
+            position: "absolute",
+            inset: 0,
+            background:
+              "radial-gradient(ellipse 80% 55% at 50% -15%, rgba(201,168,117,0.18) 0%, transparent 55%), linear-gradient(180deg, #101115 0%, #0D0E10 45%, #0c0d10 100%)",
+            pointerEvents: "none",
+          }}
+        />
+        <div style={{ position: "relative", textAlign: "center" }}>
+          <div style={{ marginBottom: 16 }}>
+            <Wordmark />
+          </div>
+          <div style={{ fontFamily: "'DM Sans', sans-serif", fontSize: 15, fontWeight: 500, color: "rgba(255,255,255,0.55)", letterSpacing: "0.3px" }}>
+            Building your plan…
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <GlassCard style={{ display: "flex", flexDirection: "column", gap: 14 }}>
@@ -85,10 +146,21 @@ export default function StepConnect({ profile, user, supabase, selectedDevices, 
         </div>
       )}
 
-      {error ? <div style={{ fontSize: 12, color: "#ff6b6b" }}>{error}</div> : null}
+      <div style={{ fontSize: 13, color: "rgba(255,255,255,0.45)", lineHeight: 1.5 }}>You can add more integrations anytime from the menu.</div>
+      {wantWhoop || wantStrava ? (
+        <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+          {wantWhoop ? <CheckRow label="WHOOP" ok={whoopDone} /> : null}
+          {wantStrava ? <CheckRow label="Strava" ok={stravaDone} /> : null}
+        </div>
+      ) : (
+        <div style={{ fontSize: 13, color: "rgba(255,255,255,0.5)", lineHeight: 1.5 }}>No wearable connections selected — you can still build your plan.</div>
+      )}
 
-      <PrimaryButton onClick={onContinue} disabled={saving}>
-        {saving ? "Saving…" : "CONTINUE"}
+      {error ? <div style={{ fontSize: 12, color: "#ff6b6b" }}>{error}</div> : null}
+      {planErr ? <div style={{ fontSize: 12, color: "#ff6b6b" }}>{planErr}</div> : null}
+
+      <PrimaryButton onClick={runBuild} disabled={saving}>
+        Build My Plan →
       </PrimaryButton>
     </GlassCard>
   );

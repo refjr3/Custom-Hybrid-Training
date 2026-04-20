@@ -500,46 +500,6 @@ function DrawerConnections({
                 Skip Onboarding
               </button>
             </div>
-            <div style={{ display: "flex", gap: 8, marginTop: 8 }}>
-              <button
-                type="button"
-                onClick={() => {
-                  window.location.href = "/?preview=step3&focus=competing";
-                }}
-                style={{
-                  flex: 1,
-                  background: "rgba(200,200,255,0.1)",
-                  border: "1px solid rgba(200,200,255,0.25)",
-                  borderRadius: 10,
-                  padding: "9px",
-                  fontSize: 11,
-                  fontWeight: 600,
-                  color: "rgba(200,200,255,0.9)",
-                  cursor: "pointer",
-                }}
-              >
-                Preview Step 3 · Competing
-              </button>
-              <button
-                type="button"
-                onClick={() => {
-                  window.location.href = "/?preview=step3&focus=return";
-                }}
-                style={{
-                  flex: 1,
-                  background: "rgba(200,200,255,0.1)",
-                  border: "1px solid rgba(200,200,255,0.25)",
-                  borderRadius: 10,
-                  padding: "9px",
-                  fontSize: 11,
-                  fontWeight: 600,
-                  color: "rgba(200,200,255,0.9)",
-                  cursor: "pointer",
-                }}
-              >
-                Preview Step 3 · Return
-              </button>
-            </div>
           </div>
         )}
         {renderConnectCard({

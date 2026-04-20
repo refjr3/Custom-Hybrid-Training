@@ -1,14 +1,34 @@
 /**
  * Full-screen onboarding frame: wordmark, volumetric haze, step rail, optional back.
- * Phase 4.1 — used by OnboardingFlow in later commits.
  */
 
-const STEP_KEYS = ["profile", "goals", "devices", "connect", "complete"];
+export const STEP_KEYS = [
+  "profile",
+  "training_style",
+  "race_decision",
+  "race_search",
+  "secondary",
+  "capacity",
+  "environment",
+  "devices",
+  "connect",
+];
+
+const LEGACY_STEP_MAP = {
+  profile: "profile",
+  goals: "training_style",
+  devices: "devices",
+  connect: "connect",
+  complete: "connect",
+};
 
 /** Map server `onboarding_step` string → 0-based index; default to profile. */
 export function stepIndexFromProfile(step) {
   const s = typeof step === "string" ? step.trim().toLowerCase() : "";
-  const i = STEP_KEYS.indexOf(s);
+  const canon = LEGACY_STEP_MAP[s] || s;
+  let i = STEP_KEYS.indexOf(canon);
+  if (i >= 0) return i;
+  i = STEP_KEYS.indexOf(s);
   return i >= 0 ? i : 0;
 }
 
@@ -32,17 +52,17 @@ export function Wordmark({ style = {} }) {
   );
 }
 
-function StepDots({ currentIndex, total = 5 }) {
+function StepDots({ currentIndex, total = 9 }) {
   return (
     <div style={{ display: "flex", justifyContent: "center", gap: 8, marginTop: 4, marginBottom: 20 }}>
-      {Array.from({ length: total }).map((_, i) => (
+      {Array.from({ length: total }).map((_, idx) => (
         <div
-          key={i}
+          key={idx}
           style={{
-            width: i === currentIndex ? 22 : 6,
+            width: idx === currentIndex ? 22 : 6,
             height: 6,
             borderRadius: 999,
-            background: i === currentIndex ? "#C9A875" : "rgba(255,255,255,0.12)",
+            background: idx === currentIndex ? "#C9A875" : "rgba(255,255,255,0.12)",
             transition: "width 0.25s ease, background 0.2s ease",
           }}
         />
@@ -53,7 +73,7 @@ function StepDots({ currentIndex, total = 5 }) {
 
 export default function OnboardingShell({
   stepIndex = 0,
-  stepTotal = 5,
+  stepTotal = 9,
   title,
   subtitle,
   onBack,

@@ -2,6 +2,7 @@ import { createClient } from "@supabase/supabase-js";
 import { getAccessTokenFromRequest } from "../lib/sessionToken.js";
 
 export default async function handler(req, res) {
+  if (req.method !== "GET") return res.status(405).json({ error: "Method not allowed" });
   try {
     const token = getAccessTokenFromRequest(req);
     if (!token) return res.status(401).json({ error: "no_auth" });

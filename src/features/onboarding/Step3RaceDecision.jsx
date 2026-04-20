@@ -1,48 +1,31 @@
 import { PrimaryButton, GlassCard } from "./shared/Inputs.jsx";
 
-const OPTIONS = [
-  {
-    id: "competing",
-    title: "Competing",
-    body: "Training for a specific event or race",
-  },
-  {
-    id: "performance",
-    title: "Performance",
-    body: "Getting fitter without a specific race",
-  },
-  {
-    id: "composition",
-    title: "Composition",
-    body: "Body recomp — lose fat, build muscle",
-  },
-  {
-    id: "return",
-    title: "Return",
-    body: "Coming back from injury, break, or life event",
-  },
-];
+export default function Step3RaceDecision({ value, onChange, onNext, saving, error }) {
+  const v = value || {};
+  const intent = v.event_training_intent || "";
 
-export default function Step2Focus({ value, onChange, onNext, saving, error }) {
-  const selected = value?.primary_focus || "";
-
-  const set = (k, v) => onChange({ ...value, [k]: v });
+  const setIntent = (id) => {
+    onChange({ ...v, event_training_intent: id });
+  };
 
   const handleNext = () => {
-    if (!selected) return;
-    onNext({ ...value, primary_focus: selected });
+    if (!intent) return;
+    onNext({ ...v, event_training_intent: intent });
   };
 
   return (
     <GlassCard style={{ display: "flex", flexDirection: "column", gap: 14 }}>
       <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
-        {OPTIONS.map((o) => {
-          const active = selected === o.id;
+        {[
+          { id: "yes", title: "Yes, I have a race/event", body: "Search our catalog or enter manually." },
+          { id: "no", title: "No, just training", body: "We will focus on performance without a fixed race." },
+        ].map((o) => {
+          const active = intent === o.id;
           return (
             <button
               key={o.id}
               type="button"
-              onClick={() => set("primary_focus", o.id)}
+              onClick={() => setIntent(o.id)}
               style={{
                 textAlign: "left",
                 padding: "16px 18px",
@@ -61,10 +44,8 @@ export default function Step2Focus({ value, onChange, onNext, saving, error }) {
           );
         })}
       </div>
-
       {error ? <div style={{ fontSize: 12, color: "#ff6b6b" }}>{error}</div> : null}
-
-      <PrimaryButton onClick={handleNext} disabled={!selected || saving}>
+      <PrimaryButton onClick={handleNext} disabled={!intent || saving}>
         {saving ? "Saving…" : "NEXT"}
       </PrimaryButton>
     </GlassCard>
