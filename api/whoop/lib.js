@@ -41,6 +41,183 @@ export async function fetchWhoopV2(token) {
   return { recRes, sleepRes, cycleRes };
 }
 
+const WHOOP_RECOVERY_URL = "https://api.prod.whoop.com/developer/v2/recovery";
+const WHOOP_SLEEP_URL = "https://api.prod.whoop.com/developer/v2/activity/sleep";
+
+async function fetchWhoopPaginatedJson(accessToken, baseUrl, startIso, endIso) {
+  const headers = { Authorization: `Bearer ${accessToken}` };
+  const out = [];
+  let nextToken = null;
+  let guard = 0;
+  while (guard < 40) {
+    guard += 1;
+    const url = new URL(baseUrl);
+    url.searchParams.set("limit", "25");
+    if (startIso) url.searchParams.set("start", startIso);
+    if (endIso) url.searchParams.set("end", endIso);
+    if (nextToken) url.searchParams.set("nextToken", nextToken);
+    const res = await fetch(url.toString(), { headers });
+    if (!res.ok) {
+      console.warn("[whoop/lib] paginated fetch failed", baseUrl, res.status);
+      break;
+    }
+    const j = await res.json().catch(() => ({}));
+    const recs = Array.isArray(j.records) ? j.records : [];
+    out.push(...recs);
+    nextToken = j.next_token || j.nextToken || null;
+    if (!nextToken || recs.length === 0) break;
+  }
+  return out;
+}
+
+export async function fetchWhoopRecoveryHistory(accessToken, startIso, endIso) {
+  return fetchWhoopPaginatedJson(accessToken, WHOOP_RECOVERY_URL, startIso, endIso);
+}
+
+export async function fetchWhoopSleepHistory(accessToken, startIso, endIso) {
+  return fetchWhoopPaginatedJson(accessToken, WHOOP_SLEEP_URL, startIso, endIso);
+}
+
+/** One unified_metrics row from a single WHOOP recovery (+ optional sleep) record. */
+export function buildWhoopUnifiedRowFromRecoverySleep(userId, timeZone, rec, sleep) {
+  if (!rec || typeof rec !== "object") return null;
+  if (rec.score_state && rec.score_state !== "SCORED") return null;
+  const score = rec.score || {};
+  const recoveryScore = Number(score.recovery_score ?? rec.recovery_score ?? NaN);
+  if (!Number.isFinite(recoveryScore)) return null;
+
+  const readiness = Math.round(recoveryScore);
+  const readinessColor = score.user_calibrating
+    ? "gray"
+    : readiness >= 67
+      ? "green"
+      : readiness >= 34
+        ? "yellow"
+        : "red";
+
+  const hrvMilli =
+    score.hrv_rmssd_milli ??
+    score.hrv?.rmssd_milli ??
+    rec.hrv_rmssd_milli ??
+    rec.hrv?.rmssd_milli;
+  const rhrRaw = score.resting_heart_rate ?? rec.resting_heart_rate ?? score.rhr;
+
+  const stage = sleep?.score?.stage_summary || {};
+  const inBedMilli =
+    stage.total_in_bed_time_milli ??
+    sleep?.score?.stage_summary?.total_in_bed_time_milli ??
+    sleep?.total_in_bed_time_milli;
+  const deepMilli =
+    stage.total_slow_wave_sleep_time_milli ??
+    sleep?.score?.stage_summary?.total_slow_wave_sleep_time_milli ??
+    sleep?.slow_wave_sleep_time_milli;
+  const remMilli = stage.total_rem_sleep_time_milli ?? sleep?.score?.stage_summary?.total_rem_sleep_time_milli;
+  const lightMilli = stage.total_light_sleep_time_milli ?? sleep?.score?.stage_summary?.total_light_sleep_time_milli;
+  const awakeMilli = stage.total_awake_time_milli ?? sleep?.score?.stage_summary?.total_awake_time_milli;
+
+  const sleepPerf = sleep?.score?.sleep_performance_percentage;
+
+  const anchorIso = rec.created_at || sleep?.end || sleep?.start || new Date().toISOString();
+  const date = isoYmdInTimeZone(anchorIso, timeZone) || String(anchorIso).slice(0, 10);
+
+  return {
+    user_id: userId,
+    date,
+    source: "whoop",
+    readiness_score: readiness,
+    readiness_color: readinessColor,
+    hrv_rmssd: hrvMilli != null && Number.isFinite(Number(hrvMilli)) ? Number(hrvMilli) : null,
+    resting_hr:
+      rhrRaw != null && Number.isFinite(Number(rhrRaw)) ? Math.round(Number(rhrRaw)) : null,
+    sleep_total_min: roundMinFromMilli(inBedMilli),
+    sleep_score:
+      sleepPerf != null && Number.isFinite(Number(sleepPerf)) ? Math.round(Number(sleepPerf)) : null,
+    sleep_deep_min: roundMinFromMilli(deepMilli),
+    sleep_rem_min: roundMinFromMilli(remMilli),
+    sleep_light_min: roundMinFromMilli(lightMilli),
+    sleep_awake_min: roundMinFromMilli(awakeMilli),
+    raw_payload: { recovery: rec, sleep: sleep || null, cycle: null },
+    updated_at: new Date().toISOString(),
+  };
+}
+
+export async function countWhoopUnifiedRowsSince(supabase, userId, sinceYmd) {
+  const { count, error } = await supabase
+    .from("unified_metrics")
+    .select("*", { count: "exact", head: true })
+    .eq("user_id", userId)
+    .eq("source", "whoop")
+    .gte("date", sinceYmd);
+  if (error) {
+    console.warn("[whoop/lib] count whoop rows", error.message);
+    return 0;
+  }
+  return typeof count === "number" ? count : 0;
+}
+
+export async function patchWhoopBackfilledAt(supabase, userId) {
+  const { data: prof } = await supabase
+    .from("user_profiles")
+    .select("connected_sources")
+    .eq("user_id", userId)
+    .maybeSingle();
+  const cs =
+    typeof prof?.connected_sources === "object" && prof?.connected_sources
+      ? prof.connected_sources
+      : {};
+  const whoop = {
+    ...(typeof cs.whoop === "object" && cs.whoop ? cs.whoop : {}),
+    backfilled_at: new Date().toISOString(),
+  };
+  await supabase.from("user_profiles").update({ connected_sources: { ...cs, whoop } }).eq("user_id", userId);
+}
+
+/**
+ * Backfill up to ~30 days of WHOOP recovery+sleep into unified_metrics (once per user).
+ * @returns {{ upserted: number, skipped: boolean }}
+ */
+export async function backfillWhoopUnifiedHistory(supabase, userId, timeZone, accessToken) {
+  const endIso = new Date().toISOString();
+  const historyStart = new Date();
+  historyStart.setDate(historyStart.getDate() - 30);
+  const startIso = historyStart.toISOString();
+
+  const [recoveries, sleeps] = await Promise.all([
+    fetchWhoopRecoveryHistory(accessToken, startIso, endIso),
+    fetchWhoopSleepHistory(accessToken, startIso, endIso),
+  ]);
+
+  const sleepById = new Map();
+  for (const s of sleeps) {
+    if (s?.id) sleepById.set(String(s.id), s);
+  }
+
+  let upserted = 0;
+  for (const rec of recoveries) {
+    const sid = rec.sleep_id != null ? String(rec.sleep_id) : "";
+    const sleep = sid ? sleepById.get(sid) : null;
+    const payload = buildWhoopUnifiedRowFromRecoverySleep(userId, timeZone, rec, sleep);
+    if (!payload) continue;
+
+    const { data: existing } = await supabase
+      .from("unified_metrics")
+      .select("*")
+      .eq("user_id", userId)
+      .eq("date", payload.date)
+      .eq("source", "whoop")
+      .maybeSingle();
+
+    const merged = mergeUnifiedRow(existing, payload);
+    const { error: upErr } = await supabase
+      .from("unified_metrics")
+      .upsert(merged, { onConflict: "user_id,date,source" });
+    if (!upErr) upserted += 1;
+    else console.error("[whoop/lib] backfill upsert", payload.date, upErr);
+  }
+
+  return { upserted, skipped: false };
+}
+
 /** Calendar YYYY-MM-DD in the user’s IANA time zone for an ISO timestamp. */
 export function isoYmdInTimeZone(isoInput, timeZone = "America/New_York") {
   if (!isoInput) return null;

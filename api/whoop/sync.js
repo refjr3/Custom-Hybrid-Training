@@ -1,12 +1,15 @@
 import { createClient } from "@supabase/supabase-js";
 import { getAccessTokenFromRequest } from "../lib/sessionToken.js";
-import { getCalendarYmdInTimeZone } from "../../lib/getLocalToday.js";
+import { addCalendarDaysToIsoYmd, getCalendarYmdInTimeZone } from "../../lib/getLocalToday.js";
 import {
   parseCookies,
   loadWhoopRecordJson,
   upsertWhoopUnifiedFromApiJson,
   formatClientWhoopResponse,
   shouldThrottleWhoopSync,
+  countWhoopUnifiedRowsSince,
+  patchWhoopBackfilledAt,
+  backfillWhoopUnifiedHistory,
 } from "./lib.js";
 
 /**
@@ -84,6 +87,23 @@ export default async function handler(req, res) {
         error: loaded.error,
         reconnect: Boolean(loaded.reconnect),
       });
+    }
+
+    const todayYmd = getCalendarYmdInTimeZone(tz);
+    const thirtyDaysAgoYmd = addCalendarDaysToIsoYmd(todayYmd, -30) || todayYmd;
+    const whoopBackfilled = Boolean(profile?.connected_sources?.whoop?.backfilled_at);
+    const whoopRowCount = await countWhoopUnifiedRowsSince(supabase, user.id, thirtyDaysAgoYmd);
+    const needsWhoopBackfill = !whoopBackfilled && whoopRowCount < 25;
+
+    if (needsWhoopBackfill) {
+      try {
+        await backfillWhoopUnifiedHistory(supabase, user.id, tz, loaded.access);
+        await patchWhoopBackfilledAt(supabase, user.id);
+      } catch (bfErr) {
+        console.error("[whoop/sync] history backfill:", bfErr?.message || bfErr);
+      }
+    } else if (!whoopBackfilled && whoopRowCount >= 25) {
+      await patchWhoopBackfilledAt(supabase, user.id);
     }
 
     const { recData, sleepData, cycleData } = loaded;
