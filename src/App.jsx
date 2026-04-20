@@ -8,6 +8,8 @@ import AuthScreen from "./AuthScreen";
 import OnboardingFlow from "./features/onboarding/OnboardingFlow.jsx";
 import PlanBuilder from "./PlanBuilder";
 import TodayDrawer from "./TodayDrawer.jsx";
+import { useDataSources } from "./features/today/useDataSources.js";
+import { ConnectPrompt } from "./features/today/ConnectPrompt.jsx";
 
 const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
 const supabaseKey = import.meta.env.VITE_SUPABASE_ANON_KEY;
@@ -2789,6 +2791,7 @@ export default function App() {
   const [labSessionId, setLabSessionId] = useState(createSessionId);
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [drawerSection, setDrawerSection] = useState("menu");
+  const dataSources = useDataSources(profile);
   // Auth state is declared with the rest of top-level hooks to keep hook order stable.
   const [session, setSession]       = useState(null);
   const [profile, setProfile]       = useState(null);
@@ -4238,6 +4241,10 @@ export default function App() {
           || (Number(whoopData?.sleep?.hours || 0) > 0 ? Math.round(Number(whoopData.sleep.hours) * 3600000) : 0);
         const sleepHoursDisp = inBedMs > 0 ? Math.floor(inBedMs / 3600000) : 0;
         const sleepMinsDisp = inBedMs > 0 ? Math.floor((inBedMs % 3600000) / 60000) : 0;
+        const openConnectionsDrawer = () => {
+          setDrawerSection("connections");
+          setDrawerOpen(true);
+        };
 
         return (
           <div style={{ padding: "12px 16px 20px", display: "flex", flexDirection: "column", gap: 14, overflowX: "hidden" }}>
@@ -4351,33 +4358,43 @@ export default function App() {
               <br />
               count, {profile?.name?.split(" ")[0] || "Rafael"}.
             </div>
-            <div style={creamCard}>
-              <div style={{ position: "absolute", top: 0, left: "5%", right: "5%", height: 1, background: "linear-gradient(90deg,transparent,rgba(255,255,255,0.9) 50%,transparent)", pointerEvents: "none" }} />
-              <div style={{ position: "absolute", top: -30, right: -30, width: 160, height: 130, background: "radial-gradient(ellipse at top right, rgba(255,255,255,0.4) 0%, transparent 65%)", pointerEvents: "none" }} />
-              <div style={{ padding: "22px 22px 18px", position: "relative", zIndex: 1 }}>
-                <div style={{ fontSize: 9, fontWeight: 600, color: "rgba(13,14,16,0.3)", letterSpacing: "2.5px", textTransform: "uppercase", marginBottom: 12, fontFamily: C.fs }}>Recovery</div>
-                <div style={{ display: "flex", alignItems: "flex-end", justifyContent: "space-between", marginBottom: 16 }}>
-                  <div style={{ fontFamily: C.serif, fontSize: 76, color: DS.base, lineHeight: 1, letterSpacing: "-3px", fontWeight: 400 }}>{recDisp}</div>
-                  <div style={{ textAlign: "right", paddingBottom: 10 }}>
-                    <div style={{ fontSize: 12, fontWeight: 600, color: recoveryBadge.fg, marginBottom: 4, fontFamily: C.fs }}>{gateWord}</div>
-                    <div style={{ fontSize: 10, color: "rgba(13,14,16,0.38)", fontFamily: C.fs }}>Execute as programmed</div>
+            {dataSources.hasRecoverySource ? (
+              <div style={creamCard}>
+                <div style={{ position: "absolute", top: 0, left: "5%", right: "5%", height: 1, background: "linear-gradient(90deg,transparent,rgba(255,255,255,0.9) 50%,transparent)", pointerEvents: "none" }} />
+                <div style={{ position: "absolute", top: -30, right: -30, width: 160, height: 130, background: "radial-gradient(ellipse at top right, rgba(255,255,255,0.4) 0%, transparent 65%)", pointerEvents: "none" }} />
+                <div style={{ padding: "22px 22px 18px", position: "relative", zIndex: 1 }}>
+                  <div style={{ fontSize: 9, fontWeight: 600, color: "rgba(13,14,16,0.3)", letterSpacing: "2.5px", textTransform: "uppercase", marginBottom: 12, fontFamily: C.fs }}>Recovery</div>
+                  <div style={{ display: "flex", alignItems: "flex-end", justifyContent: "space-between", marginBottom: 16 }}>
+                    <div style={{ fontFamily: C.serif, fontSize: 76, color: DS.base, lineHeight: 1, letterSpacing: "-3px", fontWeight: 400 }}>{recDisp}</div>
+                    <div style={{ textAlign: "right", paddingBottom: 10 }}>
+                      <div style={{ fontSize: 12, fontWeight: 600, color: recoveryBadge.fg, marginBottom: 4, fontFamily: C.fs }}>{gateWord}</div>
+                      <div style={{ fontSize: 10, color: "rgba(13,14,16,0.38)", fontFamily: C.fs }}>Execute as programmed</div>
+                    </div>
+                  </div>
+                  <div style={{ display: "flex", borderTop: "1px solid rgba(13,14,16,0.08)", paddingTop: 14 }}>
+                    {[
+                      ["HRV", hrvDisp],
+                      ["RHR", rhrDisp],
+                      ["Sleep", sleepDisp],
+                    ].map(([lbl, val]) => (
+                      <div key={lbl} style={{ flex: 1, textAlign: "center", borderRight: lbl !== "Sleep" ? "1px solid rgba(13,14,16,0.08)" : "none" }}>
+                        <div style={{ fontSize: 20, fontWeight: 600, color: DS.base, letterSpacing: "-0.5px", lineHeight: 1, marginBottom: 3, fontFamily: C.fs }}>{val}</div>
+                        <div style={{ fontSize: 8, fontWeight: 600, color: "rgba(13,14,16,0.3)", letterSpacing: "1.5px", textTransform: "uppercase", fontFamily: C.fs }}>{lbl}</div>
+                      </div>
+                    ))}
                   </div>
                 </div>
-                <div style={{ display: "flex", borderTop: "1px solid rgba(13,14,16,0.08)", paddingTop: 14 }}>
-                  {[
-                    ["HRV", hrvDisp],
-                    ["RHR", rhrDisp],
-                    ["Sleep", sleepDisp],
-                  ].map(([lbl, val]) => (
-                    <div key={lbl} style={{ flex: 1, textAlign: "center", borderRight: lbl !== "Sleep" ? "1px solid rgba(13,14,16,0.08)" : "none" }}>
-                      <div style={{ fontSize: 20, fontWeight: 600, color: DS.base, letterSpacing: "-0.5px", lineHeight: 1, marginBottom: 3, fontFamily: C.fs }}>{val}</div>
-                      <div style={{ fontSize: 8, fontWeight: 600, color: "rgba(13,14,16,0.3)", letterSpacing: "1.5px", textTransform: "uppercase", fontFamily: C.fs }}>{lbl}</div>
-                    </div>
-                  ))}
-                </div>
               </div>
-            </div>
+            ) : (
+              <ConnectPrompt
+                icon="💚"
+                title="Connect a recovery tracker"
+                description="WHOOP, Oura, or Garmin — see your daily readiness, HRV, and resting heart rate."
+                onConnect={openConnectionsDrawer}
+              />
+            )}
 
+            {dataSources.hasActivitySource ? (
             <div style={glassCard}>
               <div style={specularTop()} />
               <div style={{ position: "absolute", top: -20, right: -20, width: 120, height: 120, background: "radial-gradient(circle,rgba(210,190,155,0.10) 0%,transparent 70%)", pointerEvents: "none" }} />
@@ -4386,19 +4403,6 @@ export default function App() {
                   <div style={{ fontSize: 9, fontWeight: 600, color: "rgba(255,255,255,0.22)", letterSpacing: "2.5px", textTransform: "uppercase", fontFamily: C.fs }}>Weekly Z2 Time</div>
                   <div style={{ fontSize: 12, fontWeight: 600, color: DS.gold, fontFamily: C.fs, flexShrink: 0 }}>{z2HeaderDone} / {TARGET_Z2_MIN} min</div>
                 </div>
-                {!stravaConnected ? (
-                  <div style={{ marginBottom: 10 }}>
-                    <div style={{ fontFamily: C.fs, fontSize: 10, color: "rgba(255,255,255,0.35)", marginBottom: 8, lineHeight: 1.45 }}>
-                      Connect Strava to track Z2. Weekly minutes use Strava HR zone 2 time from each activity (not plan estimates).
-                    </div>
-                    <a
-                      href={session?.user?.id ? `/api/strava/login?uid=${encodeURIComponent(session.user.id)}` : "/api/strava/login"}
-                      style={{ fontSize: 10, fontWeight: 600, color: DS.gold, fontFamily: C.fs, textDecoration: "none" }}
-                    >
-                      Connect Strava →
-                    </a>
-                  </div>
-                ) : null}
                 {stravaConnected && stravaWeeklyZ2Error ? (
                   <div style={{ marginBottom: 10 }}>
                     <div style={{ fontFamily: C.fs, fontSize: 10, color: C.red }}>{stravaWeeklyZ2Error}</div>
@@ -4490,6 +4494,14 @@ export default function App() {
                 </div>
               </div>
             </div>
+            ) : (
+              <ConnectPrompt
+                icon="⚡"
+                title="Connect an activity tracker"
+                description="Strava or Garmin — track your Zone 2 training and weekly volume automatically."
+                onConnect={openConnectionsDrawer}
+              />
+            )}
 
             <div style={glassCard}>
               <div style={specularTop()} />
@@ -4598,53 +4610,68 @@ export default function App() {
               </div>
             )}
 
-            {whoopData?.sleep && (inBedMs > 0 || whoopData.sleep.score > 0) ? (
-              <div style={glassCard}>
-                <div style={specularTop()} />
-                <div style={{ position: "absolute", top: -20, right: -20, width: 120, height: 120, background: "radial-gradient(circle,rgba(210,190,155,0.1) 0%,transparent 70%)", pointerEvents: "none" }} />
-                <div style={{ padding: "20px 22px 16px", position: "relative", zIndex: 1 }}>
-                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 14 }}>
-                    <div>
-                      <div style={lbl}>{"Last Night's Sleep"}</div>
-                      <div style={{ fontFamily: "'DM Serif Display',serif", fontSize: 44, color: "#fff", letterSpacing: "-2px", lineHeight: 1 }}>
-                        {sleepHoursDisp}
-                        <span style={{ fontSize: 20 }}>h</span>
-                        {" "}
-                        {sleepMinsDisp}
-                        <span style={{ fontSize: 20 }}>m</span>
+            {dataSources.hasSleepSource ? (
+              whoopData?.sleep && (inBedMs > 0 || whoopData.sleep.score > 0) ? (
+                <div style={glassCard}>
+                  <div style={specularTop()} />
+                  <div style={{ position: "absolute", top: -20, right: -20, width: 120, height: 120, background: "radial-gradient(circle,rgba(210,190,155,0.1) 0%,transparent 70%)", pointerEvents: "none" }} />
+                  <div style={{ padding: "20px 22px 16px", position: "relative", zIndex: 1 }}>
+                    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 14 }}>
+                      <div>
+                        <div style={lbl}>{"Last Night's Sleep"}</div>
+                        <div style={{ fontFamily: "'DM Serif Display',serif", fontSize: 44, color: "#fff", letterSpacing: "-2px", lineHeight: 1 }}>
+                          {sleepHoursDisp}
+                          <span style={{ fontSize: 20 }}>h</span>
+                          {" "}
+                          {sleepMinsDisp}
+                          <span style={{ fontSize: 20 }}>m</span>
+                        </div>
+                      </div>
+                      <div style={{ textAlign: "right", paddingTop: 20 }}>
+                        <div style={{ fontFamily: "'DM Serif Display',serif", fontSize: 28, color: "#C9A875", letterSpacing: "-1px", lineHeight: 1 }}>{whoopData.sleep.score ?? "—"}</div>
+                        <div style={{ fontSize: 8, color: "rgba(255,255,255,0.3)", letterSpacing: "1.5px", textTransform: "uppercase", marginTop: 2 }}>Score</div>
                       </div>
                     </div>
-                    <div style={{ textAlign: "right", paddingTop: 20 }}>
-                      <div style={{ fontFamily: "'DM Serif Display',serif", fontSize: 28, color: "#C9A875", letterSpacing: "-1px", lineHeight: 1 }}>{whoopData.sleep.score ?? "—"}</div>
-                      <div style={{ fontSize: 8, color: "rgba(255,255,255,0.3)", letterSpacing: "1.5px", textTransform: "uppercase", marginTop: 2 }}>Score</div>
-                    </div>
+                    {showSleepStageBar ? (
+                      <>
+                        <div style={{ height: 8, borderRadius: 4, overflow: "hidden", display: "flex", marginBottom: 10 }}>
+                          <div style={{ width: `${(sleepStageMs.awake / sleepStageTotal) * 100}%`, background: "rgba(255,255,255,0.15)", minWidth: 2 }} />
+                          <div style={{ width: `${(sleepStageMs.rem / sleepStageTotal) * 100}%`, background: "#C9A875", minWidth: 2 }} />
+                          <div style={{ width: `${(sleepStageMs.light / sleepStageTotal) * 100}%`, background: "rgba(201,168,117,0.4)", minWidth: 2 }} />
+                          <div style={{ width: `${(sleepStageMs.deep / sleepStageTotal) * 100}%`, background: "rgba(201,168,117,0.7)", minWidth: 2 }} />
+                        </div>
+                        <div style={{ display: "flex", gap: 12, flexWrap: "wrap" }}>
+                          {[
+                            ["Awake", "rgba(255,255,255,0.15)", fmtStageMin(sleepStageMs.awake)],
+                            ["REM", "#C9A875", fmtStageMin(sleepStageMs.rem)],
+                            ["Light", "rgba(201,168,117,0.4)", fmtStageMin(sleepStageMs.light)],
+                            ["Deep", "rgba(201,168,117,0.7)", fmtStageMin(sleepStageMs.deep)],
+                          ].map(([label, color, time]) => (
+                            <div key={label} style={{ display: "flex", alignItems: "center", gap: 4 }}>
+                              <span style={{ width: 8, height: 8, borderRadius: 2, background: color, display: "inline-block", flexShrink: 0 }} />
+                              <span style={{ fontSize: 9, color: "rgba(255,255,255,0.3)" }}>{label} {time}</span>
+                            </div>
+                          ))}
+                        </div>
+                      </>
+                    ) : null}
                   </div>
-                  {showSleepStageBar ? (
-                    <>
-                      <div style={{ height: 8, borderRadius: 4, overflow: "hidden", display: "flex", marginBottom: 10 }}>
-                        <div style={{ width: `${(sleepStageMs.awake / sleepStageTotal) * 100}%`, background: "rgba(255,255,255,0.15)", minWidth: 2 }} />
-                        <div style={{ width: `${(sleepStageMs.rem / sleepStageTotal) * 100}%`, background: "#C9A875", minWidth: 2 }} />
-                        <div style={{ width: `${(sleepStageMs.light / sleepStageTotal) * 100}%`, background: "rgba(201,168,117,0.4)", minWidth: 2 }} />
-                        <div style={{ width: `${(sleepStageMs.deep / sleepStageTotal) * 100}%`, background: "rgba(201,168,117,0.7)", minWidth: 2 }} />
-                      </div>
-                      <div style={{ display: "flex", gap: 12, flexWrap: "wrap" }}>
-                        {[
-                          ["Awake", "rgba(255,255,255,0.15)", fmtStageMin(sleepStageMs.awake)],
-                          ["REM", "#C9A875", fmtStageMin(sleepStageMs.rem)],
-                          ["Light", "rgba(201,168,117,0.4)", fmtStageMin(sleepStageMs.light)],
-                          ["Deep", "rgba(201,168,117,0.7)", fmtStageMin(sleepStageMs.deep)],
-                        ].map(([label, color, time]) => (
-                          <div key={label} style={{ display: "flex", alignItems: "center", gap: 4 }}>
-                            <span style={{ width: 8, height: 8, borderRadius: 2, background: color, display: "inline-block", flexShrink: 0 }} />
-                            <span style={{ fontSize: 9, color: "rgba(255,255,255,0.3)" }}>{label} {time}</span>
-                          </div>
-                        ))}
-                      </div>
-                    </>
-                  ) : null}
                 </div>
-              </div>
-            ) : null}
+              ) : (
+                <div style={glassCard}>
+                  <div style={{ padding: "18px 20px", fontSize: 11, color: "rgba(255,255,255,0.35)", lineHeight: 1.5 }}>
+                    Sleep source connected. Waiting for your latest sleep sync...
+                  </div>
+                </div>
+              )
+            ) : (
+              <ConnectPrompt
+                icon="🌙"
+                title="Connect a sleep tracker"
+                description="WHOOP, Oura, or Garmin — see your sleep quality, stages, and recovery correlation."
+                onConnect={openConnectionsDrawer}
+              />
+            )}
           </div>
         );
       })()}
