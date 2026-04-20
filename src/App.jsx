@@ -2830,6 +2830,27 @@ export default function App() {
   }, [session?.user?.id]);
 
   useEffect(() => {
+    if (!session?.user?.id) return;
+    const today = new Date().toISOString().slice(0, 10);
+    const last = localStorage.getItem("baselines_last_computed");
+    if (last === today) return;
+
+    (async () => {
+      try {
+        const {
+          data: { session: s },
+        } = await supabase.auth.getSession();
+        await fetch("/api/metrics/baselines", {
+          headers: { Authorization: `Bearer ${s?.access_token}` },
+        });
+        localStorage.setItem("baselines_last_computed", today);
+      } catch (e) {
+        console.error("[baselines]", e);
+      }
+    })();
+  }, [session?.user?.id]);
+
+  useEffect(() => {
     const t1 = setTimeout(() => setSplashPhase("logo-in"), 300);
     const t2 = setTimeout(() => setSplashPhase("tagline"), 1100);
     const t3 = setTimeout(() => setSplashPhase("glow"), 1800);
