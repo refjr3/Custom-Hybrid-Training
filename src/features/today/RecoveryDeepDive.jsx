@@ -1,9 +1,16 @@
 import { useState, useEffect } from "react";
 import { DeepDiveModal } from "./DeepDiveModal.jsx";
 import { TrendDots, StatTile, SectionLabel, InsightCard } from "./DeepDiveCharts.jsx";
+import { evaluateHRV, evaluateRHR, evaluateReadiness } from "../../../api/lib/thresholds.js";
+
+function normalizeBaselinesPayload(json) {
+  if (!json || typeof json !== "object" || json.error) return null;
+  return json;
+}
 
 export const RecoveryDeepDive = ({ open, onClose, supabase, dataSources }) => {
   const [metrics, setMetrics] = useState([]);
+  const [baselines, setBaselines] = useState(null);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -14,15 +21,21 @@ export const RecoveryDeepDive = ({ open, onClose, supabase, dataSources }) => {
         const {
           data: { session },
         } = await supabase.auth.getSession();
+        const headers = { Authorization: `Bearer ${session?.access_token}` };
         const end = new Date().toISOString().slice(0, 10);
         const startD = new Date();
         startD.setDate(startD.getDate() - 29);
         const start = startD.toISOString().slice(0, 10);
-        const res = await fetch(`/api/metrics/range?start=${start}&end=${end}`, {
-          headers: { Authorization: `Bearer ${session?.access_token}` },
-        });
-        const data = await res.json();
-        setMetrics(Array.isArray(data) ? data : []);
+
+        const [metricsRes, baselinesRes] = await Promise.all([
+          fetch(`/api/metrics/range?start=${start}&end=${end}`, { headers }),
+          fetch("/api/metrics/baselines", { headers }),
+        ]);
+
+        const metricsData = await metricsRes.json();
+        const baselinesData = await baselinesRes.json();
+        setMetrics(Array.isArray(metricsData) ? metricsData : []);
+        setBaselines(normalizeBaselinesPayload(baselinesData));
       } catch (e) {
         console.error("[recovery deep dive]", e);
       }
@@ -43,16 +56,19 @@ export const RecoveryDeepDive = ({ open, onClose, supabase, dataSources }) => {
   };
 
   const recoveryDots = metrics.map((m) => ({
+    date: m.date,
     value: m.readiness_score,
     color: colorMap[m.readiness_color] || colorMap.gray,
   }));
 
   const hrvDots = metrics.map((m) => ({
+    date: m.date,
     value: m.hrv_rmssd,
     color: "#C9A875",
   }));
 
   const rhrDots = metrics.map((m) => ({
+    date: m.date,
     value: m.resting_hr,
     color: "#4db8ff",
   }));
@@ -67,6 +83,26 @@ export const RecoveryDeepDive = ({ open, onClose, supabase, dataSources }) => {
   const firstAvg = firstHalf.reduce((a, b) => a + b, 0) / (firstHalf.length || 1);
   const lastAvg = lastHalf.reduce((a, b) => a + b, 0) / (lastHalf.length || 1);
   const hrvTrend = lastAvg > firstAvg + 2 ? "up" : lastAvg < firstAvg - 2 ? "down" : "flat";
+
+  const recoveryAnnotation = (() => {
+    const lastFive = metrics.slice(-5).map((m) => m.readiness_score).filter((v) => v != null && !Number.isNaN(Number(v)));
+    const trending =
+      lastFive.length >= 3 && Number(lastFive[lastFive.length - 1]) > Number(lastFive[0]) + 10;
+    if (trending) return "↑ Trending up last 5 days";
+    const greens = metrics.filter((m) => m.readiness_color === "green").length;
+    return `${greens} green days this month`;
+  })();
+
+  const hrvAnnotation =
+    hrvTrend === "up"
+      ? "↑ Trending up vs 30-day baseline"
+      : hrvTrend === "down"
+        ? "↓ Below baseline — recovery signal"
+        : "Steady at baseline";
+
+  const readinessThreshold = evaluateReadiness(todayScore);
+  const hrvThreshold = evaluateHRV(today?.hrv_rmssd, baselines?.baseline_hrv_rmssd);
+  const rhrThreshold = evaluateRHR(today?.resting_hr, baselines?.baseline_resting_hr);
 
   return (
     <DeepDiveModal
@@ -114,7 +150,15 @@ export const RecoveryDeepDive = ({ open, onClose, supabase, dataSources }) => {
       ) : null}
 
       <SectionLabel>30-Day Recovery</SectionLabel>
-      <TrendDots data={recoveryDots} heightBand={70} />
+      <TrendDots
+        data={recoveryDots}
+        heightBand={80}
+        unit=""
+        yMin={0}
+        yMax={100}
+        baseline={baselines?.baseline_recovery_score}
+        annotation={recoveryAnnotation}
+      />
 
       <div style={{ display: "flex", gap: 8, marginTop: 16 }}>
         <StatTile label="Green" value={greenDays} unit="days" accent="#5dffa0" />
@@ -123,13 +167,20 @@ export const RecoveryDeepDive = ({ open, onClose, supabase, dataSources }) => {
       </div>
 
       <SectionLabel>HRV · 30 Days</SectionLabel>
-      <TrendDots data={hrvDots} heightBand={60} />
+      <TrendDots
+        data={hrvDots}
+        heightBand={70}
+        unit="ms"
+        baseline={baselines?.baseline_hrv_rmssd}
+        annotation={hrvAnnotation}
+      />
       <div style={{ display: "flex", gap: 8, marginTop: 16 }}>
         <StatTile
           label="Current"
           value={today?.hrv_rmssd ? Math.round(today.hrv_rmssd) : "—"}
           unit="ms"
           accent="#C9A875"
+          threshold={hrvThreshold}
         />
         <StatTile
           label="30-Day Avg"
@@ -140,13 +191,36 @@ export const RecoveryDeepDive = ({ open, onClose, supabase, dataSources }) => {
           label="Trend"
           value={hrvTrend === "up" ? "↑" : hrvTrend === "down" ? "↓" : "→"}
           accent={hrvTrend === "up" ? "#5dffa0" : hrvTrend === "down" ? "#FF6B6B" : "rgba(255,255,255,0.5)"}
+          trend={{
+            direction: hrvTrend === "up" ? "up" : hrvTrend === "down" ? "down" : "flat",
+            text: hrvTrend === "up" ? "Rising" : hrvTrend === "down" ? "Falling" : "Flat",
+          }}
         />
       </div>
 
       <SectionLabel>Resting Heart Rate</SectionLabel>
-      <TrendDots data={rhrDots} heightBand={60} />
+      <TrendDots
+        data={rhrDots}
+        heightBand={60}
+        unit=" bpm"
+        baseline={baselines?.baseline_resting_hr}
+        annotation={null}
+      />
       <div style={{ display: "flex", gap: 8, marginTop: 16 }}>
-        <StatTile label="Current" value={today?.resting_hr || "—"} unit="bpm" accent="#4db8ff" />
+        <StatTile
+          label="Current"
+          value={today?.resting_hr ?? "—"}
+          unit="bpm"
+          accent="#4db8ff"
+          threshold={rhrThreshold}
+        />
+        <StatTile
+          label="Readiness"
+          value={todayScore ?? "—"}
+          unit=""
+          accent={colorMap[todayColor]}
+          threshold={readinessThreshold}
+        />
       </div>
 
       <InsightCard>
