@@ -53,9 +53,6 @@ export default function Step4RaceSearch({ profile, supabase, value, onChange, on
     setManual(false);
   };
 
-  const showSelectedCard =
-    Boolean(String(v.target_race_name || "").trim()) && !manual && v.event_category && v.event_category !== "other";
-
   return (
     <GlassCard style={{ display: "flex", flexDirection: "column", gap: 14 }}>
       <label style={labelStyle}>
@@ -80,28 +77,16 @@ export default function Step4RaceSearch({ profile, supabase, value, onChange, on
             sport={sportFilter || undefined}
             placeholder={`Search ${cat?.label || ""} races…`}
             onSelect={handleRaceSelect}
+            selectedRace={
+              v.target_race_name
+                ? {
+                    name: v.target_race_name,
+                    race_date: v.target_race_date || null,
+                    city: v.race_city || "",
+                  }
+                : null
+            }
           />
-          {showSelectedCard ? (
-            <div
-              style={{
-                fontSize: 13,
-                lineHeight: 1.45,
-                color: "rgba(201,168,117,0.95)",
-                padding: "12px 14px",
-                borderRadius: 12,
-                background: "rgba(201,168,117,0.1)",
-                border: "1px solid rgba(201,168,117,0.28)",
-              }}
-            >
-              <div style={{ fontSize: 10, letterSpacing: "0.6px", color: "rgba(255,255,255,0.45)", textTransform: "uppercase", marginBottom: 4 }}>Selected</div>
-              <strong style={{ fontWeight: 600 }}>{v.target_race_name}</strong>
-              {v.target_race_date ? (
-                <span style={{ color: "rgba(255,255,255,0.55)" }}>{` on ${v.target_race_date}`}</span>
-              ) : (
-                <span style={{ color: "rgba(255,255,255,0.45)" }}> · date TBD</span>
-              )}
-            </div>
-          ) : null}
         </>
       ) : null}
 
