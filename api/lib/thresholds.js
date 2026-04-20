@@ -59,13 +59,21 @@ export function evaluateSleepScore(score) {
 export function evaluateZ2Weekly(weekMinutes, target = 240, dayOfWeek, _baseline) {
   if (weekMinutes == null) return null;
 
-  // Proration: expected volume so far based on day of week (Mon=1 ... Sun=7)
   const dayIdx = dayOfWeek === 0 ? 7 : dayOfWeek;
-  const expectedByNow = (target / 7) * dayIdx;
-  const pctOfTarget = (weekMinutes / target) * 100;
-  const pctOfPace = expectedByNow > 0 ? (weekMinutes / expectedByNow) * 100 : 0;
 
-  if (pctOfPace >= 80) return { color: "green", text: `${Math.round(pctOfTarget)}% of target`, pctOfPace };
+  if (dayIdx <= 2) {
+    return {
+      color: "green",
+      text: `${weekMinutes} min · week just started`,
+      pctOfPace: null,
+    };
+  }
+
+  const expectedByNow = (target / 7) * dayIdx;
+  const pctOfPace = expectedByNow > 0 ? (weekMinutes / expectedByNow) * 100 : 0;
+  const pctOfTarget = (weekMinutes / target) * 100;
+
+  if (pctOfPace >= 80) return { color: "green", text: `On pace · ${Math.round(pctOfTarget)}% of target`, pctOfPace };
   if (pctOfPace >= 50) return { color: "amber", text: `Behind pace · ${Math.round(pctOfTarget)}% of target`, pctOfPace };
   return { color: "red", text: `Well behind · ${Math.round(pctOfTarget)}% of target`, pctOfPace };
 }

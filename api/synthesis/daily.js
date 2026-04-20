@@ -116,8 +116,22 @@ export default async function handler(req, res) {
       z2_weekly: evaluateZ2Weekly(weeklyZ2, 240, jsWeekdayFromTz(tz), baselines?.baseline_z2_weekly_min),
     };
 
-    const colors = Object.values(flags).filter(Boolean).map((f) => f.color);
-    const overallColor = colors.includes("red") ? "red" : colors.includes("amber") ? "amber" : "green";
+    const bodyFlagColors = [
+      flags.readiness,
+      flags.hrv,
+      flags.rhr,
+      flags.sleep_duration,
+      flags.sleep_score,
+      flags.sleep_deep,
+      flags.sleep_awake,
+    ]
+      .filter(Boolean)
+      .map((f) => f.color);
+
+    let overallColor;
+    if (bodyFlagColors.includes("red")) overallColor = "red";
+    else if (bodyFlagColors.filter((c) => c === "amber").length >= 2) overallColor = "amber";
+    else overallColor = "green";
 
     const flagSummary = Object.entries(flags)
       .filter(([, f]) => f)
@@ -126,38 +140,52 @@ export default async function handler(req, res) {
 
     const plannedSession = todayDay?.am_session_custom || todayDay?.am_session || "rest day";
 
-    const sleepH =
-      todayMetrics?.sleep_total_min != null
-        ? `${Math.round(todayMetrics.sleep_total_min / 60)}h ${Math.round(todayMetrics.sleep_total_min % 60)}m`
-        : "n/a";
-
     const dayIdx = (() => {
       const d = jsWeekdayFromTz(tz);
       return d === 0 ? 7 : d;
     })();
 
-    const prompt = `You are ${profile?.name || "an athlete"}'s hybrid training coach. Based on today's data, write a SHORT daily recommendation (max 2 sentences).
+    const dayOfWeek = dayIdx;
+    const sleepLine =
+      todayMetrics?.sleep_total_min != null
+        ? `${Math.round(todayMetrics.sleep_total_min / 60)}h ${todayMetrics.sleep_total_min % 60}m`
+        : "n/a";
+
+    const prompt = `You are ${profile?.name || "an athlete"}'s hybrid training coach. Write a SHORT daily read (max 2 sentences for summary, 1 for action).
+
+COACHING PHILOSOPHY:
+- You are a grinder, not a worrier. Default stance: get the session done.
+- Only recommend pulling back, modifying, or skipping when body signals are CLEARLY off:
+  * Readiness red (below 34), OR
+  * HRV down more than 15% from baseline, OR
+  * RHR up more than 8 bpm above baseline, OR
+  * Sleep under 6 hours total, OR
+  * Multiple amber flags pointing the same direction
+- Pacing metrics (Z2 weekly behind pace on Mon/Tue/Wed) are NOT reasons to pull back from today's planned session. Mention them as callouts but don't override the session.
+- When body signals are green or mixed-green, call for full execution.
+- When body signals are mixed with one yellow, note it but keep the session.
+- When body signals are clearly red, pull back specifically and briefly.
 
 Today's metrics:
 - Readiness: ${todayMetrics?.readiness_score ?? "n/a"} (${todayMetrics?.readiness_color ?? "n/a"})
 - HRV: ${todayMetrics?.hrv_rmssd != null ? todayMetrics.hrv_rmssd.toFixed(0) : "n/a"}ms (baseline ${baselines?.baseline_hrv_rmssd != null ? baselines.baseline_hrv_rmssd.toFixed(0) : "n/a"})
 - RHR: ${todayMetrics?.resting_hr ?? "n/a"} (baseline ${baselines?.baseline_resting_hr != null ? baselines.baseline_resting_hr.toFixed(0) : "n/a"})
-- Sleep: ${sleepH}, score ${todayMetrics?.sleep_score ?? "n/a"}
+- Sleep: ${sleepLine}, score ${todayMetrics?.sleep_score ?? "n/a"}
 - Deep sleep: ${todayMetrics?.sleep_deep_min != null ? todayMetrics.sleep_deep_min.toFixed(0) : "n/a"}min (baseline ${baselines?.baseline_sleep_deep_min != null ? baselines.baseline_sleep_deep_min.toFixed(0) : "n/a"})
 - Awake: ${todayMetrics?.sleep_awake_min != null ? todayMetrics.sleep_awake_min.toFixed(0) : "n/a"}min
-- Weekly Z2: ${weeklyZ2}min of 240 target (${Math.round((weeklyZ2 / 240) * 100)}% — it's day ${dayIdx} of 7)
+- Weekly Z2: ${weeklyZ2}min of 240 target (day ${dayOfWeek} of 7 — ${dayOfWeek <= 2 ? "week just started" : dayOfWeek >= 5 ? "late in week" : "mid-week"})
 
 Today's plan: ${plannedSession}
 
 Thresholds evaluated:
 ${flagSummary}
 
-Write the response as:
-HEADLINE: [4-6 words, punchy. e.g. "Green to go." or "Pull back today."]
-SUMMARY: [1 sentence connecting the data to the recommendation]
-ACTION: [1 sentence — the specific thing to do today]
+Respond exactly as:
+HEADLINE: [4-6 words, punchy, confident]
+SUMMARY: [1-2 sentences reading the body state, not the pacing]
+ACTION: [1 sentence — what to do with today's planned session. Default: execute as written.]
 
-Be direct. Use the athlete's name. No fluff. Be specific about numbers when they're off baseline.`;
+Be direct. Use the athlete's name occasionally, not every time. No fluff. When body is green, say go.`;
 
     let headline = "Today";
     let summary = "";
@@ -176,9 +204,21 @@ Be direct. Use the athlete's name. No fluff. Be specific about numbers when they
       action = (responseText.match(/ACTION:\s*(.+)/i)?.[1] || "").trim();
     } else {
       headline =
-        overallColor === "green" ? "Green to go." : overallColor === "amber" ? "Balance the load." : "Pull back today.";
-      summary = `Recovery and load signals read ${overallColor} against your baselines.`;
-      action = plannedSession ? `Execute today’s plan with that in mind: ${plannedSession}.` : "Prioritize easy movement and sleep tonight.";
+        overallColor === "green"
+          ? "Go get it."
+          : overallColor === "amber"
+            ? "Stay the course."
+            : "Ease off today.";
+      summary =
+        overallColor === "green"
+          ? "Body signals support training — execute the plan."
+          : overallColor === "amber"
+            ? "A few yellow lights; still bias toward doing the work as written unless you spike worse."
+            : "Recovery signals are off; pull back and prioritize sleep.";
+      action =
+        overallColor === "red"
+          ? "Swap today for easy Z2 or full rest per feel."
+          : `Execute today's session as written: ${plannedSession}.`;
     }
 
     return res.status(200).json({
