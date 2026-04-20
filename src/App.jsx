@@ -5,7 +5,6 @@ import {
   formatEasternYmdFromDate,
 } from "../lib/getLocalToday.js";
 import AuthScreen from "./AuthScreen";
-import Onboarding from "./Onboarding";
 import OnboardingFlow from "./features/onboarding/OnboardingFlow.jsx";
 import Step3Sport from "./features/onboarding/Step3Sport.jsx";
 import PlanBuilder from "./PlanBuilder";
@@ -22,6 +21,32 @@ const supabase = createClient(
   supabaseUrl || "https://placeholder.supabase.co",
   supabaseKey || "placeholder"
 );
+
+/** Load or insert a minimal `user_profiles` row (replaces legacy Onboarding.jsx). */
+async function fetchOrCreateUserProfile(supabaseClient, sessionUser) {
+  const { data: existing, error: selErr } = await supabaseClient
+    .from("user_profiles")
+    .select("*")
+    .eq("user_id", sessionUser.id)
+    .maybeSingle();
+  if (selErr) throw selErr;
+  if (existing) return existing;
+  const { data: row, error: insErr } = await supabaseClient
+    .from("user_profiles")
+    .insert({
+      user_id: sessionUser.id,
+      name:
+        sessionUser.user_metadata?.full_name ||
+        (typeof sessionUser.email === "string" ? sessionUser.email.split("@")[0] : null) ||
+        "Athlete",
+      onboarding_completed: false,
+      onboarding_step: "profile",
+    })
+    .select()
+    .single();
+  if (insErr) throw insErr;
+  return row;
+}
 
 /** Full-screen cinematic splash on every cold load (phased animation). */
 const SplashScreen = ({ phase }) => {
@@ -2797,6 +2822,7 @@ export default function App() {
   // Auth state is declared with the rest of top-level hooks to keep hook order stable.
   const [session, setSession]       = useState(null);
   const [profile, setProfile]       = useState(null);
+  const [profileBootstrapError, setProfileBootstrapError] = useState(null);
   const [authLoading, setAuthLoading] = useState(true);
   const dataFetched = useRef(false);
   /** After OAuth, session may load after URL is cleaned — refetch Strava once JWT exists. */
@@ -2831,9 +2857,18 @@ export default function App() {
     supabase.auth.getSession().then(({ data: { session } }) => {
       setSession(session);
       if (session) {
-        supabase
-          .from("user_profiles").select("*").eq("user_id", session.user.id).single()
-          .then(({ data }) => { setProfile(data || null); setAuthLoading(false); });
+        setProfileBootstrapError(null);
+        fetchOrCreateUserProfile(supabase, session.user)
+          .then((p) => {
+            setProfile(p);
+            setAuthLoading(false);
+          })
+          .catch((err) => {
+            console.error("[App] profile bootstrap", err);
+            setProfileBootstrapError(err?.message || "Profile setup failed");
+            setProfile(null);
+            setAuthLoading(false);
+          });
       } else {
         setAuthLoading(false);
       }
@@ -2842,17 +2877,24 @@ export default function App() {
     const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, newSession) => {
       setSession(newSession);
       if (newSession) {
-        supabase
-          .from("user_profiles").select("*").eq("user_id", newSession.user.id).single()
-          .then(({ data }) => {
-            setProfile(prev => {
+        setProfileBootstrapError(null);
+        fetchOrCreateUserProfile(supabase, newSession.user)
+          .then((data) => {
+            setProfile((prev) => {
               if (prev?.user_id === data?.user_id) return prev;
               return data || null;
             });
             setAuthLoading(false);
+          })
+          .catch((err) => {
+            console.error("[App] profile bootstrap (auth change)", err);
+            setProfileBootstrapError(err?.message || "Profile setup failed");
+            setProfile(null);
+            setAuthLoading(false);
           });
       } else {
         setProfile(null);
+        setProfileBootstrapError(null);
         dataFetched.current = false;
         setStravaWeeklyZ2Minutes(null);
         setAuthLoading(false);
@@ -3773,7 +3815,37 @@ export default function App() {
     return <Step3SportPreview focus={focus} />;
   }
 
-  if (!profile) return <Onboarding supabase={supabase} session={session} onComplete={(p) => { setShowEntrance(true); setTimeout(() => setShowEntrance(false), 2800); setProfile(p); }} />;
+  if (!profile) {
+    if (profileBootstrapError) {
+      return (
+        <div style={{ minHeight: "100vh", background: C.bg, color: C.text, fontFamily: C.fs, maxWidth: 480, margin: "0 auto", padding: "24px 20px" }}>
+          <div style={{ fontFamily: C.fm, fontSize: 10, color: C.red, marginBottom: 12 }}>PROFILE SETUP</div>
+          <div style={{ fontSize: 15, lineHeight: 1.5, marginBottom: 16 }}>{profileBootstrapError}</div>
+          <button
+            type="button"
+            onClick={() => window.location.reload()}
+            style={{
+              padding: "12px 18px",
+              borderRadius: 10,
+              border: `1px solid ${C.border}`,
+              background: C.card,
+              color: C.text,
+              cursor: "pointer",
+              fontFamily: C.fs,
+            }}
+          >
+            Retry
+          </button>
+        </div>
+      );
+    }
+    return (
+      <div style={{ minHeight: "100vh", background: C.bg, color: C.text, fontFamily: C.fs, maxWidth: 480, margin: "0 auto", padding: "24px 20px" }}>
+        <div style={{ fontFamily: C.fm, fontSize: 10, color: C.muted, letterSpacing: 2 }}>LOADING</div>
+        <div style={{ fontSize: 15, marginTop: 8, color: "rgba(255,255,255,0.5)" }}>Setting up your profile…</div>
+      </div>
+    );
+  }
   if (profile && !profile.onboarding_completed) {
     return (
       <OnboardingFlow
