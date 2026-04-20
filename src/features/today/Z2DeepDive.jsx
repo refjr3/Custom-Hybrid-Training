@@ -11,8 +11,14 @@ function startOfIsoWeek(d) {
   return x;
 }
 
+function normalizeBaselinesPayload(json) {
+  if (!json || typeof json !== "object" || json.error) return null;
+  return json;
+}
+
 export const Z2DeepDive = ({ open, onClose, supabase, dataSources }) => {
   const [metrics, setMetrics] = useState([]);
+  const [baselines, setBaselines] = useState(null);
 
   useEffect(() => {
     if (!open) return;
@@ -20,15 +26,20 @@ export const Z2DeepDive = ({ open, onClose, supabase, dataSources }) => {
       const {
         data: { session },
       } = await supabase.auth.getSession();
+      const headers = { Authorization: `Bearer ${session?.access_token}` };
       const end = new Date().toISOString().slice(0, 10);
       const startD = new Date();
       startD.setDate(startD.getDate() - 27);
       const start = startD.toISOString().slice(0, 10);
-      const res = await fetch(`/api/metrics/range?start=${start}&end=${end}`, {
-        headers: { Authorization: `Bearer ${session?.access_token}` },
-      });
-      const data = await res.json();
-      setMetrics(Array.isArray(data) ? data : []);
+
+      const [metricsRes, baselinesRes] = await Promise.all([
+        fetch(`/api/metrics/range?start=${start}&end=${end}`, { headers }),
+        fetch("/api/metrics/baselines", { headers }),
+      ]);
+      const metricsData = await metricsRes.json();
+      const baselinesData = await baselinesRes.json();
+      setMetrics(Array.isArray(metricsData) ? metricsData : []);
+      setBaselines(normalizeBaselinesPayload(baselinesData));
     })();
   }, [open, supabase]);
 
@@ -46,8 +57,9 @@ export const Z2DeepDive = ({ open, onClose, supabase, dataSources }) => {
       return d >= weekStart && d <= weekEnd;
     });
     const total = weekMetrics.reduce((sum, m) => sum + (m.z2_minutes || 0), 0);
+    const label = w === 3 ? "This wk" : `${weekStart.getMonth() + 1}/${weekStart.getDate()}`;
     weeks.push({
-      label: `W${w + 1}`,
+      label,
       value: total,
       isCurrent: w === 3,
       metrics: weekMetrics,
@@ -58,6 +70,10 @@ export const Z2DeepDive = ({ open, onClose, supabase, dataSources }) => {
   const bestWeek = weeks.length ? weeks.reduce((max, w) => (w.value > max.value ? w : max), weeks[0]) : { value: 0 };
   const avgWeek = weeks.length ? weeks.reduce((sum, w) => sum + w.value, 0) / weeks.length : 0;
   const target = 240;
+  const baselineWeeklyZ2 = baselines?.baseline_z2_weekly_min;
+
+  const dow = now.getDay();
+  const dayIdx = dow === 0 ? 7 : dow;
 
   return (
     <DeepDiveModal
@@ -106,10 +122,29 @@ export const Z2DeepDive = ({ open, onClose, supabase, dataSources }) => {
         >
           {currentWeek.value >= target ? `✓ Target hit · +${currentWeek.value - target} min` : `${target - currentWeek.value} min to target`}
         </div>
+        {dayIdx <= 2 ? (
+          <div
+            style={{
+              marginTop: 10,
+              fontSize: 11,
+              color: "rgba(255,255,255,0.4)",
+              textAlign: "center",
+            }}
+          >
+            Week just started — no pace pressure yet.
+          </div>
+        ) : null}
       </div>
 
       <SectionLabel>Last 4 Weeks</SectionLabel>
-      <WeeklyBars data={weeks} maxValue={Math.max(target, ...weeks.map((w) => w.value))} />
+      <WeeklyBars
+        data={weeks}
+        maxValue={Math.max(target, baselineWeeklyZ2 || 0, ...weeks.map((w) => w.value))}
+        targetValue={240}
+        baselineValue={baselineWeeklyZ2 != null ? Math.round(Number(baselineWeeklyZ2)) : null}
+        accentColor="#C9A875"
+        showValues
+      />
 
       <div style={{ display: "flex", gap: 8, marginTop: 16 }}>
         <StatTile label="Avg" value={Math.round(avgWeek)} unit="min" />
@@ -117,7 +152,7 @@ export const Z2DeepDive = ({ open, onClose, supabase, dataSources }) => {
         <StatTile label="Target" value={target} unit="min" accent="#C9A875" />
       </div>
 
-      <SectionLabel>This Week&apos;s Sessions</SectionLabel>
+      <SectionLabel>{"This Week's Sessions"}</SectionLabel>
       <div
         style={{
           background: "rgba(255,255,255,0.03)",
