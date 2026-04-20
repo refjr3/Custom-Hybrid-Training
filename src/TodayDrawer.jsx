@@ -196,14 +196,10 @@ function DrawerProfile({ profile, session, setDrawerSection, supabase, setProfil
     const wkg = numOrNull(form.weight_kg);
     const payload = {
       name: (form.full_name || "").trim() || profile?.name || "Athlete",
-      dob: form.date_of_birth || null,
       date_of_birth: form.date_of_birth || null,
-      sex: form.gender || null,
       gender: form.gender || null,
       height_cm: hcm,
       weight_kg: wkg,
-      height_in: hcm != null ? Math.round((hcm / 2.54) * 10) / 10 : profile?.height_in ?? null,
-      weight_lbs: wkg != null ? Math.round(wkg * 2.20462 * 10) / 10 : profile?.weight_lbs ?? null,
       target_race_date: form.target_race_date || null,
       hyrox_division: form.hyrox_division || null,
       training_experience: form.training_experience || null,
