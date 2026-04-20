@@ -1,198 +1,546 @@
-export const TrendDots = ({ data, heightBand = 80 }) => {
-  if (!data?.length) return null;
-  const values = data.map((d) => d.value).filter((v) => v != null);
+import { useState } from "react";
+
+export const TrendDots = ({
+  data,
+  heightBand = 80,
+  baseline = null,
+  unit = "",
+  annotation = null,
+  yMin = null,
+  yMax = null,
+}) => {
+  const [tappedIndex, setTappedIndex] = useState(null);
+
+  if (!data?.length) {
+    return (
+      <div
+        style={{
+          height: heightBand + 48,
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "center",
+          color: "rgba(255,255,255,0.2)",
+          fontSize: 11,
+        }}
+      >
+        No data
+      </div>
+    );
+  }
+
+  const values = data.map((d) => d.value).filter((v) => v != null && !Number.isNaN(Number(v)));
   if (!values.length) return null;
-  const max = Math.max(...values, 100);
-  const min = Math.min(...values, 0);
+
+  const dataMin = Math.min(...values);
+  const dataMax = Math.max(...values);
+  const min = yMin !== null ? yMin : Math.floor(dataMin * 0.9);
+  const max = yMax !== null ? yMax : Math.ceil(dataMax * 1.1);
   const range = max - min || 1;
 
+  const baselineY = baseline != null ? 100 - ((baseline - min) / range) * 100 : null;
+
+  const xLabels = [];
+  if (data[0]?.date) {
+    const firstDate = new Date(data[0].date);
+    const midDate = new Date(data[Math.floor(data.length / 2)]?.date);
+    const lastDate = new Date(data[data.length - 1]?.date);
+    xLabels.push(
+      { pos: 0, text: firstDate.toLocaleDateString("en-US", { month: "short", day: "numeric" }) },
+      { pos: 50, text: midDate.toLocaleDateString("en-US", { month: "short", day: "numeric" }) },
+      { pos: 100, text: lastDate.toLocaleDateString("en-US", { month: "short", day: "numeric" }) },
+    );
+  }
+
+  const tappedDot = tappedIndex != null ? data[tappedIndex] : null;
+  const xDenom = Math.max(data.length - 1, 1);
+
+  const polylinePoints = data
+    .map((d, i) => {
+      if (d.value == null || Number.isNaN(Number(d.value))) return null;
+      const x = (i / xDenom) * 100;
+      const y = 100 - ((Number(d.value) - min) / range) * 100;
+      return `${x},${y}`;
+    })
+    .filter(Boolean)
+    .join(" ");
+
   return (
-    <div
-      style={{
-        position: "relative",
-        height: heightBand,
-        marginTop: 20,
-        marginBottom: 8,
-      }}
-    >
-      {[0.25, 0.5, 0.75].map((p) => (
-        <div
-          key={p}
-          style={{
-            position: "absolute",
-            left: 0,
-            right: 0,
-            top: `${p * 100}%`,
-            height: 1,
-            background: "rgba(255,255,255,0.04)",
-          }}
-        />
-      ))}
-      <svg style={{ position: "absolute", inset: 0, width: "100%", height: "100%", overflow: "visible" }}>
-        <polyline
-          points={data
-            .map((d, i) => {
-              if (d.value == null) return null;
-              const x = (i / (data.length - 1)) * 100;
-              const y = 100 - ((d.value - min) / range) * 100;
-              return `${x},${y}`;
-            })
-            .filter(Boolean)
-            .join(" ")}
-          fill="none"
-          stroke="rgba(201,168,117,0.25)"
-          strokeWidth="1"
-          vectorEffect="non-scaling-stroke"
-          preserveAspectRatio="none"
-          style={{ transform: "scale(1,1)" }}
-        />
-      </svg>
-      {data.map((d, i) => {
-        if (d.value == null) return null;
-        const x = (i / (data.length - 1)) * 100;
-        const y = 100 - ((d.value - min) / range) * 100;
-        const color = d.color || "#C9A875";
-        return (
+    <div style={{ position: "relative", marginTop: 20 }}>
+      <div
+        style={{
+          position: "absolute",
+          left: 0,
+          top: 0,
+          fontSize: 9,
+          fontWeight: 500,
+          color: "rgba(255,255,255,0.25)",
+          letterSpacing: "0.5px",
+        }}
+      >
+        {max}
+        {unit}
+      </div>
+      <div
+        style={{
+          position: "absolute",
+          left: 0,
+          top: heightBand - 12,
+          fontSize: 9,
+          fontWeight: 500,
+          color: "rgba(255,255,255,0.25)",
+          letterSpacing: "0.5px",
+        }}
+      >
+        {min}
+        {unit}
+      </div>
+
+      <div
+        style={{
+          position: "relative",
+          marginLeft: 34,
+          height: heightBand,
+        }}
+      >
+        {[0.25, 0.5, 0.75].map((p) => (
           <div
-            key={i}
+            key={p}
             style={{
               position: "absolute",
-              left: `${x}%`,
-              top: `${y}%`,
-              width: 7,
-              height: 7,
-              borderRadius: "50%",
-              background: color,
-              transform: "translate(-50%,-50%)",
-              boxShadow: `0 0 8px ${color}40`,
+              left: 0,
+              right: 0,
+              top: `${p * 100}%`,
+              height: 1,
+              background: "rgba(255,255,255,0.04)",
             }}
           />
-        );
-      })}
-    </div>
-  );
-};
+        ))}
 
-export const WeeklyBars = ({ data, maxValue, unit = "min", accentColor = "#C9A875" }) => {
-  const max = maxValue || Math.max(...data.map((d) => d.value || 0), 1);
-
-  return (
-    <div
-      style={{
-        display: "flex",
-        gap: 6,
-        alignItems: "flex-end",
-        height: 120,
-        marginTop: 16,
-        marginBottom: 8,
-      }}
-    >
-      {data.map((d, i) => {
-        const pct = ((d.value || 0) / max) * 100;
-        return (
-          <div
-            key={i}
-            style={{
-              flex: 1,
-              display: "flex",
-              flexDirection: "column",
-              alignItems: "center",
-              gap: 6,
-            }}
-          >
+        {baselineY != null && (
+          <>
             <div
               style={{
-                width: "100%",
-                height: `${pct}%`,
-                minHeight: 2,
-                background: d.isCurrent ? accentColor : `${accentColor}40`,
-                borderRadius: "4px 4px 2px 2px",
-                transition: "height 0.4s ease",
-                boxShadow: d.isCurrent ? `0 0 12px ${accentColor}60` : "none",
+                position: "absolute",
+                left: 0,
+                right: 0,
+                top: `${baselineY}%`,
+                height: 1,
+                borderTop: "1px dashed rgba(201,168,117,0.35)",
+                pointerEvents: "none",
               }}
             />
             <div
               style={{
+                position: "absolute",
+                right: -2,
+                top: `calc(${baselineY}% - 8px)`,
                 fontSize: 8,
                 fontWeight: 600,
-                color: "rgba(255,255,255,0.3)",
-                letterSpacing: "0.5px",
+                color: "rgba(201,168,117,0.55)",
+                letterSpacing: "1px",
+                background: "rgba(13,14,16,0.7)",
+                padding: "1px 5px",
+                borderRadius: 3,
               }}
             >
-              {d.label}
+              BASE
             </div>
+          </>
+        )}
+
+        <svg
+          style={{
+            position: "absolute",
+            inset: 0,
+            width: "100%",
+            height: "100%",
+            overflow: "visible",
+            pointerEvents: "none",
+          }}
+        >
+          {polylinePoints ? (
+            <polyline
+              points={polylinePoints}
+              fill="none"
+              stroke="rgba(201,168,117,0.35)"
+              strokeWidth="1.5"
+              vectorEffect="non-scaling-stroke"
+              preserveAspectRatio="none"
+            />
+          ) : null}
+        </svg>
+
+        {data.map((d, i) => {
+          if (d.value == null || Number.isNaN(Number(d.value))) return null;
+          const x = (i / xDenom) * 100;
+          const y = 100 - ((Number(d.value) - min) / range) * 100;
+          const color = d.color || "#C9A875";
+          const isTapped = tappedIndex === i;
+
+          return (
+            <button
+              key={i}
+              type="button"
+              onClick={(e) => {
+                e.stopPropagation();
+                setTappedIndex(isTapped ? null : i);
+              }}
+              style={{
+                position: "absolute",
+                left: `${x}%`,
+                top: `${y}%`,
+                width: isTapped ? 14 : 10,
+                height: isTapped ? 14 : 10,
+                marginLeft: isTapped ? -7 : -5,
+                marginTop: isTapped ? -7 : -5,
+                borderRadius: "50%",
+                background: color,
+                boxShadow: `0 0 ${isTapped ? 14 : 8}px ${color}50`,
+                border: "none",
+                cursor: "pointer",
+                padding: 0,
+                transition: "all 0.15s ease",
+                zIndex: isTapped ? 3 : 2,
+              }}
+            />
+          );
+        })}
+
+        {tappedDot && tappedIndex != null ? (
+          <div
+            style={{
+              position: "absolute",
+              left: `${(tappedIndex / xDenom) * 100}%`,
+              bottom: "calc(100% + 4px)",
+              transform: "translateX(-50%)",
+              background: "rgba(20,20,22,0.98)",
+              border: "1px solid rgba(255,255,255,0.15)",
+              borderRadius: 8,
+              padding: "6px 10px",
+              fontSize: 11,
+              color: "#fff",
+              whiteSpace: "nowrap",
+              zIndex: 10,
+              boxShadow: "0 4px 12px rgba(0,0,0,0.4)",
+            }}
+          >
+            <div style={{ fontWeight: 600 }}>
+              {Math.round(Number(tappedDot.value))}
+              {unit}
+            </div>
+            {tappedDot.date ? (
+              <div style={{ fontSize: 9, color: "rgba(255,255,255,0.4)", marginTop: 1 }}>
+                {new Date(tappedDot.date).toLocaleDateString("en-US", {
+                  weekday: "short",
+                  month: "short",
+                  day: "numeric",
+                })}
+              </div>
+            ) : null}
           </div>
-        );
-      })}
+        ) : null}
+      </div>
+
+      {xLabels.length > 0 ? (
+        <div
+          style={{
+            position: "relative",
+            marginLeft: 34,
+            marginTop: 8,
+            height: 14,
+          }}
+        >
+          {xLabels.map((l, i) => (
+            <div
+              key={i}
+              style={{
+                position: "absolute",
+                left: `${l.pos}%`,
+                transform:
+                  l.pos === 0 ? "translateX(0)" : l.pos === 100 ? "translateX(-100%)" : "translateX(-50%)",
+                fontSize: 9,
+                fontWeight: 500,
+                color: "rgba(255,255,255,0.3)",
+                letterSpacing: "0.3px",
+              }}
+            >
+              {l.text}
+            </div>
+          ))}
+        </div>
+      ) : null}
+
+      {annotation ? (
+        <div
+          style={{
+            marginTop: 14,
+            marginLeft: 34,
+            fontSize: 11,
+            color: "rgba(201,168,117,0.7)",
+            fontWeight: 500,
+            letterSpacing: "0.2px",
+          }}
+        >
+          {annotation}
+        </div>
+      ) : null}
     </div>
   );
 };
 
-export const StatTile = ({ label, value, unit, accent, trend }) => (
-  <div
-    style={{
-      flex: 1,
-      background: "rgba(255,255,255,0.04)",
-      border: "1px solid rgba(255,255,255,0.07)",
-      borderRadius: 14,
-      padding: "14px 16px",
-    }}
-  >
-    <div
-      style={{
-        fontSize: 8,
-        fontWeight: 600,
-        color: "rgba(255,255,255,0.22)",
-        letterSpacing: "2px",
-        textTransform: "uppercase",
-        marginBottom: 6,
-      }}
-    >
-      {label}
-    </div>
-    <div
-      style={{
-        fontSize: 22,
-        fontFamily: "'DM Serif Display', serif",
-        color: accent || "#fff",
-        lineHeight: 1,
-        letterSpacing: "-0.5px",
-      }}
-    >
-      {value}
-      {unit && (
-        <span
-          style={{
-            fontSize: 11,
-            color: "rgba(255,255,255,0.3)",
-            fontFamily: "'DM Sans', sans-serif",
-            fontWeight: 400,
-            marginLeft: 4,
-          }}
-        >
-          {unit}
-        </span>
-      )}
-    </div>
-    {trend && (
+export const WeeklyBars = ({
+  data,
+  maxValue,
+  unit = "min",
+  accentColor = "#C9A875",
+  targetValue = null,
+  baselineValue = null,
+  showValues = true,
+}) => {
+  const max = maxValue || Math.max(...data.map((d) => d.value || 0), targetValue || 0, baselineValue || 0, 1);
+  const targetY = targetValue != null ? 100 - (targetValue / max) * 100 : null;
+  const baselineY = baselineValue != null ? 100 - (baselineValue / max) * 100 : null;
+
+  return (
+    <div style={{ position: "relative", marginTop: 16 }}>
       <div
         style={{
-          fontSize: 10,
-          color:
-            trend.direction === "up"
-              ? "#5dffa0"
-              : trend.direction === "down"
-                ? "#FF6B6B"
-                : "rgba(255,255,255,0.3)",
-          marginTop: 4,
+          position: "absolute",
+          left: 0,
+          top: 0,
+          fontSize: 9,
           fontWeight: 500,
+          color: "rgba(255,255,255,0.25)",
         }}
       >
-        {trend.direction === "up" ? "↑" : trend.direction === "down" ? "↓" : "→"} {trend.text}
+        {Math.round(max)}
+        {unit}
       </div>
-    )}
-  </div>
-);
+
+      <div
+        style={{
+          display: "flex",
+          gap: 6,
+          alignItems: "flex-end",
+          height: 140,
+          marginLeft: 34,
+          position: "relative",
+        }}
+      >
+        {baselineY != null ? (
+          <>
+            <div
+              style={{
+                position: "absolute",
+                left: 0,
+                right: 0,
+                top: `${baselineY}%`,
+                height: 1,
+                borderTop: "1px dashed rgba(100,180,255,0.45)",
+                pointerEvents: "none",
+                zIndex: 1,
+              }}
+            />
+            <div
+              style={{
+                position: "absolute",
+                left: 0,
+                top: `calc(${baselineY}% - 8px)`,
+                fontSize: 8,
+                fontWeight: 600,
+                color: "rgba(100,180,255,0.75)",
+                letterSpacing: "1px",
+                background: "rgba(13,14,16,0.7)",
+                padding: "1px 5px",
+                borderRadius: 3,
+              }}
+            >
+              AVG {Math.round(baselineValue)}
+            </div>
+          </>
+        ) : null}
+
+        {targetY != null ? (
+          <>
+            <div
+              style={{
+                position: "absolute",
+                left: 0,
+                right: 0,
+                top: `${targetY}%`,
+                height: 1,
+                borderTop: "1px dashed rgba(201,168,117,0.5)",
+                pointerEvents: "none",
+                zIndex: 1,
+              }}
+            />
+            <div
+              style={{
+                position: "absolute",
+                right: -4,
+                top: `calc(${targetY}% - 8px)`,
+                fontSize: 8,
+                fontWeight: 600,
+                color: "rgba(201,168,117,0.7)",
+                letterSpacing: "1px",
+                background: "rgba(13,14,16,0.7)",
+                padding: "1px 5px",
+                borderRadius: 3,
+              }}
+            >
+              TARGET {targetValue}
+            </div>
+          </>
+        ) : null}
+
+        {data.map((d, i) => {
+          const pct = ((d.value || 0) / max) * 100;
+          const isHit = targetValue != null && d.value >= targetValue;
+          return (
+            <div
+              key={i}
+              style={{
+                flex: 1,
+                display: "flex",
+                flexDirection: "column",
+                alignItems: "center",
+                gap: 6,
+                height: "100%",
+                justifyContent: "flex-end",
+              }}
+            >
+              {showValues && d.value > 0 ? (
+                <div
+                  style={{
+                    fontSize: 10,
+                    fontWeight: 600,
+                    color: d.isCurrent ? accentColor : "rgba(255,255,255,0.45)",
+                    fontFamily: "'DM Serif Display', serif",
+                  }}
+                >
+                  {Math.round(d.value)}
+                </div>
+              ) : null}
+              <div
+                style={{
+                  width: "100%",
+                  height: `${pct}%`,
+                  minHeight: d.value > 0 ? 3 : 0,
+                  background: d.isCurrent ? accentColor : `${accentColor}40`,
+                  borderRadius: "4px 4px 2px 2px",
+                  transition: "height 0.4s ease",
+                  boxShadow: d.isCurrent ? `0 0 12px ${accentColor}60` : "none",
+                  border: isHit && !d.isCurrent ? `1px solid ${accentColor}80` : "none",
+                }}
+              />
+              <div
+                style={{
+                  fontSize: 9,
+                  fontWeight: 600,
+                  color: d.isCurrent ? "rgba(255,255,255,0.7)" : "rgba(255,255,255,0.3)",
+                  letterSpacing: "0.5px",
+                  textAlign: "center",
+                }}
+              >
+                {d.label}
+              </div>
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+};
+
+export const StatTile = ({ label, value, unit, accent, trend, threshold }) => {
+  const thresholdColors = {
+    green: "#5dffa0",
+    amber: "#ffd84d",
+    red: "#FF6B6B",
+  };
+  const color = threshold?.color ? thresholdColors[threshold.color] : accent || "#fff";
+  const borderTint = threshold?.color ? `${thresholdColors[threshold.color]}30` : "rgba(255,255,255,0.07)";
+
+  return (
+    <div
+      style={{
+        flex: 1,
+        background: "rgba(255,255,255,0.04)",
+        border: `1px solid ${borderTint}`,
+        borderRadius: 14,
+        padding: "14px 16px",
+      }}
+    >
+      <div
+        style={{
+          fontSize: 8,
+          fontWeight: 600,
+          color: "rgba(255,255,255,0.22)",
+          letterSpacing: "2px",
+          textTransform: "uppercase",
+          marginBottom: 6,
+        }}
+      >
+        {label}
+      </div>
+      <div
+        style={{
+          fontSize: 22,
+          fontFamily: "'DM Serif Display', serif",
+          color,
+          lineHeight: 1,
+          letterSpacing: "-0.5px",
+        }}
+      >
+        {value}
+        {unit ? (
+          <span
+            style={{
+              fontSize: 11,
+              color: "rgba(255,255,255,0.3)",
+              fontFamily: "'DM Sans', sans-serif",
+              fontWeight: 400,
+              marginLeft: 4,
+            }}
+          >
+            {unit}
+          </span>
+        ) : null}
+      </div>
+      {threshold?.text ? (
+        <div
+          style={{
+            fontSize: 9,
+            color,
+            opacity: 0.8,
+            marginTop: 4,
+            fontWeight: 500,
+            letterSpacing: "0.3px",
+          }}
+        >
+          {threshold.text}
+        </div>
+      ) : null}
+      {trend && !threshold ? (
+        <div
+          style={{
+            fontSize: 10,
+            color:
+              trend.direction === "up"
+                ? "#5dffa0"
+                : trend.direction === "down"
+                  ? "#FF6B6B"
+                  : "rgba(255,255,255,0.3)",
+            marginTop: 4,
+            fontWeight: 500,
+          }}
+        >
+          {trend.direction === "up" ? "↑" : trend.direction === "down" ? "↓" : "→"} {trend.text}
+        </div>
+      ) : null}
+    </div>
+  );
+};
 
 export const SectionLabel = ({ children }) => (
   <div
