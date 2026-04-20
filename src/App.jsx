@@ -2806,10 +2806,10 @@ export default function App() {
   const [labSessionId, setLabSessionId] = useState(createSessionId);
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [drawerSection, setDrawerSection] = useState("menu");
-  const dataSources = useDataSources(profile);
   // Auth state is declared with the rest of top-level hooks to keep hook order stable.
   const [session, setSession]       = useState(null);
   const [profile, setProfile]       = useState(null);
+  const dataSources = useDataSources(profile);
   const [profileBootstrapError, setProfileBootstrapError] = useState(null);
   const [authLoading, setAuthLoading] = useState(true);
   const dataFetched = useRef(false);
