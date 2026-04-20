@@ -21,7 +21,7 @@ const colorPalette = {
   },
 };
 
-export const DailyCallCard = ({ supabase }) => {
+export const DailyCallCard = ({ supabase, cornerLabel = "Today's Call" }) => {
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(true);
 
@@ -115,7 +115,7 @@ export const DailyCallCard = ({ supabase }) => {
             textTransform: "uppercase",
           }}
         >
-          {"Today's Call"}
+          {cornerLabel}
         </div>
       </div>
 
