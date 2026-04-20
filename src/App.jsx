@@ -13,6 +13,7 @@ import { ConnectPrompt } from "./features/today/ConnectPrompt.jsx";
 import { RecoveryDeepDive } from "./features/today/RecoveryDeepDive.jsx";
 import { Z2DeepDive } from "./features/today/Z2DeepDive.jsx";
 import { SleepDeepDive } from "./features/today/SleepDeepDive.jsx";
+import { DailyCallCard } from "./features/today/DailyCallCard.jsx";
 
 const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
 const supabaseKey = import.meta.env.VITE_SUPABASE_ANON_KEY;
@@ -4319,6 +4320,7 @@ export default function App() {
                 </div>
               </div>
             </div>
+            <DailyCallCard supabase={supabase} />
             <div style={{ textAlign: "center", marginBottom: 16 }}>
               <div
                 style={{
