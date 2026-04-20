@@ -1,4 +1,5 @@
 import { createClient } from "@supabase/supabase-js";
+import { addCalendarDaysToIsoYmd, getCalendarYmdInTimeZone } from "../../lib/getLocalToday.js";
 import { getStravaAccessForRequest } from "./tokenCookies.js";
 
 const supabase = createClient(
@@ -18,6 +19,38 @@ function startOfLocalWeekMonday(d = new Date()) {
   monday.setDate(d.getDate() + diff);
   monday.setHours(0, 0, 0, 0);
   return monday;
+}
+
+function localCalendarYmd(d) {
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, "0");
+  const day = String(d.getDate()).padStart(2, "0");
+  return `${y}-${m}-${day}`;
+}
+
+async function patchStravaZ2HistoryBackfilled(userId) {
+  const { data: prof, error: readErr } = await supabase
+    .from("user_profiles")
+    .select("connected_sources")
+    .eq("user_id", userId)
+    .maybeSingle();
+  if (readErr) {
+    console.warn("[strava/weekly-z2] backfill flag read:", readErr.message);
+    return;
+  }
+  const cs =
+    typeof prof?.connected_sources === "object" && prof?.connected_sources
+      ? prof.connected_sources
+      : {};
+  const strava = {
+    ...(typeof cs.strava === "object" && cs.strava ? cs.strava : {}),
+    z2_history_backfilled_at: new Date().toISOString(),
+  };
+  const { error } = await supabase
+    .from("user_profiles")
+    .update({ connected_sources: { ...cs, strava } })
+    .eq("user_id", userId);
+  if (error) console.warn("[strava/weekly-z2] backfill flag write:", error.message);
 }
 
 const getSecondsInZ2Stream = (hrData = [], lower = 133, upper = 148) => {
@@ -292,7 +325,29 @@ export default async function handler(req, res) {
   try {
     const now = new Date();
     const weekStart = startOfLocalWeekMonday(now);
-    const afterEpoch = Math.floor(weekStart.getTime() / 1000);
+    const weekStartYmd = localCalendarYmd(weekStart);
+
+    const { data: profRow } = await supabase
+      .from("user_profiles")
+      .select("connected_sources, time_zone")
+      .eq("user_id", appUserId)
+      .maybeSingle();
+    const tz = profRow?.time_zone || "America/New_York";
+    const todayYmd = getCalendarYmdInTimeZone(tz) || localCalendarYmd(now);
+    const thirtyAgoYmd = addCalendarDaysToIsoYmd(todayYmd, -30) || todayYmd;
+    const { data: stravaDateRows } = await supabase
+      .from("unified_metrics")
+      .select("date")
+      .eq("user_id", appUserId)
+      .eq("source", "strava")
+      .gte("date", thirtyAgoYmd);
+    const distinctStravaDays = new Set((stravaDateRows || []).map((r) => r.date)).size;
+    const stravaHistoryDone = Boolean(profRow?.connected_sources?.strava?.z2_history_backfilled_at);
+    const needsStravaHistory = !stravaHistoryDone && distinctStravaDays < 20;
+
+    const afterEpoch = needsStravaHistory
+      ? Math.floor((Date.now() - 30 * 24 * 60 * 60 * 1000) / 1000)
+      : Math.floor(weekStart.getTime() / 1000);
     const beforeEpoch = Math.floor(now.getTime() / 1000) + 2;
 
     const activitiesRes = await fetchActivitiesInRange(accessToken, afterEpoch, beforeEpoch);
@@ -373,7 +428,10 @@ export default async function handler(req, res) {
         }
 
         const secs = metrics.z2;
-        if (secs > 0) {
+        const actYmd = activityLocalYmd(a);
+        const inCurrentWeek =
+          actYmd && actYmd >= weekStartYmd && actYmd <= todayYmd;
+        if (secs > 0 && inCurrentWeek) {
           totalZ2Seconds += secs;
           summary.push({
             name: a.name || "Activity",
@@ -390,6 +448,12 @@ export default async function handler(req, res) {
 
     await upsertStravaUnifiedDays(supabase, appUserId, byDate);
     await patchStravaLastSync(appUserId);
+
+    if (needsStravaHistory) {
+      await patchStravaZ2HistoryBackfilled(appUserId);
+    } else if (!stravaHistoryDone && distinctStravaDays >= 20) {
+      await patchStravaZ2HistoryBackfilled(appUserId);
+    }
 
     if (weeklyZ2Minutes > 0) {
       await writeZ2Cache(appUserId, weeklyZ2Minutes);
