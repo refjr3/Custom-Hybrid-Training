@@ -3163,7 +3163,14 @@ export default function App() {
         rawMinutes = localStorage.getItem(lsKey);
         const n = parseInt(rawMinutes, 10);
         if (Number.isFinite(n) && n > 0) hadPositiveLocal = true;
-        if (Number.isFinite(n) && n >= 0) setStravaWeeklyZ2Minutes(n);
+        if (Number.isFinite(n) && n >= 0) {
+          setStravaWeeklyZ2Minutes(n);
+          setWeeklyZoneMinutes((prev) => ({
+            z2: n,
+            z3: typeof prev?.z3 === "number" ? prev.z3 : 0,
+            z4_plus: typeof prev?.z4_plus === "number" ? prev.z4_plus : 0,
+          }));
+        }
       } catch (_) {}
     }
 
@@ -3184,6 +3191,14 @@ export default function App() {
       ageMin < 60 &&
       Number.isFinite(parseInt(rawMinutes, 10))
     ) {
+      const throttledZ2 = parseInt(rawMinutes, 10);
+      if (Number.isFinite(throttledZ2) && throttledZ2 >= 0) {
+        setWeeklyZoneMinutes((prev) => ({
+          z2: throttledZ2,
+          z3: typeof prev?.z3 === "number" ? prev.z3 : 0,
+          z4_plus: typeof prev?.z4_plus === "number" ? prev.z4_plus : 0,
+        }));
+      }
       return;
     }
 
@@ -3232,46 +3247,53 @@ export default function App() {
         }
         return;
       }
-      const wzm =
-        data.weeklyZoneMinutes && typeof data.weeklyZoneMinutes === "object" ? data.weeklyZoneMinutes : null;
-      const z2FromApi = data.weeklyZ2Minutes ?? data.totalMinutes;
-      setWeeklyZoneMinutes({
-        z2: Math.max(0, Math.round(Number(wzm?.z2 ?? z2FromApi ?? 0)) || 0),
-        z3: Math.max(0, Math.round(Number(wzm?.z3 ?? 0)) || 0),
-        z4_plus: Math.max(0, Math.round(Number(wzm?.z4_plus ?? 0)) || 0),
-      });
-      const mins = z2FromApi;
-      if (typeof mins === "number" && Number.isFinite(mins)) {
-        const m = Math.max(0, mins);
-        const fromCache = data.fromCache === true;
-        if (m > 0 || fromCache) {
-          setStravaWeeklyZ2Minutes(m);
-          setStravaConnected(true);
-          if (lsKey) {
-            try {
-              localStorage.setItem(lsKey, String(m));
-            } catch (_) {}
-          }
-        } else {
-          console.warn(
-            "[Z2] API returned 0 (live Strava), keeping last value if any. Error:",
-            data.error,
-            "rateLimited:",
-            data.rateLimited
-          );
-          if (!hadPositiveLocal) {
-            const raw = lsKey ? localStorage.getItem(lsKey) : null;
-            const prev = raw != null ? parseInt(raw, 10) : NaN;
-            if (!Number.isFinite(prev) || prev <= 0) {
-              setStravaWeeklyZ2Minutes(0);
-              setWeeklyZoneMinutes({ z2: 0, z3: 0, z4_plus: 0 });
-              setStravaConnected(true);
+
+      console.log("[z2 fetch] raw response:", JSON.stringify(data).slice(0, 300));
+      console.log("[z2 fetch] weeklyZoneMinutes:", data.weeklyZoneMinutes);
+      console.log("[z2 fetch] weeklyZ2Minutes:", data.weeklyZ2Minutes);
+
+      const z2FromApi = Number(data.weeklyZ2Minutes ?? data.totalMinutes ?? 0);
+      const w = data.weeklyZoneMinutes;
+      const zoneMinutes =
+        w && typeof w === "object"
+          ? {
+              z2: Math.max(0, Math.round(Number(w.z2 ?? (Number.isFinite(z2FromApi) ? z2FromApi : 0)))),
+              z3: Math.max(0, Math.round(Number(w.z3 ?? 0))),
+              z4_plus: Math.max(0, Math.round(Number(w.z4_plus ?? 0))),
             }
+          : {
+              z2: Math.max(0, Math.round(Number.isFinite(z2FromApi) ? z2FromApi : 0)),
+              z3: 0,
+              z4_plus: 0,
+            };
+      setWeeklyZoneMinutes(zoneMinutes);
+      setStravaWeeklyZ2Minutes(zoneMinutes.z2);
+
+      const m = zoneMinutes.z2;
+      const fromCache = data.fromCache === true;
+      if (m > 0 || fromCache) {
+        setStravaConnected(true);
+        if (lsKey) {
+          try {
+            localStorage.setItem(lsKey, String(m));
+          } catch (_) {}
+        }
+      } else {
+        console.warn(
+          "[Z2] API returned 0 (live Strava), keeping last value if any. Error:",
+          data.error,
+          "rateLimited:",
+          data.rateLimited
+        );
+        if (!hadPositiveLocal) {
+          const raw = lsKey ? localStorage.getItem(lsKey) : null;
+          const prev = raw != null ? parseInt(raw, 10) : NaN;
+          if (!Number.isFinite(prev) || prev <= 0) {
+            setStravaWeeklyZ2Minutes(0);
+            setWeeklyZoneMinutes({ z2: 0, z3: 0, z4_plus: 0 });
+            setStravaConnected(true);
           }
         }
-      } else if (!hadPositiveLocal) {
-        setStravaWeeklyZ2Minutes(0);
-        setWeeklyZoneMinutes({ z2: 0, z3: 0, z4_plus: 0 });
       }
     } catch (e) {
       setStravaWeeklyZ2Error(e?.message || "Failed loading Strava Z2");
