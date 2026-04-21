@@ -96,6 +96,8 @@ export default async function handler(req, res) {
     const todayMetrics = await resolveMetrics(user.id, today);
 
     const { data: baselines } = await supabase.from("user_baselines").select("*").eq("user_id", user.id).maybeSingle();
+    console.log("[synthesis] todayMetrics:", JSON.stringify(todayMetrics));
+    console.log("[synthesis] baselines:", JSON.stringify(baselines));
 
     const activeVariantId = await getActiveVariantId(supabase, user.id);
 
@@ -134,10 +136,23 @@ export default async function handler(req, res) {
       .filter(Boolean)
       .map((f) => f.color);
 
-    let overallColor;
-    if (bodyFlagColors.includes("red")) overallColor = "red";
-    else if (bodyFlagColors.filter((c) => c === "amber").length >= 2) overallColor = "amber";
-    else overallColor = "green";
+    const hasBodyData = !!(
+      todayMetrics
+      && (
+        todayMetrics.readiness_score != null
+        || todayMetrics.hrv_rmssd != null
+        || todayMetrics.sleep_total_min != null
+      )
+    );
+
+    let overallColor = "green";
+    if (hasBodyData) {
+      if (bodyFlagColors.includes("red")) overallColor = "red";
+      else if (bodyFlagColors.filter((c) => c === "amber").length >= 2) overallColor = "amber";
+      else overallColor = "green";
+    } else {
+      overallColor = "gray";
+    }
 
     const flagSummary = Object.entries(flags)
       .filter(([, f]) => f)
@@ -152,10 +167,16 @@ export default async function handler(req, res) {
     })();
 
     const dayOfWeek = dayIdx;
-    const sleepLine =
-      todayMetrics?.sleep_total_min != null
-        ? `${Math.round(todayMetrics.sleep_total_min / 60)}h ${todayMetrics.sleep_total_min % 60}m`
-        : "n/a";
+    const bodyContext = hasBodyData
+      ? `
+Today's body metrics:
+- Readiness: ${todayMetrics?.readiness_score ?? "not available"} (${todayMetrics?.readiness_color ?? "n/a"})
+- HRV: ${todayMetrics?.hrv_rmssd != null ? todayMetrics.hrv_rmssd.toFixed(0) : "not available"}ms (baseline ${baselines?.baseline_hrv_rmssd != null ? baselines.baseline_hrv_rmssd.toFixed(0) : "n/a"})
+- RHR: ${todayMetrics?.resting_hr ?? "not available"} bpm (baseline ${baselines?.baseline_resting_hr != null ? baselines.baseline_resting_hr.toFixed(0) : "n/a"})
+- Sleep: ${todayMetrics?.sleep_total_min ? `${(todayMetrics.sleep_total_min / 60).toFixed(1)}h` : "not available"}, score ${todayMetrics?.sleep_score ?? "n/a"}
+- Deep sleep: ${todayMetrics?.sleep_deep_min != null ? todayMetrics.sleep_deep_min.toFixed(0) : "not available"}min
+`
+      : "No wearable data synced yet today. Coach based on planned session only.";
 
     const prompt = `You are ${profile?.name || "an athlete"}'s hybrid training coach. Write a SHORT daily read (max 2 sentences for summary, 1 for action).
 
@@ -172,12 +193,7 @@ COACHING PHILOSOPHY:
 - When body signals are mixed with one yellow, note it but keep the session.
 - When body signals are clearly red, pull back specifically and briefly.
 
-Today's metrics:
-- Readiness: ${todayMetrics?.readiness_score ?? "n/a"} (${todayMetrics?.readiness_color ?? "n/a"})
-- HRV: ${todayMetrics?.hrv_rmssd != null ? todayMetrics.hrv_rmssd.toFixed(0) : "n/a"}ms (baseline ${baselines?.baseline_hrv_rmssd != null ? baselines.baseline_hrv_rmssd.toFixed(0) : "n/a"})
-- RHR: ${todayMetrics?.resting_hr ?? "n/a"} (baseline ${baselines?.baseline_resting_hr != null ? baselines.baseline_resting_hr.toFixed(0) : "n/a"})
-- Sleep: ${sleepLine}, score ${todayMetrics?.sleep_score ?? "n/a"}
-- Deep sleep: ${todayMetrics?.sleep_deep_min != null ? todayMetrics.sleep_deep_min.toFixed(0) : "n/a"}min (baseline ${baselines?.baseline_sleep_deep_min != null ? baselines.baseline_sleep_deep_min.toFixed(0) : "n/a"})
+${bodyContext}
 - Awake: ${todayMetrics?.sleep_awake_min != null ? todayMetrics.sleep_awake_min.toFixed(0) : "n/a"}min
 - Weekly Z2: ${weeklyZ2}min of 240 target (day ${dayOfWeek} of 7 — ${dayOfWeek <= 2 ? "week just started" : dayOfWeek >= 5 ? "late in week" : "mid-week"})
 
@@ -192,6 +208,7 @@ SUMMARY: [1-2 sentences reading the body state, not the pacing]
 ACTION: [1 sentence — what to do with today's planned session. Default: execute as written.]
 
 Be direct. Use the athlete's name occasionally, not every time. No fluff. When body is green, say go.`;
+    console.log("[synthesis] prompt sent to claude:", prompt.slice(0, 500));
 
     let headline = "Today";
     let summary = "";
