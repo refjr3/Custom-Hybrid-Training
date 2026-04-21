@@ -1,4 +1,5 @@
 import { createClient } from "@supabase/supabase-js";
+import { getActiveVariantId, applyTrainingVariantFilter } from "../lib/getActiveVariant.js";
 import {
   getLocalToday,
   formatEasternYmdFromDate,
@@ -385,6 +386,8 @@ export default async function handler(req, res) {
   if (authErr || !authData?.user) return res.status(401).json({ error: "Invalid token" });
   const userId = authData.user.id;
 
+  const activeVariantId = await getActiveVariantId(supabase, userId);
+
   const cutoff = isoDaysAgo(60);
   const todayIso = getLocalToday();
 
@@ -527,10 +530,13 @@ export default async function handler(req, res) {
     };
   });
 
-  const { data: dayRows, error: dErr } = await supabase
-    .from("training_days")
-    .select("week_id, day_name, date_label, am_session, pm_session, am_session_custom, pm_session_custom")
-    .eq("user_id", userId);
+  const { data: dayRows, error: dErr } = await applyTrainingVariantFilter(
+    supabase
+      .from("training_days")
+      .select("week_id, day_name, date_label, am_session, pm_session, am_session_custom, pm_session_custom")
+      .eq("user_id", userId),
+    activeVariantId
+  );
 
   if (dErr) {
     return res.status(500).json({ error: "training_days_query_failed", details: dErr.message });

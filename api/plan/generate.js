@@ -1,4 +1,5 @@
 import { createClient } from "@supabase/supabase-js";
+import { getActiveVariantId, applyTrainingVariantFilter } from "../lib/getActiveVariant.js";
 
 const supabase = createClient(
   process.env.SUPABASE_URL,
@@ -262,6 +263,9 @@ export default async function handler(req, res) {
     if (authErr || !user) return res.status(401).json({ error: "Invalid token" });
     const userId = user.id;
 
+    const activeVariantId = await getActiveVariantId(supabase, userId);
+    const variantInsert = activeVariantId ? { variant_id: activeVariantId } : {};
+
     const profileData = req.body?.profile || null;
     let profile = profileData;
     if (!profile) {
@@ -311,10 +315,13 @@ export default async function handler(req, res) {
 
     if (genStatus === "complete") {
     // Completed plan exists — honour idempotency, don't regenerate
-    const { count } = await supabase
-      .from("training_weeks")
-      .select("id", { count: "exact", head: true })
-      .eq("user_id", userId);
+    const { count } = await applyTrainingVariantFilter(
+      supabase
+        .from("training_weeks")
+        .select("id", { count: "exact", head: true })
+        .eq("user_id", userId),
+      activeVariantId
+    );
 
     if (count > 0) {
       return res.status(200).json({ success: true, message: "Plan already exists", weeks_created: 0 });
@@ -325,9 +332,9 @@ export default async function handler(req, res) {
     if (genStatus === "in_progress" || genStatus === "failed") {
     // Previous attempt was interrupted or failed — clear partial data and retry
     const [{ error: delDaysErr }, { error: delWeeksErr }, { error: delBlocksErr }] = await Promise.all([
-      supabase.from("training_days").delete().eq("user_id", userId),
-      supabase.from("training_weeks").delete().eq("user_id", userId),
-      supabase.from("training_blocks").delete().eq("user_id", userId),
+      applyTrainingVariantFilter(supabase.from("training_days").delete().eq("user_id", userId), activeVariantId),
+      applyTrainingVariantFilter(supabase.from("training_weeks").delete().eq("user_id", userId), activeVariantId),
+      applyTrainingVariantFilter(supabase.from("training_blocks").delete().eq("user_id", userId), activeVariantId),
     ]);
 
     if (delDaysErr || delWeeksErr || delBlocksErr) {
@@ -427,6 +434,7 @@ export default async function handler(req, res) {
           block_id: block.block_id,
           phase:    block.phase  || block.block_id,
           label:    block.label  || block.block_id,
+          ...variantInsert,
         });
 
       if (blockErr) {
@@ -458,6 +466,7 @@ export default async function handler(req, res) {
             phase:      block.phase     || block.block_id,
             subtitle:   week.subtitle   || "",
             week_order: globalWeekIndex + 1,
+            ...variantInsert,
           });
 
         if (weekErr) {
@@ -484,6 +493,7 @@ export default async function handler(req, res) {
             is_race_day: false,
             is_sunday:  day.is_sunday  || day.day_name === "SUN",
             ai_modified: false,
+            ...variantInsert,
           };
         });
 

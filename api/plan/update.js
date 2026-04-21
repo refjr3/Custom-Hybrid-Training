@@ -1,4 +1,5 @@
 import { createClient } from "@supabase/supabase-js";
+import { getActiveVariantId, applyTrainingVariantFilter } from "../lib/getActiveVariant.js";
 
 const supabase = createClient(
   process.env.SUPABASE_URL,
@@ -16,6 +17,8 @@ export default async function handler(req, res) {
   if (authErr || !user) return res.status(401).json({ error: "Invalid token" });
   const userId = user.id;
 
+  const activeVariantId = await getActiveVariantId(supabase, userId);
+
   const { type, week_id, day, changes, description } = req.body;
 
   if (!type) return res.status(400).json({ error: "Missing type" });
@@ -25,20 +28,38 @@ export default async function handler(req, res) {
     if (!weekRef) return null;
     // Try UUID first
     if (UUID_RE.test(weekRef)) {
-      const { data } = await supabase
-        .from("training_weeks").select("id, week_id, label").eq("id", weekRef).eq("user_id", userId).single();
+      const { data } = await applyTrainingVariantFilter(
+        supabase
+          .from("training_weeks")
+          .select("id, week_id, label")
+          .eq("id", weekRef)
+          .eq("user_id", userId),
+        activeVariantId
+      ).single();
       if (data) return data;
     }
     // Try week_id slug
     {
-      const { data } = await supabase
-        .from("training_weeks").select("id, week_id, label").eq("week_id", weekRef).eq("user_id", userId).single();
+      const { data } = await applyTrainingVariantFilter(
+        supabase
+          .from("training_weeks")
+          .select("id, week_id, label")
+          .eq("week_id", weekRef)
+          .eq("user_id", userId),
+        activeVariantId
+      ).single();
       if (data) return data;
     }
     // Try label (case-insensitive) — this is how the AI references weeks
     {
-      const { data } = await supabase
-        .from("training_weeks").select("id, week_id, label").ilike("label", `%${weekRef}%`).eq("user_id", userId).single();
+      const { data } = await applyTrainingVariantFilter(
+        supabase
+          .from("training_weeks")
+          .select("id, week_id, label")
+          .ilike("label", `%${weekRef}%`)
+          .eq("user_id", userId),
+        activeVariantId
+      ).single();
       if (data) return data;
     }
     return null;
@@ -129,13 +150,15 @@ export default async function handler(req, res) {
         return res.status(400).json({ error: "No valid fields to update" });
       }
 
-      const { data: updated, error: updateErr, count } = await supabase
-        .from("training_days")
-        .update(updatePayload)
-        .eq("week_id", weekRow.week_id)
-        .eq("day_name", normalizedDay)
-        .eq("user_id", userId)
-        .select();
+      const { data: updated, error: updateErr, count } = await applyTrainingVariantFilter(
+        supabase
+          .from("training_days")
+          .update(updatePayload)
+          .eq("week_id", weekRow.week_id)
+          .eq("day_name", normalizedDay)
+          .eq("user_id", userId),
+        activeVariantId
+      ).select();
 
       if (updateErr) {
         console.error("[plan/update] supabase error:", updateErr.message);
@@ -197,13 +220,15 @@ export default async function handler(req, res) {
             }
           }
 
-          const { data: updated, error: updateErr } = await supabase
-            .from("training_days")
-            .update(updatePayload)
-            .eq("week_id", weekRow.week_id)
-            .eq("day_name", normalizedDay)
-            .eq("user_id", userId)
-            .select();
+          const { data: updated, error: updateErr } = await applyTrainingVariantFilter(
+            supabase
+              .from("training_days")
+              .update(updatePayload)
+              .eq("week_id", weekRow.week_id)
+              .eq("day_name", normalizedDay)
+              .eq("user_id", userId),
+            activeVariantId
+          ).select();
 
           const updatedCount = updated?.length || 0;
           if (!updateErr) updatedForWeek += updatedCount;

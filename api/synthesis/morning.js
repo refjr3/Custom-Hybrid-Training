@@ -1,4 +1,5 @@
 import { createClient } from "@supabase/supabase-js";
+import { getActiveVariantId, applyTrainingVariantFilter } from "../lib/getActiveVariant.js";
 
 const supabase = createClient(
   process.env.SUPABASE_URL,
@@ -140,6 +141,8 @@ async function handleLegacyRecoverySynthesis(req, res, user) {
     return res.status(200).json({ modified: false, reason: "missing_plan_context" });
   }
 
+  const activeVariantId = await getActiveVariantId(supabase, user.id);
+
   try {
     const prompt = `The athlete's WHOOP recovery is ${recovery_score}% (RED zone — under 35%). Their scheduled session is "${session_name}".
 
@@ -197,12 +200,14 @@ Return ONLY a JSON object (no markdown fences):
     };
     const normalizedDay = DAY_MAP[day.toLowerCase()] || day.toUpperCase().slice(0, 3);
 
-    const weekRow = await supabase
-      .from("training_weeks")
-      .select("id, week_id")
-      .eq("id", week_id)
-      .eq("user_id", user.id)
-      .single();
+    const weekRow = await applyTrainingVariantFilter(
+      supabase
+        .from("training_weeks")
+        .select("id, week_id")
+        .eq("id", week_id)
+        .eq("user_id", user.id),
+      activeVariantId
+    ).single();
 
     if (!weekRow.data) {
       return res.status(200).json({ modified: false, reason: "week_not_found" });
@@ -218,12 +223,15 @@ Return ONLY a JSON object (no markdown fences):
       updatePayload.am_session = parsed.replacement_type;
     }
 
-    await supabase
-      .from("training_days")
-      .update(updatePayload)
-      .eq("week_id", weekRow.data.week_id)
-      .eq("day_name", normalizedDay)
-      .eq("user_id", user.id);
+    await applyTrainingVariantFilter(
+      supabase
+        .from("training_days")
+        .update(updatePayload)
+        .eq("week_id", weekRow.data.week_id)
+        .eq("day_name", normalizedDay)
+        .eq("user_id", user.id),
+      activeVariantId
+    );
 
     return res.status(200).json({
       modified: true,

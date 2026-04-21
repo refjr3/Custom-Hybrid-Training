@@ -7,6 +7,7 @@ import {
   addCalendarDaysToIsoYmd,
   formatEasternYmdFromDate,
 } from "../../lib/getLocalToday.js";
+import { getActiveVariantId, applyTrainingVariantFilter } from "../lib/getActiveVariant.js";
 import {
   evaluateReadiness,
   evaluateHRV,
@@ -96,11 +97,16 @@ export default async function handler(req, res) {
 
     const { data: baselines } = await supabase.from("user_baselines").select("*").eq("user_id", user.id).maybeSingle();
 
+    const activeVariantId = await getActiveVariantId(supabase, user.id);
+
     const weekStart = mondayIsoOnOrBefore(today, tz);
     const weekMetrics = await resolveMetricsRange(user.id, weekStart, today);
     const weeklyZ2 = weekMetrics.reduce((sum, m) => sum + (m.z2_minutes || 0), 0);
 
-    const { data: dayRows } = await supabase.from("training_days").select("*").eq("user_id", user.id);
+    const { data: dayRows } = await applyTrainingVariantFilter(
+      supabase.from("training_days").select("*").eq("user_id", user.id),
+      activeVariantId
+    );
 
     const todayDay =
       (dayRows || []).find((d) => dateLabelToIso(d.date_label, yearHint) === today) || null;

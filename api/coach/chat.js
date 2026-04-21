@@ -1,4 +1,5 @@
 import { createClient } from "@supabase/supabase-js";
+import { getActiveVariantId, applyTrainingVariantFilter } from "../lib/getActiveVariant.js";
 
 const supabase = createClient(
   process.env.SUPABASE_URL,
@@ -24,16 +25,20 @@ export default async function handler(req, res) {
     } catch (_) {}
   }
 
+  const activeVariantId = resolvedUserId ? await getActiveVariantId(supabase, resolvedUserId) : null;
+
   // Resolve current week row so we can map week UUID -> week slug for training_days.
   let currentWeekRow = null;
   if (currentWeek?.id && resolvedUserId) {
     try {
-      const { data } = await supabase
-        .from("training_weeks")
-        .select("id, week_id, block_id, label")
-        .eq("user_id", resolvedUserId)
-        .eq("id", currentWeek.id)
-        .maybeSingle();
+      const { data } = await applyTrainingVariantFilter(
+        supabase
+          .from("training_weeks")
+          .select("id, week_id, block_id, label")
+          .eq("user_id", resolvedUserId)
+          .eq("id", currentWeek.id),
+        activeVariantId
+      ).maybeSingle();
       currentWeekRow = data || null;
     } catch (_) {}
   }
@@ -49,12 +54,15 @@ export default async function handler(req, res) {
       ? supabase.from("biomarkers").select("label,value,unit,flag").eq("user_id", resolvedUserId).in("flag", ["HIGH", "LOW"])
       : supabase.from("biomarkers").select("label,value,unit,flag").in("flag", ["HIGH", "LOW"]),
     (currentWeekSlug && resolvedUserId)
-      ? supabase
-          .from("training_days")
-          .select("day_name,am_session,pm_session,note,ai_modified,am_session_blocks,pm_session_blocks")
-          .eq("user_id", resolvedUserId)
-          .eq("week_id", currentWeekSlug)
-          .order("day_name")
+      ? applyTrainingVariantFilter(
+          supabase
+            .from("training_days")
+            .select("day_name,am_session,pm_session,note,ai_modified,am_session_blocks,pm_session_blocks")
+            .eq("user_id", resolvedUserId)
+            .eq("week_id", currentWeekSlug)
+            .order("day_name"),
+          activeVariantId
+        )
       : Promise.resolve({ data: null }),
   ]);
 
@@ -117,12 +125,15 @@ export default async function handler(req, res) {
   let blockWeekLabels = [];
   if (currentWeekRow?.block_id && resolvedUserId) {
     try {
-      const { data: blockWeeks } = await supabase
-        .from("training_weeks")
-        .select("label, week_order")
-        .eq("user_id", resolvedUserId)
-        .eq("block_id", currentWeekRow.block_id)
-        .order("week_order", { ascending: true });
+      const { data: blockWeeks } = await applyTrainingVariantFilter(
+        supabase
+          .from("training_weeks")
+          .select("label, week_order")
+          .eq("user_id", resolvedUserId)
+          .eq("block_id", currentWeekRow.block_id)
+          .order("week_order", { ascending: true }),
+        activeVariantId
+      );
       blockWeekLabels = (blockWeeks || []).map((w) => w.label).filter(Boolean);
     } catch (_) {}
   }

@@ -1,4 +1,5 @@
 import { createClient } from "@supabase/supabase-js";
+import { getActiveVariantId, applyTrainingVariantFilter } from "../lib/getActiveVariant.js";
 // Plan day labels are interpreted on the client using US Eastern dates (see ../../lib/getLocalToday.js).
 
 const supabase = createClient(
@@ -18,11 +19,16 @@ export default async function handler(req, res) {
   if (authErr || !user) return res.status(401).json({ error: "Invalid token" });
   const userId = user.id;
 
-  const { data: blockRows, error: blocksErr } = await supabase
-    .from("training_blocks")
-    .select("block_id, phase, label, block_order")
-    .eq("user_id", userId)
-    .order("block_order", { ascending: true });
+  const activeVariantId = await getActiveVariantId(supabase, userId);
+
+  const { data: blockRows, error: blocksErr } = await applyTrainingVariantFilter(
+    supabase
+      .from("training_blocks")
+      .select("block_id, phase, label, block_order")
+      .eq("user_id", userId)
+      .order("block_order", { ascending: true }),
+    activeVariantId
+  );
 
   if (blocksErr) return res.status(500).json({ error: blocksErr.message });
   if (!blockRows || blockRows.length === 0) {
@@ -31,12 +37,15 @@ export default async function handler(req, res) {
   }
 
   const blockIds = blockRows.map((b) => b.block_id).filter(Boolean);
-  const { data: weeks, error: weeksErr } = await supabase
-    .from("training_weeks")
-    .select("*")
-    .eq("user_id", userId)
-    .in("block_id", blockIds)
-    .order("week_order", { ascending: true });
+  const { data: weeks, error: weeksErr } = await applyTrainingVariantFilter(
+    supabase
+      .from("training_weeks")
+      .select("*")
+      .eq("user_id", userId)
+      .in("block_id", blockIds)
+      .order("week_order", { ascending: true }),
+    activeVariantId
+  );
 
   if (weeksErr) return res.status(500).json({ error: weeksErr.message });
 
@@ -48,11 +57,14 @@ export default async function handler(req, res) {
   }
 
   const weekIds = weeks.map((w) => w.week_id).filter(Boolean);
-  const { data: days, error: daysErr } = await supabase
-    .from("training_days")
-    .select("*")
-    .eq("user_id", userId)
-    .in("week_id", weekIds);
+  const { data: days, error: daysErr } = await applyTrainingVariantFilter(
+    supabase
+      .from("training_days")
+      .select("*")
+      .eq("user_id", userId)
+      .in("week_id", weekIds),
+    activeVariantId
+  );
 
   if (daysErr) return res.status(500).json({ error: daysErr.message });
 

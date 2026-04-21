@@ -2345,6 +2345,8 @@ const SessionModal = ({ name, dayData, sess, weekId, onClose, onSessSwitch, sund
 
   const saveEdit = async () => {
     if (!supabase || !authSession?.access_token || !dayData) return;
+    const userId = authSession?.user?.id;
+    if (!userId) return;
     setSaving(true);
     const blocksKey = sess === "am" ? "am_session_blocks" : "pm_session_blocks";
     const ordered = editBlocks.map((b,i) => ({ ...b, order:i }));
@@ -2356,16 +2358,33 @@ const SessionModal = ({ name, dayData, sess, weekId, onClose, onSessSwitch, sund
       ai_modification_note: null,
     };
     try {
-      // weekId is the UUID from training_weeks; training_days.week_id is the slug
-      // Look up the slug first, then update training_days
-      const { data: weekRow } = await supabase
-        .from("training_weeks").select("week_id").eq("id", weekId).single();
+      const { data: vRow } = await supabase
+        .from("plan_variants")
+        .select("id")
+        .eq("user_id", userId)
+        .eq("is_active", true)
+        .maybeSingle();
+      const activeVid = vRow?.id ?? null;
+      let weekQ = supabase
+        .from("training_weeks")
+        .select("week_id")
+        .eq("id", weekId)
+        .eq("user_id", userId);
+      weekQ = activeVid
+        ? weekQ.or(`variant_id.eq.${activeVid},variant_id.is.null`)
+        : weekQ.is("variant_id", null);
+      const { data: weekRow } = await weekQ.single();
       const wkSlug = weekRow?.week_id || weekId;
-      const { error } = await supabase
+      let dayQ = supabase
         .from("training_days")
         .update(update)
         .eq("week_id", wkSlug)
-        .eq("day_name", dayData.day);
+        .eq("day_name", dayData.day)
+        .eq("user_id", userId);
+      dayQ = activeVid
+        ? dayQ.or(`variant_id.eq.${activeVid},variant_id.is.null`)
+        : dayQ.is("variant_id", null);
+      const { error } = await dayQ;
       if (error) throw error;
       setToast("✓ Saved");
       setTimeout(() => { setToast(null); setEditMode(false); if (onSaved) onSaved(); }, 1200);
