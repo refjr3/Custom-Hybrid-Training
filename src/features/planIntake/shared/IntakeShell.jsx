@@ -63,7 +63,7 @@ export default function IntakeShell({
         style={{
           position: "relative",
           zIndex: 1,
-          padding: "28px 22px 36px",
+          padding: "32px 24px 48px",
           minHeight: "100vh",
           boxSizing: "border-box",
           display: "flex",

@@ -248,7 +248,6 @@ export default function PlanIntakeFlow({ open, onClose, supabase, session, profi
             unavailableDays={unavailableDays}
             mainFocus={mainFocus}
             intakeRaceDate={intakeRaceDate}
-            raceStepShown={raceRequired}
             onJumpToStep={jumpToStep}
             onLooksGood={handleLooksGood}
             onBackFullEdit={() => setStep(0)}

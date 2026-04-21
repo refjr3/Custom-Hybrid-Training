@@ -1,3 +1,5 @@
+import { focusWorkingPhrase } from "./labels.js";
+
 function dayShortName(day) {
   const map = {
     mon: "Mondays",
@@ -17,17 +19,7 @@ export function synthesizeIntake({ daysPerWeek, flexibility, unavailableDays, ma
     flexible: "with flexibility week to week",
   }[flexibility] || "with flexibility week to week";
 
-  const effectiveRace = raceDate || profile?.target_race_date || null;
-
-  const focusLabel = {
-    get_stronger: "to build strength",
-    build_endurance: "to build endurance",
-    lose_weight: "to sustainably lose weight",
-    get_consistent: "to get consistent again",
-    train_for_race: effectiveRace
-      ? `toward your ${new Date(`${effectiveRace}T12:00:00`).toLocaleDateString("en-US", { month: "long", day: "numeric" })} race`
-      : "for a race",
-  }[mainFocus] || "toward your goals";
+  const focusLabel = focusWorkingPhrase(mainFocus, raceDate, profile?.target_race_date);
 
   const unavailablePart = unavailableDays?.length
     ? `, avoiding ${unavailableDays.map((d) => dayShortName(d)).join(" and ")}`
