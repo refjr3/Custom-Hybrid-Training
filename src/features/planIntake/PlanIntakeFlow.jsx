@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import IntakeShell from "./shared/IntakeShell.jsx";
 import Step1Days from "./Step1Days.jsx";
 import Step2Unavailable from "./Step2Unavailable.jsx";
@@ -42,12 +42,23 @@ export default function PlanIntakeFlow({ open, onClose, supabase, session, profi
   const [intakeSubmitting, setIntakeSubmitting] = useState(false);
   const [saveError, setSaveError] = useState("");
 
+  console.log("[intake] render — step:", step, "open:", open);
+
   const syncFromProfile = useCallback(() => {
     setDaysPerWeek(parseDaysPerWeek(profile));
     setFlexibility(profile?.schedule_flexibility === "strict" ? "strict" : "flexible");
     if (profile?.target_race_date) setMainFocus("train_for_race");
     else setMainFocus(null);
   }, [profile]);
+
+  useEffect(() => {
+    console.log("[intake] MOUNT");
+    return () => console.log("[intake] UNMOUNT");
+  }, []);
+
+  useEffect(() => {
+    console.log("[intake] step changed to:", step);
+  }, [step]);
 
   useEffect(() => {
     if (open) {
@@ -96,8 +107,13 @@ export default function PlanIntakeFlow({ open, onClose, supabase, session, profi
   };
 
   const handleNextFromStep0 = async () => {
+    console.log("[intake] Step 1 NEXT — saving...");
     const ok = await saveStep1Profile();
-    if (ok) setStep(1);
+    console.log("[intake] Step 1 NEXT — save result ok:", ok);
+    if (ok) {
+      console.log("[intake] Step 1 NEXT — advancing to step 1");
+      setStep(1);
+    }
   };
 
   const handleBack = () => {
