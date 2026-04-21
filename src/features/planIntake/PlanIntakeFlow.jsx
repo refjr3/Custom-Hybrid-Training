@@ -4,6 +4,8 @@ import Step1Days from "./Step1Days.jsx";
 import Step2Unavailable from "./Step2Unavailable.jsx";
 import Step3Focus from "./Step3Focus.jsx";
 import Step4Race from "./Step4Race.jsx";
+import Step5Confirm from "./Step5Confirm.jsx";
+import { buildIntakeGenerationContext } from "./shared/synthesizeIntake.js";
 
 const DAY_SET = new Set([3, 4, 5, 6, 7]);
 
@@ -26,16 +28,18 @@ function needsRaceStep(profile, mainFocus) {
 
 /**
  * Phase 10a — steps 0–4 (confirm stub until 10a.6).
- * @param {{ open: boolean, onClose: () => void, supabase: object, session: object | null, profile: object | null, onProfileUpdated?: () => void }} props
+ * @param {{ open: boolean, onClose: () => void, supabase: object, session: object | null, profile: object | null, onProfileUpdated?: () => void, onIntakeComplete?: (payload: { message: string }) => void }} props
  */
-export default function PlanIntakeFlow({ open, onClose, supabase, session, profile, onProfileUpdated }) {
+export default function PlanIntakeFlow({ open, onClose, supabase, session, profile, onProfileUpdated, onIntakeComplete }) {
   const [step, setStep] = useState(0);
   const [daysPerWeek, setDaysPerWeek] = useState(4);
   const [flexibility, setFlexibility] = useState("flexible");
   const [unavailableDays, setUnavailableDays] = useState([]);
   const [mainFocus, setMainFocus] = useState(null);
   const [intakeRaceDate, setIntakeRaceDate] = useState(null);
+  const [userBaselines, setUserBaselines] = useState(null);
   const [saving, setSaving] = useState(false);
+  const [intakeSubmitting, setIntakeSubmitting] = useState(false);
   const [saveError, setSaveError] = useState("");
 
   const syncFromProfile = useCallback(() => {
@@ -50,10 +54,23 @@ export default function PlanIntakeFlow({ open, onClose, supabase, session, profi
       setStep(0);
       setUnavailableDays([]);
       setIntakeRaceDate(null);
+      setUserBaselines(null);
       syncFromProfile();
       setSaveError("");
     }
   }, [open, syncFromProfile]);
+
+  useEffect(() => {
+    if (!open || step !== 4 || !session?.user?.id) return;
+    let cancelled = false;
+    (async () => {
+      const { data } = await supabase.from("user_baselines").select("*").eq("user_id", session.user.id).maybeSingle();
+      if (!cancelled) setUserBaselines(data || null);
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [open, step, session?.user?.id, supabase]);
 
   const raceRequired = needsRaceStep(profile, mainFocus);
 
@@ -106,6 +123,56 @@ export default function PlanIntakeFlow({ open, onClose, supabase, session, profi
     else setStep(4);
   };
 
+  const jumpToStep = (i) => {
+    setStep(Math.max(0, Math.min(4, i)));
+  };
+
+  const handleLooksGood = async () => {
+    const uid = session?.user?.id;
+    if (!uid || intakeSubmitting) return;
+    setIntakeSubmitting(true);
+    setSaveError("");
+    try {
+      const raceForRow =
+        intakeRaceDate ||
+        (profile?.target_race_date ? String(profile.target_race_date).slice(0, 10) : null);
+      if (intakeRaceDate) {
+        const { error: upErr } = await supabase
+          .from("user_profiles")
+          .update({ target_race_date: intakeRaceDate })
+          .eq("user_id", uid);
+        if (upErr) throw new Error(upErr.message);
+      }
+      const generationContext = buildIntakeGenerationContext({
+        profile,
+        userBaselines,
+        daysPerWeek,
+        flexibility,
+        unavailableDays,
+        mainFocus,
+        raceDate: raceForRow,
+      });
+      const { error: insErr } = await supabase.from("plan_generation_requests").insert({
+        user_id: uid,
+        days_per_week: daysPerWeek,
+        schedule_flexibility: flexibility,
+        unavailable_days: unavailableDays,
+        main_focus: mainFocus,
+        race_date: raceForRow,
+        generation_context: generationContext,
+        status: "intake_complete",
+      });
+      if (insErr) throw new Error(insErr.message);
+      onProfileUpdated?.();
+      onIntakeComplete?.({ message: "Plan intake saved. Generation coming soon." });
+      onClose?.();
+    } catch (e) {
+      setSaveError(e?.message || "Save failed");
+    } finally {
+      setIntakeSubmitting(false);
+    }
+  };
+
   if (!open) return null;
 
   const shellByStep =
@@ -136,7 +203,7 @@ export default function PlanIntakeFlow({ open, onClose, supabase, session, profi
             : {
                 stepIndex: 4,
                 title: "Here's what I'll work with",
-                subtitle: "Confirmation step ships in 10a.6.",
+                subtitle: "Tap any line to change it.",
               };
 
   return (
@@ -174,9 +241,19 @@ export default function PlanIntakeFlow({ open, onClose, supabase, session, profi
         ) : step === 3 ? (
           <Step4Race raceDate={intakeRaceDate} setRaceDate={setIntakeRaceDate} />
         ) : (
-          <p style={{ margin: 0, fontSize: 14, color: "rgba(255,255,255,0.4)", textAlign: "center", lineHeight: 1.55 }}>
-            Synthesized confirmation arrives in 10a.6.
-          </p>
+          <Step5Confirm
+            profile={profile}
+            daysPerWeek={daysPerWeek}
+            flexibility={flexibility}
+            unavailableDays={unavailableDays}
+            mainFocus={mainFocus}
+            intakeRaceDate={intakeRaceDate}
+            raceStepShown={raceRequired}
+            onJumpToStep={jumpToStep}
+            onLooksGood={handleLooksGood}
+            onBackFullEdit={() => setStep(0)}
+            submitting={intakeSubmitting}
+          />
         )}
 
         {saveError ? (
@@ -216,9 +293,7 @@ export default function PlanIntakeFlow({ open, onClose, supabase, session, profi
               Next
             </button>
           ) : (
-            <button type="button" onClick={() => onClose?.()} style={secondaryBtn}>
-              Close for now
-            </button>
+            <div style={{ minHeight: 8 }} />
           )}
         </div>
       </IntakeShell>
@@ -241,15 +316,3 @@ function primaryBtn(disabled) {
   };
 }
 
-const secondaryBtn = {
-  width: "100%",
-  padding: "16px 18px",
-  borderRadius: 16,
-  border: "1px solid rgba(255,255,255,0.12)",
-  background: "rgba(255,255,255,0.06)",
-  color: "rgba(255,255,255,0.85)",
-  fontSize: 15,
-  fontWeight: 600,
-  cursor: "pointer",
-  fontFamily: "'DM Sans', sans-serif",
-};
