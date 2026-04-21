@@ -345,9 +345,12 @@ function DrawerConnections({
   garminConnected: _garminConnected,
   stravaConnected,
   session,
+  profile,
 }) {
   const uid = session?.user?.id;
   const stravaHref = uid ? `/api/strava/login?uid=${encodeURIComponent(uid)}` : "/api/strava/login";
+  const whoopNeedsReconnect = Boolean(profile?.connected_sources?.whoop?.needs_reconnect);
+  const whoopStatusOk = Boolean(whoopConnected) && !whoopNeedsReconnect;
 
   const connectCardStyle = {
     background: "rgba(255,255,255,0.04)",
@@ -423,11 +426,29 @@ function DrawerConnections({
       <div style={{ padding: "0 20px", display: "flex", flexDirection: "column", gap: 10 }}>
         {renderConnectCard({
           name: "WHOOP",
-          status: whoopConnected,
+          status: whoopStatusOk,
           connectUrl: "/api/auth/login",
           color: "#5dffa0",
           desc: "Recovery, HRV, sleep data",
         })}
+        {whoopNeedsReconnect && (
+          <a
+            href="/api/auth/login"
+            style={{
+              display: "block",
+              background: "rgba(255,107,107,0.08)",
+              border: "1px solid rgba(255,107,107,0.2)",
+              borderRadius: 12,
+              padding: "10px 14px",
+              fontSize: 12,
+              color: "#FF6B6B",
+              marginTop: 8,
+              textDecoration: "none",
+            }}
+          >
+            WHOOP session expired — tap to reconnect
+          </a>
+        )}
         {/* Garmin — coming soon (developer API not accepting new apps) */}
         <div style={{ ...connectCardStyle, opacity: 0.5 }}>
           <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 6 }}>
@@ -1065,6 +1086,7 @@ export default function TodayDrawer({
             garminConnected={garminConnected}
             stravaConnected={stravaConnected}
             session={session}
+            profile={profile}
           />
         )}
         {section === "ai" && (

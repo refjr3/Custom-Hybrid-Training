@@ -20,7 +20,12 @@ export async function refreshWhoopTokens(refreshTok) {
       scope: "offline read:recovery read:sleep read:cycles read:profile",
     }).toString(),
   });
-  return res.json();
+  const json = await res.json().catch(() => ({}));
+  if (!res.ok) {
+    console.error("[whoop/lib] token refresh HTTP", res.status, json);
+    return {};
+  }
+  return json;
 }
 
 export function setWhoopCookieHeader(res, access, refresh) {
@@ -394,6 +399,55 @@ export async function patchWhoopLastSync(supabase, userId) {
     .eq("user_id", userId);
 }
 
+/** Persist rotated WHOOP OAuth tokens on the user profile (cookies may be missing on server). */
+export async function persistWhoopTokensToProfile(supabase, userId, accessToken, refreshToken) {
+  const { data: prof } = await supabase
+    .from("user_profiles")
+    .select("connected_sources")
+    .eq("user_id", userId)
+    .maybeSingle();
+  const cs =
+    typeof prof?.connected_sources === "object" && prof?.connected_sources
+      ? prof.connected_sources
+      : {};
+  const prev = typeof cs.whoop === "object" && cs.whoop ? cs.whoop : {};
+  const whoop = {
+    ...prev,
+    access_token: accessToken,
+    refresh_token: refreshToken || prev.refresh_token,
+    needs_reconnect: false,
+    connected: true,
+  };
+  const { error } = await supabase
+    .from("user_profiles")
+    .update({ connected_sources: { ...cs, whoop } })
+    .eq("user_id", userId);
+  if (error) console.error("[whoop/lib] persist whoop tokens", error.message);
+}
+
+export async function markWhoopNeedsReconnectOnProfile(supabase, userId) {
+  const { data: prof } = await supabase
+    .from("user_profiles")
+    .select("connected_sources")
+    .eq("user_id", userId)
+    .maybeSingle();
+  const cs =
+    typeof prof?.connected_sources === "object" && prof?.connected_sources
+      ? prof.connected_sources
+      : {};
+  const prev = typeof cs.whoop === "object" && cs.whoop ? cs.whoop : {};
+  const whoop = {
+    ...prev,
+    connected: false,
+    needs_reconnect: true,
+  };
+  const { error } = await supabase
+    .from("user_profiles")
+    .update({ connected_sources: { ...cs, whoop } })
+    .eq("user_id", userId);
+  if (error) console.error("[whoop/lib] mark whoop reconnect", error.message);
+}
+
 /**
  * Fetch WHOOP JSON with refresh + optional Set-Cookie on `res`.
  * @returns {{ recData: any, sleepData: any, cycleData: any, access: string, refresh: string } | { error: string, reconnect?: boolean }}
@@ -419,6 +473,7 @@ export async function loadWhoopRecordJson(accessIn, refreshIn, res) {
   let { recRes, sleepRes, cycleRes } = await fetchWhoopV2(access);
 
   if (recRes.status === 401 || sleepRes.status === 401 || cycleRes.status === 401) {
+    console.log("[whoop] 401 from WHOOP API — attempting token refresh");
     if (!refresh) {
       return { error: "whoop_reconnect_required", reconnect: true };
     }

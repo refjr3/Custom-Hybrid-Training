@@ -10,6 +10,8 @@ import {
   countWhoopUnifiedRowsSince,
   patchWhoopBackfilledAt,
   backfillWhoopUnifiedHistory,
+  persistWhoopTokensToProfile,
+  markWhoopNeedsReconnectOnProfile,
 } from "./lib.js";
 
 /**
@@ -40,12 +42,6 @@ export default async function handler(req, res) {
   if (!user) return res.status(401).json({ error: "invalid_session" });
 
   const cookies = parseCookies(req.headers.cookie || "");
-  const access = cookies.whoop_access;
-  const refresh = cookies.whoop_refresh;
-
-  if (!access && !refresh) {
-    return res.status(401).json({ error: "not_authenticated" });
-  }
 
   try {
     const { data: profile } = await supabase
@@ -53,6 +49,18 @@ export default async function handler(req, res) {
       .select("time_zone, connected_sources")
       .eq("user_id", user.id)
       .maybeSingle();
+
+    const cs =
+      typeof profile?.connected_sources === "object" && profile.connected_sources
+        ? profile.connected_sources
+        : {};
+    const whoopProf = typeof cs.whoop === "object" && cs.whoop ? cs.whoop : {};
+    const access = cookies.whoop_access || whoopProf.access_token || null;
+    const refresh = cookies.whoop_refresh || whoopProf.refresh_token || null;
+
+    if (!access && !refresh) {
+      return res.status(401).json({ error: "not_authenticated" });
+    }
 
     const tz = profile?.time_zone || "America/New_York";
     const lastSync = profile?.connected_sources?.whoop?.last_sync;
@@ -81,12 +89,24 @@ export default async function handler(req, res) {
         .json({ throttled: true, recovery: null, sleep: null, strain: null });
     }
 
+    const initialAccess = access;
+    const initialRefresh = refresh;
     const loaded = await loadWhoopRecordJson(access, refresh, res);
     if (loaded.error) {
+      if (loaded.reconnect || loaded.error === "whoop_reconnect_required") {
+        await markWhoopNeedsReconnectOnProfile(supabase, user.id);
+      }
       return res.status(401).json({
         error: loaded.error,
         reconnect: Boolean(loaded.reconnect),
       });
+    }
+
+    if (
+      loaded.access
+      && (loaded.access !== initialAccess || (loaded.refresh && loaded.refresh !== initialRefresh))
+    ) {
+      await persistWhoopTokensToProfile(supabase, user.id, loaded.access, loaded.refresh || initialRefresh);
     }
 
     const todayYmd = getCalendarYmdInTimeZone(tz);
