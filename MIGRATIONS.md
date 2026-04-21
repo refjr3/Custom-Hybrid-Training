@@ -2,7 +2,7 @@
 
 ## Fresh Supabase provisioning
 
-Run the SQL files in **`migrations/`** in **lexicographic filename order** (000, 001, 002, …). That order matches numeric sequence: **`000_bootstrap.sql` first**, then `001` … through `033`.
+Run the SQL files in **`migrations/`** in **lexicographic filename order** (000, 001, 002, …). That order matches numeric sequence: **`000_bootstrap.sql` first**, then `001` … through `034`.
 
 **000** creates `training_blocks`, `training_weeks`, `training_days`, `garmin_activities`, and `ai_messages` with RLS enabled and **service_role–only** policies so the schema exists before **001** attaches permissive policies and **003** installs user-scoped policies.
 
@@ -57,6 +57,7 @@ Previously, multiple files shared the same numeric prefix (`005`, `006`, `009`, 
 | 31 | `031_strava_z2_cache_jsonb.sql` | `strava_z2_cache` jsonb on `user_profiles` for weekly Z2 payload cache. |
 | 32 | `032_plan_variants.sql` | `plan_variants` + `variant_id` on `training_blocks` / `training_weeks` / `training_days`; RLS on variants. |
 | 33 | `033_zone_preferences.sql` | `selected_zone` + `zone_targets` jsonb on `user_profiles` (Phase 9 zone volume picker). |
+| 34 | `034_plan_intake.sql` | `plan_generation_requests` + `schedule_flexibility` on `user_profiles` (Phase 10a intake). |
 
 ## Optional scripts (`supabase/`)
 
