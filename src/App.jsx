@@ -2690,6 +2690,8 @@ export default function App() {
   const [biomarkers, setBiomarkers] = useState([]);
   const [planBlocks, setPlanBlocks] = useState([]);
   const [planLoading, setPlanLoading] = useState(true);
+  const [planVariants, setPlanVariants] = useState([]);
+  const [activeVariantId, setActiveVariantId] = useState(null);
   const [supplements, setSupplements] = useState([]);
   const [suppsLoading, setSuppsLoading] = useState(true);
   const [synthesisNote, setSynthesisNote] = useState(null);
@@ -3309,6 +3311,40 @@ export default function App() {
     } finally {
       setPlanLoading(false);
     }
+  };
+
+  useEffect(() => {
+    if (!session?.user?.id) {
+      setPlanVariants([]);
+      setActiveVariantId(null);
+      return;
+    }
+    let cancelled = false;
+    supabase
+      .from("plan_variants")
+      .select("*")
+      .eq("user_id", session.user.id)
+      .order("created_at", { ascending: false })
+      .then(({ data }) => {
+        if (cancelled) return;
+        const rows = data || [];
+        setPlanVariants(rows);
+        const active = rows.find((v) => v.is_active);
+        setActiveVariantId(active?.id || null);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [session?.user?.id]);
+
+  const switchVariant = async (newId) => {
+    if (!session?.user?.id || !newId) return;
+    await supabase.from("plan_variants").update({ is_active: false }).eq("user_id", session.user.id);
+    await supabase.from("plan_variants").update({ is_active: true }).eq("id", newId);
+    setActiveVariantId(newId);
+    setPlanVariants((prev) => prev.map((v) => ({ ...v, is_active: v.id === newId })));
+    const tok = session?.access_token;
+    if (tok) await fetchPlan(tok);
   };
 
   // Morning Synthesis: runs once per calendar day after WHOOP + plan data load
@@ -4736,6 +4772,49 @@ export default function App() {
       {nav === "plan" && !planLoading && planBlocks.length > 0 && (
         <div style={{ padding:"0 16px 24px", background:C.bg }}>
           <div style={{ paddingTop:16 }}>
+            {planVariants.length > 1 && (
+              <div
+                style={{
+                  background: "rgba(255,255,255,0.04)",
+                  border: "1px solid rgba(255,255,255,0.08)",
+                  borderRadius: 14,
+                  padding: "10px 14px",
+                  marginBottom: 16,
+                  display: "flex",
+                  alignItems: "center",
+                  gap: 10,
+                }}
+              >
+                <div
+                  style={{
+                    fontSize: 9,
+                    fontWeight: 600,
+                    color: "rgba(255,255,255,0.4)",
+                    letterSpacing: "2px",
+                  }}
+                >
+                  ACTIVE PLAN
+                </div>
+                <select
+                  value={activeVariantId || ""}
+                  onChange={(e) => switchVariant(e.target.value)}
+                  style={{
+                    flex: 1,
+                    background: "transparent",
+                    border: "none",
+                    color: "#fff",
+                    fontSize: 13,
+                    outline: "none",
+                  }}
+                >
+                  {planVariants.map((v) => (
+                    <option key={v.id} value={v.id} style={{ background: "#1a1a1e" }}>
+                      {v.variant_name}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            )}
             <div style={{ fontFamily:C.fm, fontSize:9, color:C.muted, letterSpacing:3, textTransform:"uppercase", marginBottom:10 }}>Training Block</div>
             <div style={{ display:"flex", gap:8, overflowX:"auto", scrollbarWidth:"none", msOverflowStyle:"none" }}>
               {sortedBlocks.map((b) => {
