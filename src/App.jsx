@@ -2779,14 +2779,13 @@ export default function App() {
   }, [session?.user?.id]);
 
   useEffect(() => {
-    if (profile?.selected_zone) setLocalSelectedZone(normalizeZoneKey(profile.selected_zone));
-  }, [profile?.selected_zone]);
-
-  useEffect(() => {
     if (profile?.zone_targets && typeof profile.zone_targets === "object") {
       setLocalZoneTargets((prev) => ({ ...prev, ...profile.zone_targets }));
     }
-  }, [profile?.zone_targets]);
+    if (profile?.selected_zone) {
+      setLocalSelectedZone(normalizeZoneKey(profile.selected_zone));
+    }
+  }, [profile?.zone_targets, profile?.selected_zone]);
 
   const handleZoneChange = useCallback(
     async (newZone) => {
@@ -2886,7 +2885,12 @@ export default function App() {
         setProfileBootstrapError(null);
         fetchOrCreateUserProfile(supabase, session.user)
           .then((p) => {
+            console.log("[profile load] zone_targets:", p?.zone_targets, "selected_zone:", p?.selected_zone);
             setProfile(p);
+            if (p?.zone_targets && typeof p.zone_targets === "object") {
+              setLocalZoneTargets((prev) => ({ ...prev, ...p.zone_targets }));
+            }
+            if (p?.selected_zone) setLocalSelectedZone(normalizeZoneKey(p.selected_zone));
             setAuthLoading(false);
           })
           .catch((err) => {
@@ -2906,10 +2910,15 @@ export default function App() {
         setProfileBootstrapError(null);
         fetchOrCreateUserProfile(supabase, newSession.user)
           .then((data) => {
+            console.log("[profile load] zone_targets:", data?.zone_targets, "selected_zone:", data?.selected_zone);
             setProfile((prev) => {
               if (prev?.user_id === data?.user_id) return prev;
               return data || null;
             });
+            if (data?.zone_targets && typeof data.zone_targets === "object") {
+              setLocalZoneTargets((prev) => ({ ...prev, ...data.zone_targets }));
+            }
+            if (data?.selected_zone) setLocalSelectedZone(normalizeZoneKey(data.selected_zone));
             setAuthLoading(false);
           })
           .catch((err) => {
