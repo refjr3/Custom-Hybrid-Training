@@ -4175,22 +4175,20 @@ export default function App() {
       {nav === "today" && (() => {
         const perfHdr = derivePerfPlanHeader(planBlocks);
         const normalizedZone = normalizeZoneKey(localSelectedZone);
+        const cardMinutes = weeklyZoneMinutes[normalizedZone] ?? 0;
+        console.log("[CARD RENDER]", {
+          localSelectedZone,
+          normalizedZone,
+          weeklyZoneMinutes,
+          cardMinutes,
+          zoneTargets: localZoneTargets,
+        });
         const zoneConfig = getZoneConfig(normalizedZone);
         const zoneTarget =
           localZoneTargets[normalizedZone] ?? getZoneConfig(normalizedZone).defaultTarget;
         const selectedZoneMinutes = stravaConnected
-          ? Math.max(0, Math.round(Number(weeklyZoneMinutes[normalizedZone] ?? 0)))
+          ? Math.max(0, Math.round(Number(cardMinutes)))
           : 0;
-        console.log(
-          "[zone card] localSelectedZone:",
-          localSelectedZone,
-          "normalizedZone:",
-          normalizedZone,
-          "weeklyZoneMinutes:",
-          weeklyZoneMinutes,
-          "value:",
-          weeklyZoneMinutes[normalizedZone],
-        );
         const formatMinutesLabel = (mins) => {
           const safe = Math.max(0, Number(mins || 0));
           const hours = Math.floor(safe / 60);
