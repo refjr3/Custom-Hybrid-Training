@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState } from "react";
 import IntakeShell from "./shared/IntakeShell.jsx";
 import Step1Days from "./Step1Days.jsx";
 import Step2Unavailable from "./Step2Unavailable.jsx";
+import Step3Focus from "./Step3Focus.jsx";
 
 const DAY_SET = new Set([3, 4, 5, 6, 7]);
 
@@ -18,8 +19,12 @@ function step2NextDisabled(unavailableDays, daysPerWeek) {
   return daysAvailable < daysPerWeek;
 }
 
+function needsRaceStep(profile, mainFocus) {
+  return mainFocus === "train_for_race" && !profile?.target_race_date;
+}
+
 /**
- * Phase 10a orchestrator — steps 0–2 (step 2 stub until 10a.4).
+ * Phase 10a — steps 0–4 (race + confirm stubs until 10a.5 / 10a.6).
  * @param {{ open: boolean, onClose: () => void, supabase: object, session: object | null, profile: object | null, onProfileUpdated?: () => void }} props
  */
 export default function PlanIntakeFlow({ open, onClose, supabase, session, profile, onProfileUpdated }) {
@@ -27,12 +32,15 @@ export default function PlanIntakeFlow({ open, onClose, supabase, session, profi
   const [daysPerWeek, setDaysPerWeek] = useState(4);
   const [flexibility, setFlexibility] = useState("flexible");
   const [unavailableDays, setUnavailableDays] = useState([]);
+  const [mainFocus, setMainFocus] = useState(null);
   const [saving, setSaving] = useState(false);
   const [saveError, setSaveError] = useState("");
 
   const syncFromProfile = useCallback(() => {
     setDaysPerWeek(parseDaysPerWeek(profile));
     setFlexibility(profile?.schedule_flexibility === "strict" ? "strict" : "flexible");
+    if (profile?.target_race_date) setMainFocus("train_for_race");
+    else setMainFocus(null);
   }, [profile]);
 
   useEffect(() => {
@@ -84,7 +92,14 @@ export default function PlanIntakeFlow({ open, onClose, supabase, session, profi
     setUnavailableDays([]);
   };
 
+  const raceRequired = needsRaceStep(profile, mainFocus);
   const step2Blocked = step === 1 && step2NextDisabled(unavailableDays, daysPerWeek);
+  const step3Blocked = step === 2 && !mainFocus;
+
+  const advanceFromStep2 = () => {
+    if (raceRequired) setStep(3);
+    else setStep(4);
+  };
 
   if (!open) return null;
 
@@ -101,11 +116,23 @@ export default function PlanIntakeFlow({ open, onClose, supabase, session, profi
             title: "Any days you definitely can't train?",
             subtitle: "Optional. Tap days you want off. You can always skip.",
           }
-        : {
-            stepIndex: 2,
-            title: "What's your main focus right now?",
-            subtitle: "This step continues in the next app update (10a.4).",
-          };
+        : step === 2
+          ? {
+              stepIndex: 2,
+              title: "What's your main focus right now?",
+              subtitle: "This shapes how the plan feels.",
+            }
+          : step === 3
+            ? {
+                stepIndex: 3,
+                title: "When's the race?",
+                subtitle: "Race date step ships in 10a.5 — use Back to edit focus.",
+              }
+            : {
+                stepIndex: 4,
+                title: "Here's what I'll work with",
+                subtitle: "Confirmation step ships in 10a.6.",
+              };
 
   return (
     <div
@@ -133,9 +160,19 @@ export default function PlanIntakeFlow({ open, onClose, supabase, session, profi
             onReduceDaysToAvailable={handleReduceDays}
             onClearUnavailable={handleClearUnavailable}
           />
+        ) : step === 2 ? (
+          <Step3Focus
+            mainFocus={mainFocus}
+            setMainFocus={setMainFocus}
+            raceOnProfile={Boolean(profile?.target_race_date)}
+          />
+        ) : step === 3 ? (
+          <p style={{ margin: 0, fontSize: 14, color: "rgba(255,255,255,0.4)", textAlign: "center", lineHeight: 1.55 }}>
+            Race date picker arrives in 10a.5.
+          </p>
         ) : (
           <p style={{ margin: 0, fontSize: 14, color: "rgba(255,255,255,0.4)", textAlign: "center", lineHeight: 1.55 }}>
-            Main focus options load in version 10a.4. Use Back to edit earlier steps.
+            Synthesized confirmation arrives in 10a.6.
           </p>
         )}
 
@@ -159,58 +196,24 @@ export default function PlanIntakeFlow({ open, onClose, supabase, session, profi
               type="button"
               onClick={handleNextFromStep0}
               disabled={saving}
-              style={{
-                width: "100%",
-                padding: "16px 18px",
-                borderRadius: 16,
-                border: "none",
-                background: "linear-gradient(135deg, #C9A875 0%, #a88b5c 100%)",
-                color: "#0D0E10",
-                fontSize: 15,
-                fontWeight: 700,
-                cursor: saving ? "wait" : "pointer",
-                fontFamily: "'DM Sans', sans-serif",
-              }}
+              style={primaryBtn(saving)}
             >
               {saving ? "Saving…" : "Next"}
             </button>
           ) : step === 1 ? (
-            <button
-              type="button"
-              onClick={() => setStep(2)}
-              disabled={step2Blocked}
-              style={{
-                width: "100%",
-                padding: "16px 18px",
-                borderRadius: 16,
-                border: "none",
-                background: step2Blocked ? "rgba(255,255,255,0.08)" : "linear-gradient(135deg, #C9A875 0%, #a88b5c 100%)",
-                color: step2Blocked ? "rgba(255,255,255,0.25)" : "#0D0E10",
-                fontSize: 15,
-                fontWeight: 700,
-                cursor: step2Blocked ? "not-allowed" : "pointer",
-                fontFamily: "'DM Sans', sans-serif",
-              }}
-            >
+            <button type="button" onClick={() => setStep(2)} disabled={step2Blocked} style={primaryBtn(step2Blocked)}>
+              Next
+            </button>
+          ) : step === 2 ? (
+            <button type="button" onClick={advanceFromStep2} disabled={step3Blocked} style={primaryBtn(step3Blocked)}>
+              Next
+            </button>
+          ) : step === 3 ? (
+            <button type="button" onClick={() => setStep(4)} style={primaryBtn(false)}>
               Next
             </button>
           ) : (
-            <button
-              type="button"
-              onClick={() => onClose?.()}
-              style={{
-                width: "100%",
-                padding: "16px 18px",
-                borderRadius: 16,
-                border: "1px solid rgba(255,255,255,0.12)",
-                background: "rgba(255,255,255,0.06)",
-                color: "rgba(255,255,255,0.85)",
-                fontSize: 15,
-                fontWeight: 600,
-                cursor: "pointer",
-                fontFamily: "'DM Sans', sans-serif",
-              }}
-            >
+            <button type="button" onClick={() => onClose?.()} style={secondaryBtn}>
               Close for now
             </button>
           )}
@@ -219,3 +222,31 @@ export default function PlanIntakeFlow({ open, onClose, supabase, session, profi
     </div>
   );
 }
+
+function primaryBtn(disabled) {
+  return {
+    width: "100%",
+    padding: "16px 18px",
+    borderRadius: 16,
+    border: "none",
+    background: disabled ? "rgba(255,255,255,0.08)" : "linear-gradient(135deg, #C9A875 0%, #a88b5c 100%)",
+    color: disabled ? "rgba(255,255,255,0.25)" : "#0D0E10",
+    fontSize: 15,
+    fontWeight: 700,
+    cursor: disabled ? "not-allowed" : "pointer",
+    fontFamily: "'DM Sans', sans-serif",
+  };
+}
+
+const secondaryBtn = {
+  width: "100%",
+  padding: "16px 18px",
+  borderRadius: 16,
+  border: "1px solid rgba(255,255,255,0.12)",
+  background: "rgba(255,255,255,0.06)",
+  color: "rgba(255,255,255,0.85)",
+  fontSize: 15,
+  fontWeight: 600,
+  cursor: "pointer",
+  fontFamily: "'DM Sans', sans-serif",
+};
