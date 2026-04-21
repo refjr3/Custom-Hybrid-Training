@@ -12,6 +12,8 @@ import { useDataSources } from "./features/today/useDataSources.js";
 import { ConnectPrompt } from "./features/today/ConnectPrompt.jsx";
 import { RecoveryDeepDive } from "./features/today/RecoveryDeepDive.jsx";
 import { Z2DeepDive } from "./features/today/Z2DeepDive.jsx";
+import { ZonePicker } from "./features/today/ZonePicker.jsx";
+import { getZoneConfig, getZoneTarget, getSelectedZone } from "./features/today/zoneConfig.js";
 import { SleepDeepDive } from "./features/today/SleepDeepDive.jsx";
 import { DailyCallCard } from "./features/today/DailyCallCard.jsx";
 import { InfoPop } from "./components/InfoPop.jsx";
@@ -2685,6 +2687,7 @@ export default function App() {
   const [whoopConnected, setWhoopConnected] = useState(false);
   const [stravaConnected, setStravaConnected] = useState(false);
   const [stravaWeeklyZ2Minutes, setStravaWeeklyZ2Minutes] = useState(null);
+  const [weeklyZoneMinutes, setWeeklyZoneMinutes] = useState({ z2: 0, z3: 0, z4_plus: 0 });
   const [stravaWeeklyZ2Loading, setStravaWeeklyZ2Loading] = useState(false);
   const [stravaWeeklyZ2Error, setStravaWeeklyZ2Error] = useState("");
   const [stravaBestEfforts, setStravaBestEfforts] = useState(null);
@@ -2757,6 +2760,15 @@ export default function App() {
     const { data } = await supabase.from("user_profiles").select("*").eq("user_id", session.user.id).single();
     if (data) setProfile(data);
   }, [session?.user?.id]);
+
+  const handleZoneChange = useCallback(
+    async (newZone) => {
+      if (!session?.user?.id) return;
+      await supabase.from("user_profiles").update({ selected_zone: newZone }).eq("user_id", session.user.id);
+      await refreshProfile();
+    },
+    [session?.user?.id, refreshProfile]
+  );
 
   useEffect(() => {
     if (!session?.access_token) {
@@ -3199,6 +3211,7 @@ export default function App() {
       if (data.error === "strava_not_connected" || data.error === "strava_reconnect_required") {
         setStravaConnected(false);
         setStravaWeeklyZ2Minutes(0);
+        setWeeklyZoneMinutes({ z2: 0, z3: 0, z4_plus: 0 });
         if (lsKey) {
           try {
             localStorage.removeItem(lsKey);
@@ -3213,10 +3226,21 @@ export default function App() {
       }
       if (!res.ok) {
         setStravaWeeklyZ2Error(String(data.error || "Failed loading Strava Z2"));
-        if (!hadPositiveLocal) setStravaWeeklyZ2Minutes(0);
+        if (!hadPositiveLocal) {
+          setStravaWeeklyZ2Minutes(0);
+          setWeeklyZoneMinutes({ z2: 0, z3: 0, z4_plus: 0 });
+        }
         return;
       }
-      const mins = data.weeklyZ2Minutes ?? data.totalMinutes;
+      const wzm =
+        data.weeklyZoneMinutes && typeof data.weeklyZoneMinutes === "object" ? data.weeklyZoneMinutes : null;
+      const z2FromApi = data.weeklyZ2Minutes ?? data.totalMinutes;
+      setWeeklyZoneMinutes({
+        z2: Math.max(0, Math.round(Number(wzm?.z2 ?? z2FromApi ?? 0)) || 0),
+        z3: Math.max(0, Math.round(Number(wzm?.z3 ?? 0)) || 0),
+        z4_plus: Math.max(0, Math.round(Number(wzm?.z4_plus ?? 0)) || 0),
+      });
+      const mins = z2FromApi;
       if (typeof mins === "number" && Number.isFinite(mins)) {
         const m = Math.max(0, mins);
         const fromCache = data.fromCache === true;
@@ -3240,16 +3264,21 @@ export default function App() {
             const prev = raw != null ? parseInt(raw, 10) : NaN;
             if (!Number.isFinite(prev) || prev <= 0) {
               setStravaWeeklyZ2Minutes(0);
+              setWeeklyZoneMinutes({ z2: 0, z3: 0, z4_plus: 0 });
               setStravaConnected(true);
             }
           }
         }
       } else if (!hadPositiveLocal) {
         setStravaWeeklyZ2Minutes(0);
+        setWeeklyZoneMinutes({ z2: 0, z3: 0, z4_plus: 0 });
       }
     } catch (e) {
       setStravaWeeklyZ2Error(e?.message || "Failed loading Strava Z2");
-      if (!hadPositiveLocal) setStravaWeeklyZ2Minutes(0);
+      if (!hadPositiveLocal) {
+        setStravaWeeklyZ2Minutes(0);
+        setWeeklyZoneMinutes({ z2: 0, z3: 0, z4_plus: 0 });
+      }
     } finally {
       setStravaWeeklyZ2Loading(false);
     }
@@ -4064,7 +4093,12 @@ export default function App() {
 
       {nav === "today" && (() => {
         const perfHdr = derivePerfPlanHeader(planBlocks);
-        const TARGET_Z2_MIN = 240;
+        const selectedZone = getSelectedZone(profile);
+        const zoneConfig = getZoneConfig(selectedZone);
+        const zoneTarget = getZoneTarget(profile, selectedZone);
+        const selectedZoneMinutes = stravaConnected
+          ? Math.max(0, Math.round(Number(weeklyZoneMinutes[selectedZone] ?? 0)))
+          : 0;
         const formatMinutesLabel = (mins) => {
           const safe = Math.max(0, Number(mins || 0));
           const hours = Math.floor(safe / 60);
@@ -4170,14 +4204,11 @@ export default function App() {
         const currentWeekNum = perfHdr?.currentWeekNum ?? 1;
         const currentPhaseName = perfHdr?.currentPhase || "Training";
         const currentWeekDaysStrip = todayEntry?.week?.days || [];
-        const weeklyZ2Minutes = stravaConnected
-          ? Math.max(0, Math.round(Number(stravaWeeklyZ2Minutes ?? 0)))
-          : 0;
         const z2HeaderDone = !stravaConnected
           ? "0"
           : stravaWeeklyZ2Loading && stravaWeeklyZ2Minutes == null
             ? "…"
-            : String(Math.round(weeklyZ2Minutes));
+            : String(Math.round(selectedZoneMinutes));
         const isWeekDayDoneStrip = (d) => {
           const iso = dayLabelToIso(d?.date || d?.date_label);
           if (!iso) return false;
@@ -4514,14 +4545,30 @@ export default function App() {
               <div style={specularTop()} />
               <div style={{ position: "absolute", top: -20, right: -20, width: 120, height: 120, background: "radial-gradient(circle,rgba(210,190,155,0.10) 0%,transparent 70%)", pointerEvents: "none" }} />
               <div style={{ padding: "16px 20px 18px", position: "relative", zIndex: 1 }}>
-                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 12, gap: 8 }}>
-                  <div style={{ display: "flex", alignItems: "center", gap: 4 }}>
-                    <div style={{ fontSize: 9, fontWeight: 600, color: "rgba(255,255,255,0.22)", letterSpacing: "2.5px", textTransform: "uppercase", fontFamily: C.fs }}>Weekly Z2 Time</div>
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12, gap: 8 }}>
+                  <div
+                    style={{
+                      display: "flex",
+                      alignItems: "center",
+                      gap: 8,
+                      flexWrap: "wrap",
+                      fontSize: 9,
+                      fontWeight: 600,
+                      color: "rgba(255,255,255,0.22)",
+                      letterSpacing: "2.5px",
+                      textTransform: "uppercase",
+                      fontFamily: C.fs,
+                    }}
+                  >
+                    <span onClick={(e) => e.stopPropagation()}>
+                      <ZonePicker currentZone={selectedZone} onSelect={handleZoneChange} />
+                    </span>
+                    <span>Weekly Volume</span>
                     <InfoPop
                       title={metricExplainers.z2.title}
                       short={metricExplainers.z2.short}
                       detailed={metricExplainers.z2.detailed}
-                      userContext={metricExplainers.z2.userContext(profile, weeklyZ2Minutes, TARGET_Z2_MIN)}
+                      userContext={metricExplainers.z2.userContext(profile, selectedZoneMinutes, zoneTarget)}
                       icon="i"
                       size={11}
                     />
@@ -4541,7 +4588,7 @@ export default function App() {
                         }}
                       />
                     </div>
-                    <div style={{ fontSize: 12, fontWeight: 600, color: DS.gold, fontFamily: C.fs }}>{z2HeaderDone} / {TARGET_Z2_MIN} min</div>
+                    <div style={{ fontSize: 12, fontWeight: 600, color: zoneConfig.color, fontFamily: C.fs }}>{z2HeaderDone} / {zoneTarget} min</div>
                   </div>
                 </div>
                 {stravaConnected && stravaWeeklyZ2Error ? (
@@ -4568,16 +4615,17 @@ export default function App() {
                 ) : null}
                 <div style={{ overflowX: "auto", WebkitOverflowScrolling: "touch", marginBottom: 4 }}>
                   {(() => {
-                    const TARGET_MIN = TARGET_Z2_MIN;
-                    const DONE_MIN = weeklyZ2Minutes || 0;
+                    const TARGET_MIN = Math.max(1, zoneTarget);
+                    const DONE_MIN = selectedZoneMinutes || 0;
                     const TOTAL_TICKS = 80;
                     const LIT_TICKS = Math.min(Math.round((DONE_MIN / TARGET_MIN) * TOTAL_TICKS), TOTAL_TICKS);
                     const TICK_WIDTH = 1;
                     const TICK_GAP = 1.8;
                     const TICK_STRIDE = TICK_WIDTH + TICK_GAP;
                     const TOTAL_WIDTH = TOTAL_TICKS * TICK_STRIDE - TICK_GAP;
-                    const HOUR_TICKS = [20, 40, 60, 80];
-                    const HOUR_LABELS = ["1h", "2h", "3h", "4h"];
+                    const labelFracs = [0.25, 0.5, 0.75, 1];
+                    const HOUR_TICKS = labelFracs.map((f) => Math.round(f * TOTAL_TICKS));
+                    const HOUR_LABELS = labelFracs.map((f) => formatMinutesLabel(Math.round(TARGET_MIN * f)));
                     return (
                       <div style={{ position: "relative", width: TOTAL_WIDTH, maxWidth: "100%", minWidth: 0 }}>
                         <div style={{ display: "flex", gap: `${TICK_GAP}px`, alignItems: "flex-end" }}>
@@ -4592,7 +4640,7 @@ export default function App() {
                                   height: isHour ? 11 : 6,
                                   flexShrink: 0,
                                   borderRadius: "0.5px",
-                                  background: isLit ? "#C9A875" : "rgba(58,53,48,0.9)",
+                                  background: isLit ? zoneConfig.color : "rgba(58,53,48,0.9)",
                                 }}
                               />
                             );
@@ -4628,10 +4676,10 @@ export default function App() {
                 <div style={{ fontSize: 10, color: "rgba(255,255,255,0.2)", marginTop: 14, fontFamily: C.fs }}>
                   This week{" "}
                   <span style={{ color: "rgba(255,255,255,0.5)" }}>
-                    {stravaConnected ? formatMinutesLabel(weeklyZ2Minutes) : "0min"}
+                    {stravaConnected ? formatMinutesLabel(selectedZoneMinutes) : "0min"}
                   </span>
                   {" · Target "}
-                  <span style={{ color: "rgba(255,255,255,0.5)" }}>{formatMinutesLabel(TARGET_Z2_MIN)}</span>
+                  <span style={{ color: "rgba(255,255,255,0.5)" }}>{formatMinutesLabel(zoneTarget)}</span>
                 </div>
               </div>
             </div>
