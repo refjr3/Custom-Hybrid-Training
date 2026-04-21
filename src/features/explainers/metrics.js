@@ -52,16 +52,53 @@ export const metricExplainers = {
   z2: {
     title: "Zone 2 Training",
     short:
-      "Zone 2 is steady, conversational-pace cardio. You should be able to talk in full sentences. It's the foundation of endurance — builds your aerobic base without creating much fatigue.",
+      "Zone 2 is steady, conversational-pace cardio. You should be able to talk in full sentences. It builds your aerobic base — the foundation of endurance.",
     detailed:
-      "Your body has two main energy systems for aerobic work. Zone 2 targets the fat-burning system — slow, sustainable, efficient. It also builds mitochondrial density (more cellular power plants) and improves blood flow.\n\nMost athletes undertrain Zone 2 because it feels \"too easy.\" That's the point. Elite endurance athletes spend 70-80% of their training volume here.\n\nFor hybrid athletes: Zone 2 is what lets you recover between hard efforts. More Zone 2 = more capacity for HYROX, threshold work, or races. Typical target: 4+ hours per week.\n\nHow to know you're in Zone 2: heart rate in a specific bpm range (usually 60-70% of max HR), you can hold a conversation, you could keep going for another hour.",
-    userContext: (profile, weeklyMins, target = 240) => {
-      const pct = (weeklyMins / target) * 100;
+      "Zone 2 targets your fat-burning energy system — slow, sustainable, efficient. It builds mitochondrial density (more cellular power plants) and improves blood flow without creating much fatigue.\n\nMost athletes undertrain Zone 2 because it feels too easy. That's the point. Elite endurance athletes spend 70-80% of their volume here.\n\nFor hybrid athletes: Zone 2 is what lets you recover between hard efforts. More Zone 2 = more capacity for HYROX, threshold work, or race day.\n\nHow to know you're in Zone 2: heart rate in your designated bpm range (typically 60-70% of max HR), you can hold a conversation, and you could keep going for another hour.",
+    userContext: (profile, weeklyMins, target) => {
+      const t = target || 240;
+      const pct = (weeklyMins / t) * 100;
       if (pct >= 100)
-        return `You've hit ${weeklyMins} minutes this week — past your ${target}-minute target. Strong aerobic week.`;
-      if (pct >= 75) return `You're at ${weeklyMins} of ${target} minutes. Close to target. One more session does it.`;
-      if (pct >= 40) return `You're at ${weeklyMins} of ${target} minutes. Half way. Push the second half of the week.`;
-      return `You're at ${weeklyMins} of ${target} minutes. Well behind. Zone 2 is the biggest leverage point for hybrid performance — prioritize it.`;
+        return `You're at ${weeklyMins} minutes this week — past your ${t}-minute target. Strong aerobic week.`;
+      if (pct >= 75) return `You're at ${weeklyMins} of ${t} minutes. Close to target. One more session does it.`;
+      if (pct >= 40) return `You're at ${weeklyMins} of ${t} minutes. Half way. Push the second half of the week.`;
+      return `You're at ${weeklyMins} of ${t} minutes. Zone 2 is the biggest leverage point for hybrid performance — prioritize it.`;
+    },
+  },
+
+  z3: {
+    title: "Zone 3 Training",
+    short:
+      'Zone 3 is moderately hard — tempo pace. You can talk but only in short phrases. It sits between aerobic base (Z2) and threshold (Z4), often called the "gray zone."',
+    detailed:
+      "Zone 3 is controversial in endurance training. Too much time here can blunt your aerobic development (because it's harder than Z2 but not stimulating enough to drive real threshold gains) — the dreaded \"gray zone\" problem.\n\nBut for hybrid athletes, Zone 3 has real utility: it builds sustainable race pace, improves your ability to clear lactate at moderate intensities, and bridges the gap between easy and hard work.\n\nThe key is keeping Zone 3 intentional. 30-60 min per week of targeted tempo work (like sustained efforts or steady climbs) is productive. Spending hours in Z3 by accident because you're pushing your Z2 too hard is a common mistake.",
+    userContext: (profile, weeklyMins, target) => {
+      const t = target || 60;
+      if (weeklyMins === 0)
+        return `You have no Zone 3 time yet this week. Target is ${t} minutes — one tempo session typically gets you most of the way there.`;
+      const pct = (weeklyMins / t) * 100;
+      if (pct >= 100)
+        return `You're at ${weeklyMins} minutes, past your ${t}-minute target. For most athletes that's enough Zone 3 for the week.`;
+      if (pct >= 50) return `You're at ${weeklyMins} of ${t} minutes. On pace — don't force more unless it's a specific tempo session.`;
+      return `You're at ${weeklyMins} of ${t} minutes. Light tempo volume this week. One intentional tempo session would get you to target.`;
+    },
+  },
+
+  z4_plus: {
+    title: "Zone 4+ Training",
+    short:
+      "Zone 4 and above is threshold and max-effort work — intervals, race pace, all-out efforts. Building this zone directly improves your top-end performance and lactate tolerance.",
+    detailed:
+      "Zone 4 is threshold — the intensity just below where lactate builds faster than you can clear it. Zone 5 and above is max effort, VO2max territory, where you can only sustain for minutes.\n\nThreshold and VO2max work build race-specific fitness. They teach your body to perform when things get hard — which is the entire game in HYROX, intervals, or sprint finishes.\n\nThe trade-off: high-intensity work creates significant fatigue and needs long recovery. Too much and your aerobic base suffers. Too little and your ceiling never raises.\n\nMost hybrid athletes only need 20-40 minutes per week of true Zone 4+ work. Quality over quantity. A properly executed 4x4 minutes at threshold beats an hour of vaguely hard effort.",
+    userContext: (profile, weeklyMins, target) => {
+      const t = target || 30;
+      if (weeklyMins === 0)
+        return `No Zone 4+ time yet this week. Target is ${t} minutes. One interval session (e.g. 4x4 min at threshold) gets you there.`;
+      const pct = (weeklyMins / t) * 100;
+      if (pct >= 100)
+        return `You have ${weeklyMins} minutes — past your ${t}-minute target. That's meaningful intensity this week. Prioritize recovery.`;
+      if (pct >= 60) return `You're at ${weeklyMins} of ${t} minutes. On track. More is rarely better at this intensity.`;
+      return `You're at ${weeklyMins} of ${t} minutes. One quality interval session would get you to target.`;
     },
   },
 

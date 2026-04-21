@@ -13,7 +13,7 @@ import { ConnectPrompt } from "./features/today/ConnectPrompt.jsx";
 import { RecoveryDeepDive } from "./features/today/RecoveryDeepDive.jsx";
 import { ZoneVolumeDeepDive } from "./features/today/ZoneVolumeDeepDive.jsx";
 import { ZonePicker } from "./features/today/ZonePicker.jsx";
-import { getZoneConfig, normalizeZoneKey } from "./features/today/zoneConfig.js";
+import { getZoneConfig, normalizeZoneKey, ZONES } from "./features/today/zoneConfig.js";
 import { SleepDeepDive } from "./features/today/SleepDeepDive.jsx";
 import { DailyCallCard } from "./features/today/DailyCallCard.jsx";
 import { InfoPop } from "./components/InfoPop.jsx";
@@ -4186,6 +4186,9 @@ export default function App() {
         const zoneConfig = getZoneConfig(normalizedZone);
         const zoneTarget =
           localZoneTargets[normalizedZone] ?? getZoneConfig(normalizedZone).defaultTarget;
+        const zoneExplainer = metricExplainers[normalizedZone] || metricExplainers.z2;
+        const cardTarget =
+          localZoneTargets[normalizedZone] ?? ZONES[normalizedZone]?.defaultTarget ?? 240;
         const selectedZoneMinutes = stravaConnected
           ? Math.max(0, Math.round(Number(cardMinutes)))
           : 0;
@@ -4655,10 +4658,10 @@ export default function App() {
                     </span>
                     <span>Weekly Volume</span>
                     <InfoPop
-                      title={metricExplainers.z2.title}
-                      short={metricExplainers.z2.short}
-                      detailed={metricExplainers.z2.detailed}
-                      userContext={metricExplainers.z2.userContext(profile, selectedZoneMinutes, zoneTarget)}
+                      title={zoneExplainer.title}
+                      short={zoneExplainer.short}
+                      detailed={zoneExplainer.detailed}
+                      userContext={zoneExplainer.userContext?.(profile, cardMinutes, cardTarget)}
                       icon="i"
                       size={11}
                     />

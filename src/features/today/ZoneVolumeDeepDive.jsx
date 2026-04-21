@@ -3,7 +3,7 @@ import { DeepDiveModal } from "./DeepDiveModal.jsx";
 import { WeeklyBars, StatTile, SectionLabel, InsightCard } from "./DeepDiveCharts.jsx";
 import { InfoPop } from "../../components/InfoPop.jsx";
 import { metricExplainers } from "../explainers/metrics.js";
-import { ZONES } from "./zoneConfig.js";
+import { ZONES, normalizeZoneKey } from "./zoneConfig.js";
 
 function startOfIsoWeek(d) {
   const x = new Date(d);
@@ -217,6 +217,9 @@ export const ZoneVolumeDeepDive = ({
       ? `Week of ${selectedWeek.rangeLabel}`
       : "Sessions";
 
+  const normalizedZone = normalizeZoneKey(selectedZone);
+  const zoneExplainer = metricExplainers[normalizedZone] || metricExplainers.z2;
+
   const modalTitle = `${zoneConfig.fullLabel} Training`;
 
   return (
@@ -309,10 +312,14 @@ export const ZoneVolumeDeepDive = ({
       <div style={sectionLabelRowStyle}>
         <div style={sectionLabelTextStyle}>{weeksSectionLabel}</div>
         <InfoPop
-          title={metricExplainers.z2.title}
-          short={metricExplainers.z2.short}
-          detailed={metricExplainers.z2.detailed}
-          userContext={metricExplainers.z2.userContext(profile, Math.round(Number(heroValue)), zoneTarget)}
+          title={zoneExplainer.title}
+          short={zoneExplainer.short}
+          detailed={zoneExplainer.detailed}
+          userContext={zoneExplainer.userContext?.(
+            profile,
+            Math.round(Number(heroValue)),
+            zoneTarget,
+          )}
           icon="i"
           size={11}
         />
