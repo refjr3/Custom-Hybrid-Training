@@ -2764,10 +2764,17 @@ export default function App() {
       .select("*")
       .eq("user_id", session.user.id)
       .single();
-    if (error) console.error("[refreshProfile]", error.message);
+    if (error) {
+      console.error("[refreshProfile] error:", error.message);
+      return;
+    }
     if (data) {
       console.log("[refreshProfile] zone_targets:", data.zone_targets);
       setProfile(data);
+      if (data.zone_targets && typeof data.zone_targets === "object") {
+        setLocalZoneTargets((prev) => ({ ...prev, ...data.zone_targets }));
+      }
+      if (data.selected_zone) setLocalSelectedZone(normalizeZoneKey(data.selected_zone));
     }
   }, [session?.user?.id]);
 
