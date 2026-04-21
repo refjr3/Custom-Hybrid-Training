@@ -339,6 +339,8 @@ function DrawerProfile({ profile, session, setDrawerSection, supabase, setProfil
   );
 }
 
+const RAFAEL_USER_ID = "5285440e-a3dd-4f29-9b09-29715f0a04fc";
+
 function DrawerConnections({
   setDrawerSection,
   whoopConnected,
@@ -346,6 +348,8 @@ function DrawerConnections({
   stravaConnected,
   session,
   profile,
+  onClose,
+  setShowPlanIntake,
 }) {
   const uid = session?.user?.id;
   const stravaHref = uid ? `/api/strava/login?uid=${encodeURIComponent(uid)}` : "/api/strava/login";
@@ -424,6 +428,51 @@ function DrawerConnections({
         <div style={{ fontSize: 16, fontWeight: 600, color: "#fff", letterSpacing: "-0.3px" }}>Connections</div>
       </div>
       <div style={{ padding: "0 20px", display: "flex", flexDirection: "column", gap: 10 }}>
+        {session?.user?.id === RAFAEL_USER_ID && (
+          <div
+            style={{
+              background: "rgba(201,168,117,0.06)",
+              border: "1px solid rgba(201,168,117,0.2)",
+              borderRadius: 14,
+              padding: "14px",
+              marginBottom: 16,
+            }}
+          >
+            <div
+              style={{
+                fontSize: 9,
+                fontWeight: 600,
+                color: "rgba(201,168,117,0.7)",
+                letterSpacing: "2px",
+                textTransform: "uppercase",
+                marginBottom: 8,
+              }}
+            >
+              Rafael Only · QA
+            </div>
+            <button
+              type="button"
+              onClick={() => {
+                onClose?.();
+                setShowPlanIntake?.(true);
+              }}
+              style={{
+                width: "100%",
+                background: "rgba(201,168,117,0.15)",
+                border: "1px solid rgba(201,168,117,0.35)",
+                borderRadius: 10,
+                padding: "10px",
+                fontSize: 12,
+                fontWeight: 600,
+                color: "#C9A875",
+                cursor: "pointer",
+                letterSpacing: "0.3px",
+              }}
+            >
+              Test Plan Intake →
+            </button>
+          </div>
+        )}
         {renderConnectCard({
           name: "WHOOP",
           status: whoopStatusOk,
@@ -994,6 +1043,7 @@ export default function TodayDrawer({
   whoopConnected,
   garminConnected,
   stravaConnected,
+  setShowPlanIntake,
 }) {
   useEffect(() => {
     if (!open) return;
@@ -1087,6 +1137,8 @@ export default function TodayDrawer({
             stravaConnected={stravaConnected}
             session={session}
             profile={profile}
+            onClose={onClose}
+            setShowPlanIntake={setShowPlanIntake}
           />
         )}
         {section === "ai" && (

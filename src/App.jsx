@@ -8,6 +8,7 @@ import AuthScreen from "./AuthScreen";
 import OnboardingFlow from "./features/onboarding/OnboardingFlow.jsx";
 import PlanBuilder from "./PlanBuilder";
 import TodayDrawer from "./TodayDrawer.jsx";
+import PlanIntakeFlow from "./features/planIntake/PlanIntakeFlow.jsx";
 import { useDataSources } from "./features/today/useDataSources.js";
 import { ConnectPrompt } from "./features/today/ConnectPrompt.jsx";
 import { RecoveryDeepDive } from "./features/today/RecoveryDeepDive.jsx";
@@ -2744,6 +2745,7 @@ export default function App() {
   const [labSessionId, setLabSessionId] = useState(createSessionId);
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [drawerSection, setDrawerSection] = useState("menu");
+  const [showPlanIntake, setShowPlanIntake] = useState(false);
   const [recoveryModalOpen, setRecoveryModalOpen] = useState(false);
   const [z2ModalOpen, setZ2ModalOpen] = useState(false);
   const [sleepModalOpen, setSleepModalOpen] = useState(false);
@@ -4156,6 +4158,7 @@ export default function App() {
         whoopConnected={whoopConnected}
         garminConnected={garminConnected}
         stravaConnected={stravaConnected}
+        setShowPlanIntake={setShowPlanIntake}
       />
 
       {showEntrance && (
@@ -6240,6 +6243,19 @@ export default function App() {
           <div style={{ fontFamily:C.fm, fontSize:8, color:C.cyan, letterSpacing:1 }}>{labToast}</div>
         </div>
       )}
+
+      <PlanIntakeFlow
+        open={showPlanIntake}
+        onClose={() => setShowPlanIntake(false)}
+        supabase={supabase}
+        session={session}
+        profile={profile}
+        onProfileUpdated={refreshProfile}
+        onIntakeComplete={({ message }) => {
+          setShowPlanIntake(false);
+          console.log("[intake complete]", message);
+        }}
+      />
 
     </div>
   );
