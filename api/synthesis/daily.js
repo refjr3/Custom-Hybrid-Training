@@ -72,6 +72,15 @@ function jsWeekdayFromTz(tz) {
   return mapToJs[wd] ?? new Date().getDay();
 }
 
+function metricsHasBodyData(m) {
+  if (!m || typeof m !== "object") return false;
+  return (
+    m.readiness_score != null
+    || m.hrv_rmssd != null
+    || m.sleep_total_min != null
+  );
+}
+
 export default async function handler(req, res) {
   if (req.method !== "GET") {
     return res.status(405).json({ error: "Method not allowed" });
@@ -93,7 +102,19 @@ export default async function handler(req, res) {
     const today = getCalendarYmdInTimeZone(tz) || new Date().toISOString().slice(0, 10);
     const yearHint = parseInt(String(today).slice(0, 4), 10) || new Date().getFullYear();
 
-    const todayMetrics = await resolveMetrics(user.id, today);
+    let todayMetrics = await resolveMetrics(user.id, today);
+
+    if (!metricsHasBodyData(todayMetrics)) {
+      const yesterdayStr = addCalendarDaysToIsoYmd(today, -1);
+      if (yesterdayStr) {
+        console.log("[synthesis] no body data for today, checking", yesterdayStr);
+        const yesterdayMetrics = await resolveMetrics(user.id, yesterdayStr);
+        if (metricsHasBodyData(yesterdayMetrics)) {
+          todayMetrics = yesterdayMetrics;
+          console.log("[synthesis] using previous-day metrics as fallback:", yesterdayStr);
+        }
+      }
+    }
 
     const { data: baselines } = await supabase.from("user_baselines").select("*").eq("user_id", user.id).maybeSingle();
     console.log("[synthesis] todayMetrics:", JSON.stringify(todayMetrics));
@@ -136,14 +157,7 @@ export default async function handler(req, res) {
       .filter(Boolean)
       .map((f) => f.color);
 
-    const hasBodyData = !!(
-      todayMetrics
-      && (
-        todayMetrics.readiness_score != null
-        || todayMetrics.hrv_rmssd != null
-        || todayMetrics.sleep_total_min != null
-      )
-    );
+    const hasBodyData = metricsHasBodyData(todayMetrics);
 
     let overallColor = "green";
     if (hasBodyData) {
