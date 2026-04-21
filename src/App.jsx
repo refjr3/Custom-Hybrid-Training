@@ -3229,33 +3229,7 @@ export default function App() {
       } catch (_) {}
     }
 
-    let lastFetch = 0;
-    if (fetchAtKey) {
-      try {
-        lastFetch = parseInt(localStorage.getItem(fetchAtKey) || "0", 10);
-      } catch (_) {
-        lastFetch = 0;
-      }
-    }
-    const ageMin = (Date.now() - (Number.isFinite(lastFetch) && lastFetch > 0 ? lastFetch : 0)) / 1000 / 60;
-    if (
-      fetchAtKey &&
-      lsKey &&
-      rawMinutes != null &&
-      rawMinutes !== "" &&
-      ageMin < 60 &&
-      Number.isFinite(parseInt(rawMinutes, 10))
-    ) {
-      const throttledZ2 = parseInt(rawMinutes, 10);
-      if (Number.isFinite(throttledZ2) && throttledZ2 >= 0) {
-        setWeeklyZoneMinutes((prev) => ({
-          z2: throttledZ2,
-          z3: typeof prev?.z3 === "number" ? prev.z3 : 0,
-          z4_plus: typeof prev?.z4_plus === "number" ? prev.z4_plus : 0,
-        }));
-      }
-      return;
-    }
+    // Do not short-circuit the network request: LS only stores Z2, so skipping fetch left z3/z4_plus at 0 after cold start.
 
     setStravaWeeklyZ2Loading(true);
     setStravaWeeklyZ2Error("");
@@ -4170,22 +4144,22 @@ export default function App() {
 
       {nav === "today" && (() => {
         const perfHdr = derivePerfPlanHeader(planBlocks);
-        const selectedZone = normalizeZoneKey(localSelectedZone);
-        const zoneConfig = getZoneConfig(selectedZone);
+        const normalizedZone = normalizeZoneKey(localSelectedZone);
+        const zoneConfig = getZoneConfig(normalizedZone);
         const zoneTarget =
-          localZoneTargets[selectedZone] ?? getZoneConfig(selectedZone).defaultTarget;
+          localZoneTargets[normalizedZone] ?? getZoneConfig(normalizedZone).defaultTarget;
         const selectedZoneMinutes = stravaConnected
-          ? Math.max(0, Math.round(Number(weeklyZoneMinutes[selectedZone] ?? 0)))
+          ? Math.max(0, Math.round(Number(weeklyZoneMinutes[normalizedZone] ?? 0)))
           : 0;
         console.log(
-          "[zone card] selectedZone:",
+          "[zone card] localSelectedZone:",
           localSelectedZone,
-          "normalized:",
-          selectedZone,
-          "minutes:",
+          "normalizedZone:",
+          normalizedZone,
+          "weeklyZoneMinutes:",
           weeklyZoneMinutes,
           "value:",
-          weeklyZoneMinutes[selectedZone],
+          weeklyZoneMinutes[normalizedZone],
         );
         const formatMinutesLabel = (mins) => {
           const safe = Math.max(0, Number(mins || 0));
@@ -4649,7 +4623,7 @@ export default function App() {
                     }}
                   >
                     <span onClick={(e) => e.stopPropagation()}>
-                      <ZonePicker currentZone={selectedZone} onSelect={handleZoneChange} />
+                      <ZonePicker currentZone={normalizedZone} onSelect={handleZoneChange} />
                     </span>
                     <span>Weekly Volume</span>
                     <InfoPop
@@ -5046,7 +5020,7 @@ export default function App() {
         supabase={supabase}
         dataSources={dataSources}
         profile={profile}
-        selectedZone={localSelectedZone}
+        selectedZone={normalizeZoneKey(localSelectedZone)}
         zoneConfig={getZoneConfig(localSelectedZone)}
         zoneTarget={
           localZoneTargets[localSelectedZone] ?? getZoneConfig(localSelectedZone).defaultTarget
