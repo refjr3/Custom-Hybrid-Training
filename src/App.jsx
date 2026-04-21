@@ -2789,30 +2789,60 @@ export default function App() {
 
   const handleZoneChange = useCallback(
     async (newZone) => {
-      if (!session?.user?.id) return;
-      setLocalSelectedZone(normalizeZoneKey(newZone));
-      await supabase.from("user_profiles").update({ selected_zone: newZone }).eq("user_id", session.user.id);
+      const userId = session?.user?.id;
+      console.log("[zone change] newZone:", newZone, "user id:", userId);
+      if (!userId) return;
+      const zoneToSave = normalizeZoneKey(newZone);
+      setLocalSelectedZone(zoneToSave);
+      const { data, error, status } = await supabase
+        .from("user_profiles")
+        .update({ selected_zone: zoneToSave })
+        .eq("user_id", userId)
+        .select();
+      console.log("[zone change] UPDATE status:", status);
+      console.log("[zone change] UPDATE error:", error);
+      console.log("[zone change] UPDATE data:", data);
+      if (error) console.error("[zone change] save failed:", error.message);
       await refreshProfile();
     },
-    [session?.user?.id, refreshProfile]
+    [session?.user?.id, refreshProfile, supabase]
   );
 
   const handleZoneTargetChange = useCallback(
     async (newTarget) => {
-      if (!session?.user?.id) return;
+      const userId = session?.user?.id;
+      console.log(
+        "[zone target] START — newTarget:",
+        newTarget,
+        "localSelectedZone:",
+        localSelectedZone,
+      );
+      console.log("[zone target] user id:", userId);
+      console.log("[zone target] current profile.zone_targets:", profile?.zone_targets);
+      if (!userId) return;
+
+      const normalizedZone = normalizeZoneKey(localSelectedZone);
       let mergedForSave;
       setLocalZoneTargets((prev) => {
-        mergedForSave = { ...prev, [localSelectedZone]: newTarget };
+        mergedForSave = { ...prev, [normalizedZone]: newTarget };
+        console.log("[zone target] merged local state:", mergedForSave);
         return mergedForSave;
       });
-      const { error } = await supabase
+      const { data, error, status } = await supabase
         .from("user_profiles")
         .update({ zone_targets: mergedForSave })
-        .eq("user_id", session.user.id);
-      if (error) console.error("[zone target] save", error.message);
+        .eq("user_id", userId)
+        .select();
+      console.log("[zone target] UPDATE status:", status);
+      console.log("[zone target] UPDATE error:", error);
+      console.log("[zone target] UPDATE returned data:", data);
+      if (error) {
+        console.error("[zone target] save failed:", error.message, error.details, error.hint);
+        return;
+      }
       await refreshProfile();
     },
-    [session?.user?.id, localSelectedZone, refreshProfile]
+    [session?.user?.id, localSelectedZone, refreshProfile, profile?.zone_targets, supabase]
   );
 
   useEffect(() => {
