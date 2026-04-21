@@ -92,7 +92,6 @@ export default function PlanIntakeFlow({ open, onClose, supabase, session, profi
       setSaveError(error.message || "Could not save");
       return false;
     }
-    onProfileUpdated?.();
     return true;
   };
 
