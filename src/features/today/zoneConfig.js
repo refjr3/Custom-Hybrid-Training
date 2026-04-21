@@ -31,8 +31,21 @@ export const ZONES = {
   },
 };
 
+/** Canonical keys: z2 | z3 | z4_plus (matches weeklyZoneMinutes / API). */
+export function normalizeZoneKey(raw) {
+  const s = String(raw ?? "z2")
+    .trim()
+    .toLowerCase()
+    .replace(/\s+/g, "");
+  if (s === "z2") return "z2";
+  if (s === "z3") return "z3";
+  if (s === "z4_plus" || s === "z4+" || s === "z4plus") return "z4_plus";
+  return "z2";
+}
+
 export function getZoneConfig(zoneKey) {
-  return ZONES[zoneKey] || ZONES.z2;
+  const k = normalizeZoneKey(zoneKey);
+  return ZONES[k] || ZONES.z2;
 }
 
 export function getZoneTarget(profile, zoneKey) {

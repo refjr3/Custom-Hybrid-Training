@@ -13,7 +13,7 @@ import { ConnectPrompt } from "./features/today/ConnectPrompt.jsx";
 import { RecoveryDeepDive } from "./features/today/RecoveryDeepDive.jsx";
 import { ZoneVolumeDeepDive } from "./features/today/ZoneVolumeDeepDive.jsx";
 import { ZonePicker } from "./features/today/ZonePicker.jsx";
-import { getZoneConfig } from "./features/today/zoneConfig.js";
+import { getZoneConfig, normalizeZoneKey } from "./features/today/zoneConfig.js";
 import { SleepDeepDive } from "./features/today/SleepDeepDive.jsx";
 import { DailyCallCard } from "./features/today/DailyCallCard.jsx";
 import { InfoPop } from "./components/InfoPop.jsx";
@@ -2772,7 +2772,7 @@ export default function App() {
   }, [session?.user?.id]);
 
   useEffect(() => {
-    if (profile?.selected_zone) setLocalSelectedZone(profile.selected_zone);
+    if (profile?.selected_zone) setLocalSelectedZone(normalizeZoneKey(profile.selected_zone));
   }, [profile?.selected_zone]);
 
   useEffect(() => {
@@ -2784,7 +2784,7 @@ export default function App() {
   const handleZoneChange = useCallback(
     async (newZone) => {
       if (!session?.user?.id) return;
-      setLocalSelectedZone(newZone);
+      setLocalSelectedZone(normalizeZoneKey(newZone));
       await supabase.from("user_profiles").update({ selected_zone: newZone }).eq("user_id", session.user.id);
       await refreshProfile();
     },
@@ -4154,13 +4154,23 @@ export default function App() {
 
       {nav === "today" && (() => {
         const perfHdr = derivePerfPlanHeader(planBlocks);
-        const selectedZone = localSelectedZone;
+        const selectedZone = normalizeZoneKey(localSelectedZone);
         const zoneConfig = getZoneConfig(selectedZone);
         const zoneTarget =
           localZoneTargets[selectedZone] ?? getZoneConfig(selectedZone).defaultTarget;
         const selectedZoneMinutes = stravaConnected
           ? Math.max(0, Math.round(Number(weeklyZoneMinutes[selectedZone] ?? 0)))
           : 0;
+        console.log(
+          "[zone card] selectedZone:",
+          localSelectedZone,
+          "normalized:",
+          selectedZone,
+          "minutes:",
+          weeklyZoneMinutes,
+          "value:",
+          weeklyZoneMinutes[selectedZone],
+        );
         const formatMinutesLabel = (mins) => {
           const safe = Math.max(0, Number(mins || 0));
           const hours = Math.floor(safe / 60);
