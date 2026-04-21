@@ -6245,6 +6245,7 @@ export default function App() {
       )}
 
       <PlanIntakeFlow
+        key="plan-intake"
         open={showPlanIntake}
         onClose={() => setShowPlanIntake(false)}
         supabase={supabase}
