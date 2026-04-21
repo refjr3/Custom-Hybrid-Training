@@ -3427,17 +3427,31 @@ export default function App() {
         const res = await fetch("/api/synthesis/daily", {
           headers: { Authorization: `Bearer ${session.access_token}` },
         });
-        const data = await res.json().catch(() => ({}));
+
+        console.log("[synthesis/today] status:", res.status);
+
+        if (!res.ok) {
+          const errText = await res.text();
+          console.error("[synthesis/today] error response:", res.status, errText);
+          if (!cancelled) setCoachSynthesis(null);
+          return;
+        }
+
+        const data = await res.json();
+        console.log("[synthesis/today] response:", JSON.stringify(data).slice(0, 200));
+
         if (!cancelled && data?.headline) {
           setCoachSynthesis({
             headline: data.headline,
             summary: typeof data.summary === "string" ? data.summary : "",
             action: typeof data.action === "string" ? data.action : "",
           });
-        } else if (!cancelled) {
-          setCoachSynthesis(null);
+        } else {
+          console.warn("[synthesis/today] no headline in response:", data);
+          if (!cancelled) setCoachSynthesis(null);
         }
-      } catch {
+      } catch (err) {
+        console.error("[synthesis/today] fetch failed:", err?.message || err);
         if (!cancelled) setCoachSynthesis(null);
       } finally {
         if (!cancelled) setCoachBriefLoading(false);

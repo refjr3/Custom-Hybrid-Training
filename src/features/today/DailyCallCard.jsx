@@ -34,12 +34,25 @@ export const DailyCallCard = ({ supabase, cornerLabel = "Today's Call" }) => {
         const res = await fetch("/api/synthesis/daily", {
           headers: { Authorization: `Bearer ${session?.access_token}` },
         });
+
+        console.log("[synthesis/perf] status:", res.status);
+
+        if (!res.ok) {
+          const errText = await res.text();
+          console.error("[synthesis/perf] error response:", res.status, errText);
+          return;
+        }
+
         const json = await res.json();
+        console.log("[synthesis/perf] response:", JSON.stringify(json).slice(0, 200));
+
         if (json?.headline) setData(json);
+        else console.warn("[synthesis/perf] no headline:", json);
       } catch (e) {
-        console.error("[daily call]", e);
+        console.error("[synthesis/perf] fetch failed:", e?.message || e);
+      } finally {
+        setLoading(false);
       }
-      setLoading(false);
     };
     load();
   }, []);
