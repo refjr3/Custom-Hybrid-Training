@@ -18,14 +18,14 @@ function normalizeBaselinesPayload(json) {
   return json;
 }
 
-const z2SectionLabelRowStyle = {
+const sectionLabelRowStyle = {
   display: "flex",
   alignItems: "center",
   gap: 6,
   marginTop: 28,
   marginBottom: 12,
 };
-const z2SectionLabelTextStyle = {
+const sectionLabelTextStyle = {
   flex: 1,
   fontSize: 9,
   fontWeight: 600,
@@ -34,7 +34,29 @@ const z2SectionLabelTextStyle = {
   textTransform: "uppercase",
 };
 
-export const Z2DeepDive = ({ open, onClose, supabase, dataSources, profile }) => {
+function sessionZoneMinutes(a, zoneKey) {
+  if (zoneKey === "z3") return a?.z3Minutes ?? 0;
+  if (zoneKey === "z4_plus") return a?.z4PlusMinutes ?? 0;
+  return a?.z2Minutes ?? 0;
+}
+
+function dayZoneMinutes(m, zoneKey) {
+  if (zoneKey === "z3") return m?.z3_minutes ?? 0;
+  if (zoneKey === "z4_plus") return m?.z4_plus_minutes ?? 0;
+  return m?.z2_minutes ?? 0;
+}
+
+export const ZoneVolumeDeepDive = ({
+  open,
+  onClose,
+  supabase,
+  dataSources,
+  profile,
+  selectedZone,
+  zoneConfig,
+  zoneTarget,
+  refreshProfile,
+}) => {
   const [metrics, setMetrics] = useState([]);
   const [baselines, setBaselines] = useState(null);
   const [loading, setLoading] = useState(true);
@@ -75,50 +97,75 @@ export const Z2DeepDive = ({ open, onClose, supabase, dataSources, profile }) =>
 
         setMetrics(Array.isArray(metricsData) ? metricsData : []);
         setBaselines(normalizeBaselinesPayload(baselinesData));
+
+        const wzm =
+          currentWeekData?.weeklyZoneMinutes && typeof currentWeekData.weeklyZoneMinutes === "object"
+            ? currentWeekData.weeklyZoneMinutes
+            : null;
+        let zoneMin;
+        if (wzm) {
+          zoneMin =
+            selectedZone === "z2"
+              ? Number(wzm.z2)
+              : selectedZone === "z3"
+                ? Number(wzm.z3)
+                : Number(wzm.z4_plus);
+        } else {
+          zoneMin = Number(currentWeekData?.weeklyZ2Minutes ?? 0);
+        }
         setCurrentWeekMinutes(
-          currentWeekData?.weeklyZ2Minutes != null && Number.isFinite(Number(currentWeekData.weeklyZ2Minutes))
-            ? Math.round(Number(currentWeekData.weeklyZ2Minutes))
-            : null
+          zoneMin != null && Number.isFinite(zoneMin) ? Math.round(zoneMin) : null,
         );
         setCurrentWeekActivities(Array.isArray(currentWeekData?.activities) ? currentWeekData.activities : []);
       } catch (e) {
-        console.error("[z2 deep dive]", e);
+        console.error("[zone volume deep dive]", e);
         setCurrentWeekMinutes(null);
         setCurrentWeekActivities([]);
       } finally {
         setLoading(false);
       }
     })();
-  }, [open, supabase]);
+  }, [open, supabase, selectedZone]);
 
   const sortedMetrics = [...metrics].sort((a, b) => String(a.date || "").localeCompare(String(b.date || "")));
-  const z2DayRows = sortedMetrics.filter((m) => m.z2_minutes != null && Number(m.z2_minutes) > 0);
-  const validCount = z2DayRows.length;
-  const z2Subtitle =
+  const dayRows = sortedMetrics.filter((m) => dayZoneMinutes(m, selectedZone) > 0);
+  const validCount = dayRows.length;
+  const zoneSubtitle =
     validCount >= 10 ? "Weekly Progress" : validCount >= 7 ? `Last ${validCount} days` : "Building history…";
-  const z2WeeksSectionLabel =
+  const weeksSectionLabel =
     validCount >= 20 ? "Last 4 Weeks" : validCount >= 7 ? `Last ${validCount} days` : "Building history…";
 
   const now = new Date();
   const currentWeekStart = startOfIsoWeek(now);
   const weeks = [];
-  for (let w = 0; w < 4; w++) {
+
+  for (let w = 0; w < 4; w += 1) {
     const weekStart = new Date(currentWeekStart);
     weekStart.setDate(currentWeekStart.getDate() - (3 - w) * 7);
     const weekEnd = new Date(weekStart);
     weekEnd.setDate(weekEnd.getDate() + 6);
     const fmtShort = (d) => d.toLocaleDateString("en-US", { month: "short", day: "numeric" });
     const rangeLabel = `${fmtShort(weekStart)} – ${fmtShort(weekEnd)}`;
-    const weekMetrics = metrics.filter((m) => {
+    const weekMetrics = sortedMetrics.filter((m) => {
       const d = new Date(m.date);
       d.setHours(0, 0, 0, 0);
       return d >= weekStart && d <= weekEnd;
     });
-    const total = weekMetrics.reduce((sum, m) => sum + (m.z2_minutes || 0), 0);
+    let totalZ2 = 0;
+    let totalZ3 = 0;
+    let totalZ4Plus = 0;
+    for (const m of weekMetrics) {
+      totalZ2 += m.z2_minutes || 0;
+      totalZ3 += m.z3_minutes || 0;
+      totalZ4Plus += m.z4_plus_minutes || 0;
+    }
     const label = w === 3 ? "This wk" : `${weekStart.getMonth() + 1}/${weekStart.getDate()}`;
+    const barValue =
+      selectedZone === "z2" ? totalZ2 : selectedZone === "z3" ? totalZ3 : totalZ4Plus;
     weeks.push({
       label,
-      value: total,
+      value: barValue,
+      values: { z2: totalZ2, z3: totalZ3, z4_plus: totalZ4Plus },
       isCurrent: w === 3,
       metrics: weekMetrics,
       rangeLabel,
@@ -131,10 +178,10 @@ export const Z2DeepDive = ({ open, onClose, supabase, dataSources, profile }) =>
 
   const currentWeek = weeks[3] || { value: 0, metrics: [], activities: [] };
   const heroValue = currentWeekMinutes ?? currentWeek.value ?? 0;
-  const bestWeek = weeks.length ? weeks.reduce((max, w) => (w.value > max.value ? w : max), weeks[0]) : { value: 0 };
-  const avgWeek = weeks.length ? weeks.reduce((sum, w) => sum + w.value, 0) / weeks.length : 0;
-  const target = 240;
-  const baselineWeeklyZ2 = baselines?.baseline_z2_weekly_min;
+  const bestWeek = weeks.length ? weeks.reduce((max, wk) => (wk.value > max.value ? wk : max), weeks[0]) : { value: 0 };
+  const avgWeek = weeks.length ? weeks.reduce((sum, wk) => sum + wk.value, 0) / weeks.length : 0;
+  const baselineWeeklyZone =
+    selectedZone === "z2" ? baselines?.baseline_z2_weekly_min : null;
 
   const dow = now.getDay();
   const dayIdx = dow === 0 ? 7 : dow;
@@ -143,10 +190,12 @@ export const Z2DeepDive = ({ open, onClose, supabase, dataSources, profile }) =>
   const isCurrentWeekSelected = selectedWeekIndex === 3;
 
   const sessionRowsFromStrava = Array.isArray(currentWeekActivities) ? currentWeekActivities : [];
-  const sessionRowsFromMetrics = (currentWeek.metrics || []).filter((m) => (m.z2_minutes || 0) > 0);
+  const sessionRowsFromMetrics = (currentWeek.metrics || []).filter(
+    (m) => dayZoneMinutes(m, selectedZone) > 0,
+  );
   const pastWeekDayRows = !isCurrentWeekSelected
     ? [...(selectedWeek.metrics || [])]
-        .filter((m) => (m.z2_minutes || 0) > 0)
+        .filter((m) => dayZoneMinutes(m, selectedZone) > 0)
         .sort((a, b) => String(a.date || "").localeCompare(String(b.date || "")))
     : [];
 
@@ -162,16 +211,20 @@ export const Z2DeepDive = ({ open, onClose, supabase, dataSources, profile }) =>
       ? `Week of ${selectedWeek.rangeLabel}`
       : "Sessions";
 
+  const modalTitle = `${zoneConfig.fullLabel} Training`;
+
   return (
     <DeepDiveModal
       open={open}
       onClose={onClose}
-      subtitle={z2Subtitle}
-      title="Zone 2 Training"
+      subtitle={zoneSubtitle}
+      title={modalTitle}
       sourceLabel={dataSources?.primaryActivitySource}
     >
       {loading ? (
-        <div style={{ fontSize: 12, color: "rgba(255,255,255,0.35)", marginBottom: 12 }}>Loading Z2 data…</div>
+        <div style={{ fontSize: 12, color: "rgba(255,255,255,0.35)", marginBottom: 12 }}>
+          Loading {zoneConfig.label} data…
+        </div>
       ) : null}
 
       {validCount < 3 && !loading ? (
@@ -188,7 +241,7 @@ export const Z2DeepDive = ({ open, onClose, supabase, dataSources, profile }) =>
             textAlign: "center",
           }}
         >
-          Z2 history will build as Strava syncs. Check back in a few days.
+          {zoneConfig.fullLabel} history will build as Strava syncs. Check back in a few days.
         </div>
       ) : null}
 
@@ -202,7 +255,7 @@ export const Z2DeepDive = ({ open, onClose, supabase, dataSources, profile }) =>
           style={{
             fontFamily: "'DM Serif Display', serif",
             fontSize: 72,
-            color: "#C9A875",
+            color: zoneConfig.color,
             lineHeight: 1,
             letterSpacing: "-3px",
           }}
@@ -212,24 +265,26 @@ export const Z2DeepDive = ({ open, onClose, supabase, dataSources, profile }) =>
         <div
           style={{
             fontSize: 11,
-            color: "rgba(201,168,117,0.5)",
+            color: zoneConfig.colorDim,
             fontWeight: 500,
             letterSpacing: "1.5px",
             textTransform: "uppercase",
             marginTop: 4,
           }}
         >
-          Minutes · Target {target}
+          Minutes · Target {zoneTarget}
         </div>
         <div
           style={{
             fontSize: 10,
-            color: heroValue >= target ? "#5dffa0" : "rgba(255,255,255,0.3)",
+            color: heroValue >= zoneTarget ? "#5dffa0" : "rgba(255,255,255,0.3)",
             marginTop: 4,
             fontWeight: 500,
           }}
         >
-          {heroValue >= target ? `✓ Target hit · +${heroValue - target} min` : `${target - heroValue} min to target`}
+          {heroValue >= zoneTarget
+            ? `✓ Target hit · +${heroValue - zoneTarget} min`
+            : `${zoneTarget - heroValue} min to target`}
         </div>
         {dayIdx <= 2 ? (
           <div
@@ -245,27 +300,27 @@ export const Z2DeepDive = ({ open, onClose, supabase, dataSources, profile }) =>
         ) : null}
       </div>
 
-      <div style={z2SectionLabelRowStyle}>
-        <div style={z2SectionLabelTextStyle}>{z2WeeksSectionLabel}</div>
+      <div style={sectionLabelRowStyle}>
+        <div style={sectionLabelTextStyle}>{weeksSectionLabel}</div>
         <InfoPop
           title={metricExplainers.z2.title}
           short={metricExplainers.z2.short}
           detailed={metricExplainers.z2.detailed}
-          userContext={metricExplainers.z2.userContext(
-            profile,
-            Math.round(Number(heroValue)),
-            target,
-          )}
+          userContext={metricExplainers.z2.userContext(profile, Math.round(Number(heroValue)), zoneTarget)}
           icon="i"
           size={11}
         />
       </div>
       <WeeklyBars
         data={weeks}
-        maxValue={Math.max(target, baselineWeeklyZ2 || 0, ...weeks.map((w) => w.value))}
-        targetValue={240}
-        baselineValue={baselineWeeklyZ2 != null ? Math.round(Number(baselineWeeklyZ2)) : null}
-        accentColor="#C9A875"
+        maxValue={Math.max(
+          zoneTarget,
+          baselineWeeklyZone || 0,
+          ...weeks.map((wk) => wk.value),
+        )}
+        targetValue={zoneTarget}
+        baselineValue={baselineWeeklyZone != null ? Math.round(Number(baselineWeeklyZone)) : null}
+        accentColor={zoneConfig.color}
         showValues
         onBarClick={(i) => setSelectedWeekIndex(i)}
         selectedIndex={selectedWeekIndex}
@@ -274,7 +329,78 @@ export const Z2DeepDive = ({ open, onClose, supabase, dataSources, profile }) =>
       <div style={{ display: "flex", gap: 8, marginTop: 16 }}>
         <StatTile label="Avg" value={Math.round(avgWeek)} unit="min" />
         <StatTile label="Best" value={bestWeek.value} unit="min" accent="#5dffa0" />
-        <StatTile label="Target" value={target} unit="min" accent="#C9A875" />
+        <StatTile label="Target" value={zoneTarget} unit="min" accent={zoneConfig.color} />
+      </div>
+
+      <SectionLabel>Weekly Target</SectionLabel>
+      <div
+        style={{
+          background: "rgba(255,255,255,0.04)",
+          border: "1px solid rgba(255,255,255,0.07)",
+          borderRadius: 16,
+          padding: "16px 18px",
+          marginBottom: 8,
+        }}
+      >
+        <div
+          style={{
+            display: "flex",
+            justifyContent: "space-between",
+            alignItems: "center",
+            marginBottom: 10,
+          }}
+        >
+          <div
+            style={{
+              fontSize: 11,
+              color: "rgba(255,255,255,0.5)",
+            }}
+          >
+            Your {zoneConfig.label} target
+          </div>
+          <div
+            style={{
+              fontFamily: "'DM Serif Display', serif",
+              fontSize: 22,
+              color: zoneConfig.color,
+            }}
+          >
+            {zoneTarget}{" "}
+            <span
+              style={{
+                fontSize: 11,
+                fontFamily: "'DM Sans', sans-serif",
+                color: "rgba(255,255,255,0.4)",
+              }}
+            >
+              min/wk
+            </span>
+          </div>
+        </div>
+        <input
+          type="range"
+          min={selectedZone === "z4_plus" ? 0 : selectedZone === "z3" ? 0 : 60}
+          max={selectedZone === "z4_plus" ? 120 : selectedZone === "z3" ? 240 : 600}
+          step={15}
+          value={zoneTarget}
+          onChange={async (e) => {
+            const newTarget = parseInt(e.target.value, 10);
+            const {
+              data: { session },
+            } = await supabase.auth.getSession();
+            if (!session?.user?.id) return;
+            const currentTargets = profile?.zone_targets || {};
+            await supabase
+              .from("user_profiles")
+              .update({ zone_targets: { ...currentTargets, [selectedZone]: newTarget } })
+              .eq("user_id", session.user.id);
+            if (refreshProfile) await refreshProfile();
+          }}
+          style={{
+            width: "100%",
+            accentColor: zoneConfig.color,
+          }}
+        />
       </div>
 
       <SectionLabel>{sessionsSectionLabel}</SectionLabel>
@@ -287,55 +413,58 @@ export const Z2DeepDive = ({ open, onClose, supabase, dataSources, profile }) =>
         }}
       >
         {useStravaSessions ? (
-          sessionRowsFromStrava.map((a, i, arr) => (
-            <div
-              key={`${a.name}-${a.dateYmd || a.date}-${i}`}
-              style={{
-                display: "flex",
-                justifyContent: "space-between",
-                alignItems: "flex-start",
-                gap: 12,
-                padding: "12px 16px",
-                borderBottom: i < arr.length - 1 ? "1px solid rgba(255,255,255,0.05)" : "none",
-              }}
-            >
-              <div style={{ flex: 1, minWidth: 0 }}>
-                <div style={{ fontSize: 12, fontWeight: 600, color: "rgba(255,255,255,0.7)" }}>
-                  {a.dateHeading ? `${a.dateHeading} · ` : ""}
-                  {a.name || "Activity"}
-                </div>
-                <div style={{ fontSize: 10, color: "rgba(255,255,255,0.25)", marginTop: 2 }}>
-                  {a.type || "Workout"}
-                  {typeof a.distance_mi === "number" && a.distance_mi > 0 ? ` · ${a.distance_mi} mi` : ""}
-                </div>
-              </div>
+          sessionRowsFromStrava.map((a, i, arr) => {
+            const zm = sessionZoneMinutes(a, selectedZone);
+            return (
               <div
+                key={`${a.name}-${a.dateYmd || a.date}-${i}`}
                 style={{
-                  fontFamily: "'DM Serif Display', serif",
-                  fontSize: 18,
-                  color: "#C9A875",
-                  flexShrink: 0,
-                  textAlign: "right",
-                  lineHeight: 1.2,
+                  display: "flex",
+                  justifyContent: "space-between",
+                  alignItems: "flex-start",
+                  gap: 12,
+                  padding: "12px 16px",
+                  borderBottom: i < arr.length - 1 ? "1px solid rgba(255,255,255,0.05)" : "none",
                 }}
               >
-                {a.z2Minutes ?? 0}m Z2
-                {a.total_min != null && Number(a.total_min) > 0 ? (
-                  <div
-                    style={{
-                      fontSize: 9,
-                      fontFamily: "'DM Sans', sans-serif",
-                      color: "rgba(255,255,255,0.28)",
-                      fontWeight: 500,
-                      marginTop: 2,
-                    }}
-                  >
-                    {a.total_min} min total
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <div style={{ fontSize: 12, fontWeight: 600, color: "rgba(255,255,255,0.7)" }}>
+                    {a.dateHeading ? `${a.dateHeading} · ` : ""}
+                    {a.name || "Activity"}
                   </div>
-                ) : null}
+                  <div style={{ fontSize: 10, color: "rgba(255,255,255,0.25)", marginTop: 2 }}>
+                    {a.type || "Workout"}
+                    {typeof a.distance_mi === "number" && a.distance_mi > 0 ? ` · ${a.distance_mi} mi` : ""}
+                  </div>
+                </div>
+                <div
+                  style={{
+                    fontFamily: "'DM Serif Display', serif",
+                    fontSize: 18,
+                    color: zoneConfig.color,
+                    flexShrink: 0,
+                    textAlign: "right",
+                    lineHeight: 1.2,
+                  }}
+                >
+                  {zm}m {zoneConfig.label}
+                  {a.total_min != null && Number(a.total_min) > 0 ? (
+                    <div
+                      style={{
+                        fontSize: 9,
+                        fontFamily: "'DM Sans', sans-serif",
+                        color: "rgba(255,255,255,0.28)",
+                        fontWeight: 500,
+                        marginTop: 2,
+                      }}
+                    >
+                      {a.total_min} min total
+                    </div>
+                  ) : null}
+                </div>
               </div>
-            </div>
-          ))
+            );
+          })
         ) : !useDayRollupRows ? (
           <div
             style={{
@@ -346,14 +475,15 @@ export const Z2DeepDive = ({ open, onClose, supabase, dataSources, profile }) =>
             }}
           >
             {isCurrentWeekSelected
-              ? "No Z2 activities logged this week yet"
-              : "No Z2 in this week (from synced totals)"}
+              ? `No ${zoneConfig.label} activities logged this week yet`
+              : `No ${zoneConfig.label} in this week (from synced totals)`}
           </div>
         ) : (
           dayRollupList.map((m, i, arr) => {
             const d = new Date(`${String(m.date).slice(0, 10)}T12:00:00`);
             const dayName = d.toLocaleDateString("en-US", { weekday: "short" });
             const cal = d.toLocaleDateString("en-US", { month: "short", day: "numeric" });
+            const dm = dayZoneMinutes(m, selectedZone);
             return (
               <div
                 key={m.date}
@@ -368,7 +498,7 @@ export const Z2DeepDive = ({ open, onClose, supabase, dataSources, profile }) =>
               >
                 <div style={{ flex: 1, minWidth: 0 }}>
                   <div style={{ fontSize: 12, fontWeight: 600, color: "rgba(255,255,255,0.7)" }}>
-                    {dayName} {cal} · {m.z2_minutes} min Z2
+                    {dayName} {cal} · {dm} min {zoneConfig.label}
                   </div>
                   <div style={{ fontSize: 10, color: "rgba(255,255,255,0.25)", marginTop: 2 }}>
                     {m.total_activity_min || 0} min total activity
@@ -381,7 +511,24 @@ export const Z2DeepDive = ({ open, onClose, supabase, dataSources, profile }) =>
       </div>
 
       <InsightCard>
-        Z2 work builds your aerobic base — the foundation that lets you recover between hard efforts. 4+ hours per week is the sweet spot for most hybrid athletes.
+        {selectedZone === "z2" ? (
+          <p>
+            Z2 work builds your aerobic base — the foundation for everything. 4+ hours weekly is the sweet spot for
+            hybrid athletes.
+          </p>
+        ) : null}
+        {selectedZone === "z3" ? (
+          <p>
+            Z3 tempo work builds lactate threshold capacity. Less is more here — 60-90 min weekly is plenty for most
+            athletes.
+          </p>
+        ) : null}
+        {selectedZone === "z4_plus" ? (
+          <p>
+            Z4+ work builds VO2max and race-specific fitness. Keep volume low and quality high — 20-40 min weekly is
+            the sweet spot.
+          </p>
+        ) : null}
       </InsightCard>
     </DeepDiveModal>
   );

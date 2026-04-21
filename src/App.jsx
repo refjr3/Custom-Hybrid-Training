@@ -11,7 +11,7 @@ import TodayDrawer from "./TodayDrawer.jsx";
 import { useDataSources } from "./features/today/useDataSources.js";
 import { ConnectPrompt } from "./features/today/ConnectPrompt.jsx";
 import { RecoveryDeepDive } from "./features/today/RecoveryDeepDive.jsx";
-import { Z2DeepDive } from "./features/today/Z2DeepDive.jsx";
+import { ZoneVolumeDeepDive } from "./features/today/ZoneVolumeDeepDive.jsx";
 import { ZonePicker } from "./features/today/ZonePicker.jsx";
 import { getZoneConfig, getZoneTarget, getSelectedZone } from "./features/today/zoneConfig.js";
 import { SleepDeepDive } from "./features/today/SleepDeepDive.jsx";
@@ -4952,12 +4952,16 @@ export default function App() {
         dataSources={dataSources}
         profile={profile}
       />
-      <Z2DeepDive
+      <ZoneVolumeDeepDive
         open={z2ModalOpen}
         onClose={() => setZ2ModalOpen(false)}
         supabase={supabase}
         dataSources={dataSources}
         profile={profile}
+        selectedZone={getSelectedZone(profile)}
+        zoneConfig={getZoneConfig(getSelectedZone(profile))}
+        zoneTarget={getZoneTarget(profile, getSelectedZone(profile))}
+        refreshProfile={refreshProfile}
       />
       <SleepDeepDive
         open={sleepModalOpen}
