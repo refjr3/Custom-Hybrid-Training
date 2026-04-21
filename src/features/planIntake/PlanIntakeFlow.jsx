@@ -41,6 +41,8 @@ export default function PlanIntakeFlow({ open, onClose, supabase, session, profi
   const [saving, setSaving] = useState(false);
   const [intakeSubmitting, setIntakeSubmitting] = useState(false);
   const [saveError, setSaveError] = useState("");
+  /** True when user opened the race step from confirmation to edit date — Next returns to step 5. */
+  const [returnToConfirm, setReturnToConfirm] = useState(false);
 
   /** False while closed; set true on first paint after open so we only reset local state when the modal opens, not when `profile` updates mid-flow. */
   const intakeWasOpenRef = useRef(false);
@@ -57,6 +59,7 @@ export default function PlanIntakeFlow({ open, onClose, supabase, session, profi
       if (profile?.target_race_date) setMainFocus("train_for_race");
       else setMainFocus(null);
       setSaveError("");
+      setReturnToConfirm(false);
     }
     if (!open) intakeWasOpenRef.current = false;
   }, [open, profile]);
@@ -103,7 +106,10 @@ export default function PlanIntakeFlow({ open, onClose, supabase, session, profi
   const handleBack = () => {
     if (step <= 0) onClose?.();
     else if (step === 4 && !raceRequired) setStep(2);
-    else setStep((s) => s - 1);
+    else if (step === 3 && returnToConfirm) {
+      setReturnToConfirm(false);
+      setStep(4);
+    } else setStep((s) => s - 1);
   };
 
   const handleReduceDays = () => {
@@ -119,12 +125,15 @@ export default function PlanIntakeFlow({ open, onClose, supabase, session, profi
   const step3Blocked = step === 2 && !mainFocus;
 
   const advanceFromStep2 = () => {
+    setReturnToConfirm(false);
     if (raceRequired) setStep(3);
     else setStep(4);
   };
 
   const jumpToStep = (i) => {
-    setStep(Math.max(0, Math.min(4, i)));
+    const t = Math.max(0, Math.min(4, i));
+    setReturnToConfirm(step === 4 && t === 3);
+    setStep(t);
   };
 
   const handleLooksGood = async () => {
@@ -288,7 +297,14 @@ export default function PlanIntakeFlow({ open, onClose, supabase, session, profi
               Next
             </button>
           ) : step === 3 ? (
-            <button type="button" onClick={() => setStep(4)} style={primaryBtn(false)}>
+            <button
+              type="button"
+              onClick={() => {
+                setReturnToConfirm(false);
+                setStep(4);
+              }}
+              style={primaryBtn(false)}
+            >
               Next
             </button>
           ) : (
