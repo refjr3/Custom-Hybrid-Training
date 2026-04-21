@@ -161,19 +161,18 @@ function parseZ2JsonCacheForWeek(row, weekStartYmd, maxAgeMinutes = 60) {
   const c = row.strava_z2_cache;
   if (!c || typeof c !== "object") return null;
   if (String(c.week_start_date || "") !== String(weekStartYmd)) return null;
+  // Pre–Phase-9 caches had no weeklyZoneMinutes — treat as stale so Z3/Z4+ refetch from Strava.
+  if (c.weeklyZoneMinutes == null || typeof c.weeklyZoneMinutes !== "object") return null;
   const mins = Number(c.weeklyZ2Minutes);
   if (!Number.isFinite(mins)) return null;
   const acts = Array.isArray(c.activities) ? c.activities : [];
   const z2m = Math.max(0, Math.round(mins));
   const wzmRaw = c.weeklyZoneMinutes;
-  const weeklyZoneMinutes =
-    wzmRaw && typeof wzmRaw === "object"
-      ? {
-          z2: Math.max(0, Math.round(Number(wzmRaw.z2 ?? z2m))),
-          z3: Math.max(0, Math.round(Number(wzmRaw.z3 ?? 0))),
-          z4_plus: Math.max(0, Math.round(Number(wzmRaw.z4_plus ?? 0))),
-        }
-      : { z2: z2m, z3: 0, z4_plus: 0 };
+  const weeklyZoneMinutes = {
+    z2: Math.max(0, Math.round(Number(wzmRaw.z2 ?? z2m))),
+    z3: Math.max(0, Math.round(Number(wzmRaw.z3 ?? 0))),
+    z4_plus: Math.max(0, Math.round(Number(wzmRaw.z4_plus ?? 0))),
+  };
   return {
     weeklyZ2Minutes: z2m,
     weeklyZoneMinutes,
