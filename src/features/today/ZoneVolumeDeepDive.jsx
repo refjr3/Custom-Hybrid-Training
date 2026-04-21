@@ -1,8 +1,9 @@
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect } from "react";
 import { DeepDiveModal } from "./DeepDiveModal.jsx";
 import { WeeklyBars, StatTile, SectionLabel, InsightCard } from "./DeepDiveCharts.jsx";
 import { InfoPop } from "../../components/InfoPop.jsx";
 import { metricExplainers } from "../explainers/metrics.js";
+import { ZONES } from "./zoneConfig.js";
 
 function startOfIsoWeek(d) {
   const x = new Date(d);
@@ -64,11 +65,9 @@ export const ZoneVolumeDeepDive = ({
   const [currentWeekActivities, setCurrentWeekActivities] = useState([]);
   const [selectedWeekIndex, setSelectedWeekIndex] = useState(3);
   const [localTarget, setLocalTarget] = useState(zoneTarget);
-  const localTargetRef = useRef(zoneTarget);
 
   useEffect(() => {
     setLocalTarget(zoneTarget);
-    localTargetRef.current = zoneTarget;
   }, [zoneTarget, selectedZone]);
 
   useEffect(() => {
@@ -392,21 +391,7 @@ export const ZoneVolumeDeepDive = ({
           value={localTarget}
           onChange={(e) => {
             const v = parseInt(e.target.value, 10);
-            if (Number.isFinite(v)) {
-              setLocalTarget(v);
-              localTargetRef.current = v;
-            }
-          }}
-          onMouseUp={async (e) => {
-            const v = parseInt(e.currentTarget.value, 10);
-            if (!Number.isFinite(v) || !onTargetChange) return;
-            setLocalTarget(v);
-            localTargetRef.current = v;
-            await onTargetChange(v);
-          }}
-          onTouchEnd={async () => {
-            if (!onTargetChange) return;
-            await onTargetChange(localTargetRef.current);
+            if (Number.isFinite(v)) setLocalTarget(v);
           }}
           style={{
             width: "100%",
@@ -436,6 +421,42 @@ export const ZoneVolumeDeepDive = ({
             min / week
           </span>
         </div>
+        {localTarget !== zoneTarget && onTargetChange ? (
+          <button
+            type="button"
+            onClick={async () => {
+              await onTargetChange(localTarget);
+            }}
+            style={{
+              width: "100%",
+              marginTop: 12,
+              background: `${zoneConfig.color}1f`,
+              border: `1px solid ${zoneConfig.color}59`,
+              borderRadius: 16,
+              padding: "14px",
+              color: zoneConfig.color,
+              fontSize: 13,
+              fontWeight: 600,
+              cursor: "pointer",
+              letterSpacing: "0.5px",
+            }}
+          >
+            Save — {localTarget} min/week
+          </button>
+        ) : null}
+        {localTarget === zoneTarget && zoneTarget !== ZONES[selectedZone]?.defaultTarget ? (
+          <div
+            style={{
+              textAlign: "center",
+              marginTop: 10,
+              fontSize: 11,
+              color: "rgba(93,255,160,0.7)",
+              fontWeight: 500,
+            }}
+          >
+            ✓ Target saved
+          </div>
+        ) : null}
       </div>
 
       <SectionLabel>{sessionsSectionLabel}</SectionLabel>
