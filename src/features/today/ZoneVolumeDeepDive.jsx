@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import { DeepDiveModal } from "./DeepDiveModal.jsx";
 import { WeeklyBars, StatTile, SectionLabel, InsightCard } from "./DeepDiveCharts.jsx";
 import { InfoPop } from "../../components/InfoPop.jsx";
@@ -63,10 +63,34 @@ export const ZoneVolumeDeepDive = ({
   const [currentWeekMinutes, setCurrentWeekMinutes] = useState(null);
   const [currentWeekActivities, setCurrentWeekActivities] = useState([]);
   const [selectedWeekIndex, setSelectedWeekIndex] = useState(3);
+  const [localTarget, setLocalTarget] = useState(zoneTarget);
+  const localTargetRef = useRef(zoneTarget);
+
+  useEffect(() => {
+    setLocalTarget(zoneTarget);
+    localTargetRef.current = zoneTarget;
+  }, [zoneTarget, selectedZone]);
 
   useEffect(() => {
     if (open) setSelectedWeekIndex(3);
   }, [open]);
+
+  const persistZoneTarget = useCallback(
+    async (newTarget) => {
+      const {
+        data: { session },
+      } = await supabase.auth.getSession();
+      if (!session?.user?.id) return;
+      const currentTargets = profile?.zone_targets || {};
+      const { error } = await supabase
+        .from("user_profiles")
+        .update({ zone_targets: { ...currentTargets, [selectedZone]: newTarget } })
+        .eq("user_id", session.user.id);
+      if (error) console.error("[ZoneVolumeDeepDive] zone_targets", error);
+      if (refreshProfile) await refreshProfile();
+    },
+    [supabase, profile?.zone_targets, selectedZone, refreshProfile],
+  );
 
   useEffect(() => {
     if (!open) return;
@@ -314,11 +338,11 @@ export const ZoneVolumeDeepDive = ({
       <WeeklyBars
         data={weeks}
         maxValue={Math.max(
-          zoneTarget,
+          localTarget,
           baselineWeeklyZone || 0,
           ...weeks.map((wk) => wk.value),
         )}
-        targetValue={zoneTarget}
+        targetValue={localTarget}
         baselineValue={baselineWeeklyZone != null ? Math.round(Number(baselineWeeklyZone)) : null}
         accentColor={zoneConfig.color}
         showValues
@@ -329,7 +353,7 @@ export const ZoneVolumeDeepDive = ({
       <div style={{ display: "flex", gap: 8, marginTop: 16 }}>
         <StatTile label="Avg" value={Math.round(avgWeek)} unit="min" />
         <StatTile label="Best" value={bestWeek.value} unit="min" accent="#5dffa0" />
-        <StatTile label="Target" value={zoneTarget} unit="min" accent={zoneConfig.color} />
+        <StatTile label="Target" value={localTarget} unit="min" accent={zoneConfig.color} />
       </div>
 
       <SectionLabel>Weekly Target</SectionLabel>
@@ -365,7 +389,7 @@ export const ZoneVolumeDeepDive = ({
               color: zoneConfig.color,
             }}
           >
-            {zoneTarget}{" "}
+            {localTarget}{" "}
             <span
               style={{
                 fontSize: 11,
@@ -382,25 +406,49 @@ export const ZoneVolumeDeepDive = ({
           min={selectedZone === "z4_plus" ? 0 : selectedZone === "z3" ? 0 : 60}
           max={selectedZone === "z4_plus" ? 120 : selectedZone === "z3" ? 240 : 600}
           step={15}
-          value={zoneTarget}
-          onChange={async (e) => {
-            const newTarget = parseInt(e.target.value, 10);
-            const {
-              data: { session },
-            } = await supabase.auth.getSession();
-            if (!session?.user?.id) return;
-            const currentTargets = profile?.zone_targets || {};
-            await supabase
-              .from("user_profiles")
-              .update({ zone_targets: { ...currentTargets, [selectedZone]: newTarget } })
-              .eq("user_id", session.user.id);
-            if (refreshProfile) await refreshProfile();
+          value={localTarget}
+          onChange={(e) => {
+            const v = parseInt(e.target.value, 10);
+            if (Number.isFinite(v)) {
+              setLocalTarget(v);
+              localTargetRef.current = v;
+            }
+          }}
+          onMouseUp={(e) => {
+            const v = parseInt(e.currentTarget.value, 10);
+            if (Number.isFinite(v)) persistZoneTarget(v);
+          }}
+          onTouchEnd={() => {
+            persistZoneTarget(localTargetRef.current);
           }}
           style={{
             width: "100%",
             accentColor: zoneConfig.color,
+            cursor: "pointer",
           }}
         />
+        <div
+          style={{
+            textAlign: "center",
+            marginTop: 8,
+            fontFamily: "'DM Serif Display', serif",
+            fontSize: 28,
+            color: zoneConfig.color,
+            letterSpacing: "-0.5px",
+          }}
+        >
+          {localTarget}
+          <span
+            style={{
+              fontSize: 12,
+              fontFamily: "'DM Sans', sans-serif",
+              color: "rgba(255,255,255,0.4)",
+              marginLeft: 6,
+            }}
+          >
+            min / week
+          </span>
+        </div>
       </div>
 
       <SectionLabel>{sessionsSectionLabel}</SectionLabel>
