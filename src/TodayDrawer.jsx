@@ -12,9 +12,14 @@ function DrawerMenu({
   setDrawerSection,
   onClose,
   supabase,
+  planVariants,
+  activeVariantId,
 }) {
   const displayName = profile?.full_name || profile?.name || "Athlete";
   const email = session?.user?.email || "";
+  const activeMenuVariant =
+    (planVariants || []).find((v) => v.id === activeVariantId) ||
+    (planVariants || []).find((v) => v.is_active);
   const initials =
     (profile?.full_name || profile?.name || "")
       .split(/\s+/)
@@ -74,6 +79,12 @@ function DrawerMenu({
 
       {[
         { icon: "◎", label: "My Profile", section: "profile" },
+        {
+          icon: "◇",
+          label: "Plans",
+          section: "plans",
+          description: activeMenuVariant?.variant_name || "No active plan",
+        },
         { icon: "⬡", label: "Connections", section: "connections" },
         { icon: "◈", label: "The Lab AI", section: "ai" },
         { icon: "◉", label: "Preferences", section: "preferences" },
@@ -96,18 +107,39 @@ function DrawerMenu({
             width: "100%",
           }}
         >
-          <span style={{ fontSize: 16, color: "rgba(201,168,117,0.6)", width: 20 }}>{item.icon}</span>
-          <span
-            style={{
-              fontSize: 15,
-              fontWeight: 500,
-              color: "rgba(255,255,255,0.75)",
-              letterSpacing: "-0.2px",
-            }}
-          >
-            {item.label}
+          <span style={{ fontSize: 16, color: "rgba(201,168,117,0.6)", width: 20, flexShrink: 0 }}>{item.icon}</span>
+          <span style={{ display: "flex", flexDirection: "column", alignItems: "flex-start", minWidth: 0, flex: 1 }}>
+            <span
+              style={{
+                fontSize: 15,
+                fontWeight: 500,
+                color: "rgba(255,255,255,0.75)",
+                letterSpacing: "-0.2px",
+              }}
+            >
+              {item.label}
+            </span>
+            {item.description ? (
+              <span
+                style={{
+                  fontSize: 11,
+                  fontWeight: 400,
+                  color: "rgba(255,255,255,0.35)",
+                  marginTop: 2,
+                  letterSpacing: "-0.1px",
+                  lineHeight: 1.3,
+                  textAlign: "left",
+                  maxWidth: "100%",
+                  overflow: "hidden",
+                  textOverflow: "ellipsis",
+                  whiteSpace: "nowrap",
+                }}
+              >
+                {item.description}
+              </span>
+            ) : null}
           </span>
-          <span style={{ marginLeft: "auto", color: "rgba(255,255,255,0.2)", fontSize: 16 }}>›</span>
+          <span style={{ marginLeft: "auto", color: "rgba(255,255,255,0.2)", fontSize: 16, flexShrink: 0 }}>›</span>
         </button>
       ))}
 
@@ -339,7 +371,179 @@ function DrawerProfile({ profile, session, setDrawerSection, supabase, setProfil
   );
 }
 
-const RAFAEL_USER_ID = "5285440e-a3dd-4f29-9b09-29715f0a04fc";
+function DrawerPlans({ setDrawerSection, planVariants, activeVariantId, onSwitchVariant, onStartNewPlan }) {
+  const activeVariant =
+    planVariants?.find((v) => v.id === activeVariantId) || planVariants?.find((v) => v.is_active);
+  const activeId = activeVariant?.id ?? activeVariantId;
+  const otherVariants = (planVariants || []).filter((v) => v.id !== activeId);
+
+  return (
+    <div>
+      <div style={{ display: "flex", alignItems: "center", gap: 12, padding: "52px 20px 16px" }}>
+        <button
+          type="button"
+          onClick={() => setDrawerSection("menu")}
+          style={{
+            background: "none",
+            border: "none",
+            cursor: "pointer",
+            color: "rgba(255,255,255,0.4)",
+            fontSize: 20,
+            padding: "4px",
+          }}
+        >
+          ‹
+        </button>
+        <div style={{ fontSize: 16, fontWeight: 600, color: "#fff", letterSpacing: "-0.3px" }}>Plans</div>
+      </div>
+      <div style={{ padding: "0 22px 24px" }}>
+        <div
+          style={{
+            fontSize: 9,
+            fontWeight: 700,
+            color: "rgba(201,168,117,0.6)",
+            letterSpacing: "2.5px",
+            marginBottom: 16,
+          }}
+        >
+          ACTIVE PLAN
+        </div>
+
+        {activeVariant ? (
+          <div
+            style={{
+              background: "rgba(201,168,117,0.08)",
+              border: "1px solid rgba(201,168,117,0.25)",
+              borderRadius: 16,
+              padding: "16px 18px",
+              marginBottom: 24,
+            }}
+          >
+            <div
+              style={{
+                fontFamily: "'DM Serif Display', serif",
+                fontSize: 18,
+                color: "#fff",
+                letterSpacing: "-0.3px",
+                marginBottom: 6,
+              }}
+            >
+              {activeVariant.variant_name}
+            </div>
+            <div
+              style={{
+                fontSize: 11,
+                color: "rgba(255,255,255,0.4)",
+              }}
+            >
+              {activeVariant.block_length_weeks ? `${activeVariant.block_length_weeks} weeks` : "Custom length"}
+              {activeVariant.variant_source
+                ? ` · ${activeVariant.variant_source === "ai_generated" ? "AI generated" : "Manual"}`
+                : ""}
+            </div>
+          </div>
+        ) : (
+          <div
+            style={{
+              background: "rgba(255,255,255,0.03)",
+              border: "1px dashed rgba(255,255,255,0.1)",
+              borderRadius: 16,
+              padding: "20px",
+              marginBottom: 24,
+              textAlign: "center",
+              fontSize: 12,
+              color: "rgba(255,255,255,0.4)",
+            }}
+          >
+            No plan yet — let's build one
+          </div>
+        )}
+
+        <button
+          type="button"
+          onClick={() => {
+            onClose?.();
+            onStartNewPlan?.();
+          }}
+          style={{
+            width: "100%",
+            background: "rgba(201,168,117,0.12)",
+            border: "1px solid rgba(201,168,117,0.35)",
+            borderRadius: 14,
+            padding: "14px",
+            color: "#C9A875",
+            fontSize: 13,
+            fontWeight: 600,
+            cursor: "pointer",
+            letterSpacing: "0.3px",
+            marginBottom: 24,
+          }}
+        >
+          Build a new plan
+        </button>
+
+        {otherVariants.length > 0 && (
+          <>
+            <div
+              style={{
+                fontSize: 9,
+                fontWeight: 700,
+                color: "rgba(255,255,255,0.3)",
+                letterSpacing: "2.5px",
+                marginBottom: 12,
+                marginTop: 8,
+              }}
+            >
+              OTHER PLANS
+            </div>
+            {otherVariants.map((v) => (
+              <div
+                key={v.id}
+                role="button"
+                tabIndex={0}
+                onClick={() => onSwitchVariant(v.id)}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter" || e.key === " ") {
+                    e.preventDefault();
+                    onSwitchVariant(v.id);
+                  }
+                }}
+                style={{
+                  background: "rgba(255,255,255,0.03)",
+                  border: "1px solid rgba(255,255,255,0.08)",
+                  borderRadius: 14,
+                  padding: "14px 16px",
+                  marginBottom: 8,
+                  cursor: "pointer",
+                }}
+              >
+                <div
+                  style={{
+                    fontSize: 13,
+                    color: "rgba(255,255,255,0.8)",
+                    fontWeight: 500,
+                    marginBottom: 3,
+                  }}
+                >
+                  {v.variant_name}
+                </div>
+                <div
+                  style={{
+                    fontSize: 10,
+                    color: "rgba(255,255,255,0.3)",
+                  }}
+                >
+                  {v.block_length_weeks ? `${v.block_length_weeks} weeks` : "Custom"}
+                  {" · Switch to activate"}
+                </div>
+              </div>
+            ))}
+          </>
+        )}
+      </div>
+    </div>
+  );
+}
 
 function DrawerConnections({
   setDrawerSection,
@@ -348,8 +552,6 @@ function DrawerConnections({
   stravaConnected,
   session,
   profile,
-  onClose,
-  setShowPlanIntake,
 }) {
   const uid = session?.user?.id;
   const stravaHref = uid ? `/api/strava/login?uid=${encodeURIComponent(uid)}` : "/api/strava/login";
@@ -428,51 +630,6 @@ function DrawerConnections({
         <div style={{ fontSize: 16, fontWeight: 600, color: "#fff", letterSpacing: "-0.3px" }}>Connections</div>
       </div>
       <div style={{ padding: "0 20px", display: "flex", flexDirection: "column", gap: 10 }}>
-        {session?.user?.id === RAFAEL_USER_ID && (
-          <div
-            style={{
-              background: "rgba(201,168,117,0.06)",
-              border: "1px solid rgba(201,168,117,0.2)",
-              borderRadius: 14,
-              padding: "14px",
-              marginBottom: 16,
-            }}
-          >
-            <div
-              style={{
-                fontSize: 9,
-                fontWeight: 600,
-                color: "rgba(201,168,117,0.7)",
-                letterSpacing: "2px",
-                textTransform: "uppercase",
-                marginBottom: 8,
-              }}
-            >
-              Rafael Only · QA
-            </div>
-            <button
-              type="button"
-              onClick={() => {
-                onClose?.();
-                setShowPlanIntake?.(true);
-              }}
-              style={{
-                width: "100%",
-                background: "rgba(201,168,117,0.15)",
-                border: "1px solid rgba(201,168,117,0.35)",
-                borderRadius: 10,
-                padding: "10px",
-                fontSize: 12,
-                fontWeight: 600,
-                color: "#C9A875",
-                cursor: "pointer",
-                letterSpacing: "0.3px",
-              }}
-            >
-              Test Plan Intake →
-            </button>
-          </div>
-        )}
         {renderConnectCard({
           name: "WHOOP",
           status: whoopStatusOk,
@@ -1044,6 +1201,9 @@ export default function TodayDrawer({
   garminConnected,
   stravaConnected,
   setShowPlanIntake,
+  planVariants,
+  activeVariantId,
+  onSwitchVariant,
 }) {
   useEffect(() => {
     if (!open) return;
@@ -1118,6 +1278,8 @@ export default function TodayDrawer({
             setDrawerSection={setSection}
             onClose={closeAll}
             supabase={supabase}
+            planVariants={planVariants}
+            activeVariantId={activeVariantId}
           />
         )}
         {section === "profile" && (
@@ -1129,6 +1291,18 @@ export default function TodayDrawer({
             setProfile={setProfile}
           />
         )}
+        {section === "plans" && (
+          <DrawerPlans
+            setDrawerSection={setSection}
+            planVariants={planVariants}
+            activeVariantId={activeVariantId}
+            onSwitchVariant={onSwitchVariant}
+            onStartNewPlan={() => {
+              onClose?.();
+              setShowPlanIntake?.(true);
+            }}
+          />
+        )}
         {section === "connections" && (
           <DrawerConnections
             setDrawerSection={setSection}
@@ -1137,8 +1311,6 @@ export default function TodayDrawer({
             stravaConnected={stravaConnected}
             session={session}
             profile={profile}
-            onClose={onClose}
-            setShowPlanIntake={setShowPlanIntake}
           />
         )}
         {section === "ai" && (

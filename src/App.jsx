@@ -2700,6 +2700,7 @@ export default function App() {
   const [planLoading, setPlanLoading] = useState(true);
   const [planVariants, setPlanVariants] = useState([]);
   const [activeVariantId, setActiveVariantId] = useState(null);
+  const hasActivePlan = Array.isArray(planVariants) && planVariants.some((v) => v.is_active);
   const [metricBaselines, setMetricBaselines] = useState(null);
   const [supplements, setSupplements] = useState([]);
   const [suppsLoading, setSuppsLoading] = useState(true);
@@ -2746,6 +2747,7 @@ export default function App() {
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [drawerSection, setDrawerSection] = useState("menu");
   const [showPlanIntake, setShowPlanIntake] = useState(false);
+  const [pendingIntake, setPendingIntake] = useState(null);
   const [recoveryModalOpen, setRecoveryModalOpen] = useState(false);
   const [z2ModalOpen, setZ2ModalOpen] = useState(false);
   const [sleepModalOpen, setSleepModalOpen] = useState(false);
@@ -3475,6 +3477,28 @@ export default function App() {
     };
   }, [session?.user?.id]);
 
+  useEffect(() => {
+    if (!session?.user?.id) {
+      setPendingIntake(null);
+      return;
+    }
+    let cancelled = false;
+    (async () => {
+      const { data } = await supabase
+        .from("plan_generation_requests")
+        .select("id, status, created_at")
+        .eq("user_id", session.user.id)
+        .eq("status", "intake_complete")
+        .is("variant_id", null)
+        .order("created_at", { ascending: false })
+        .limit(1);
+      if (!cancelled) setPendingIntake(data?.[0] || null);
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [session?.user?.id, showPlanIntake]);
+
   const switchVariant = async (newId) => {
     if (!session?.user?.id || !newId) return;
     await supabase.from("plan_variants").update({ is_active: false }).eq("user_id", session.user.id);
@@ -4159,6 +4183,9 @@ export default function App() {
         garminConnected={garminConnected}
         stravaConnected={stravaConnected}
         setShowPlanIntake={setShowPlanIntake}
+        planVariants={planVariants}
+        activeVariantId={activeVariantId}
+        onSwitchVariant={switchVariant}
       />
 
       {showEntrance && (
@@ -4174,6 +4201,75 @@ export default function App() {
       )}
 
       {nav === "today" && showNoPlanState && <NoPlanState />}
+
+      {nav === "today" && !hasActivePlan && (
+        <div
+          role="button"
+          tabIndex={0}
+          onClick={() => setShowPlanIntake(true)}
+          onKeyDown={(e) => {
+            if (e.key === "Enter" || e.key === " ") {
+              e.preventDefault();
+              setShowPlanIntake(true);
+            }
+          }}
+          style={{
+            background: "linear-gradient(135deg, rgba(201,168,117,0.08) 0%, rgba(201,168,117,0.03) 100%)",
+            border: "1px solid rgba(201,168,117,0.25)",
+            borderRadius: 22,
+            padding: "24px 26px",
+            margin: "0 16px 16px",
+            cursor: "pointer",
+            transition: "transform 0.15s ease, border-color 0.15s ease",
+          }}
+        >
+          <div
+            style={{
+              fontSize: 9,
+              fontWeight: 700,
+              color: "#C9A875",
+              letterSpacing: "3px",
+              marginBottom: 10,
+            }}
+          >
+            {pendingIntake ? "YOUR ANSWERS ARE IN" : "READY WHEN YOU ARE"}
+          </div>
+          <div
+            style={{
+              fontFamily: "'DM Serif Display', serif",
+              fontSize: 24,
+              color: "#fff",
+              letterSpacing: "-0.3px",
+              lineHeight: 1.2,
+              marginBottom: 10,
+            }}
+          >
+            {pendingIntake ? "Pick up where you left off" : "Let's build your plan"}
+          </div>
+          <div
+            style={{
+              fontSize: 13,
+              color: "rgba(255,255,255,0.55)",
+              lineHeight: 1.55,
+            }}
+          >
+            {pendingIntake
+              ? "You finished the questions. Tap to generate your plan."
+              : "Four questions. Takes a minute. We'll build something that fits."}
+          </div>
+          <div
+            style={{
+              marginTop: 14,
+              display: "inline-block",
+              fontSize: 12,
+              fontWeight: 600,
+              color: "#C9A875",
+            }}
+          >
+            {pendingIntake ? "Generate →" : "Start →"}
+          </div>
+        </div>
+      )}
 
       {nav === "today" && (() => {
         const perfHdr = derivePerfPlanHeader(planBlocks);
