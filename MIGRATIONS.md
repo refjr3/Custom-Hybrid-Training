@@ -2,7 +2,7 @@
 
 ## Fresh Supabase provisioning
 
-Run the SQL files in **`migrations/`** in **lexicographic filename order** (000, 001, 002, …). That order matches numeric sequence: **`000_bootstrap.sql` first**, then `001` … through `030`.
+Run the SQL files in **`migrations/`** in **lexicographic filename order** (000, 001, 002, …). That order matches numeric sequence: **`000_bootstrap.sql` first**, then `001` … through `032`.
 
 **000** creates `training_blocks`, `training_weeks`, `training_days`, `garmin_activities`, and `ai_messages` with RLS enabled and **service_role–only** policies so the schema exists before **001** attaches permissive policies and **003** installs user-scoped policies.
 
@@ -54,6 +54,8 @@ Previously, multiple files shared the same numeric prefix (`005`, `006`, `009`, 
 | 28 | `028_missing_profile_columns.sql` | Ensures `hyrox_division`, `hyrox_format`, `bodybuilding_stage_status` on `user_profiles` if missing (drawer + onboarding). |
 | 29 | `029_onboarding_stabilization.sql` | Adds `sports` jsonb on `user_profiles`; creates `races_catalog` + RLS for race search. |
 | 30 | `030_user_baselines.sql` | `user_baselines` — rolling averages from `unified_metrics` for threshold comparisons; RLS + service_role policy. |
+| 31 | `031_strava_z2_cache_jsonb.sql` | `strava_z2_cache` jsonb on `user_profiles` for weekly Z2 payload cache. |
+| 32 | `032_plan_variants.sql` | `plan_variants` + `variant_id` on `training_blocks` / `training_weeks` / `training_days`; RLS on variants. |
 
 ## Optional scripts (`supabase/`)
 
@@ -64,6 +66,7 @@ Not part of the numbered sequence above:
 | `supabase/migrate_custom_sessions.sql` | Same logical change as `004_custom_sessions.sql` (duplicate copy for manual runs). |
 | `supabase/seed_supplements.sql` | Creates `supplements` table + example `INSERT` rows (includes a fixed demo `user_id`). |
 | `supabase/seed_races.sql` | Manual seed for `races_catalog` after **029** (HYROX, triathlon, marathons, OCR, CrossFit, etc.). |
+| `supabase/migrate_rafael_to_variant.sql` | One-time: create default `plan_variants` row for Rafael and attach existing training rows (run manually after **032**). |
 
 ## Audit notes (2026-04)
 
