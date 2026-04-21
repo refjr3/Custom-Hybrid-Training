@@ -230,7 +230,7 @@ function activityLocalYmd(activity) {
   return /^\d{4}-\d{2}-\d{2}$/.test(s) ? s : null;
 }
 
-async function respondRateLimited(res, cachedRow, weekStartYmd, bustCache = false) {
+async function respondRateLimited(res, userId, cachedRow, weekStartYmd, todayYmd, bustCache = false) {
   if (bustCache) {
     console.log("[strava/weekly-z2] bust=1 — skipping rate-limit fallback cache");
     return res.status(200).json({
@@ -241,6 +241,36 @@ async function respondRateLimited(res, cachedRow, weekStartYmd, bustCache = fals
       rateLimited: true,
     });
   }
+
+  const mondayIso = weekStartYmd;
+  const todayIso = todayYmd || localCalendarYmd(new Date());
+  const { data: umRows, error: umErr } = await supabase
+    .from("unified_metrics")
+    .select("date, z2_minutes, z3_minutes, z4_plus_minutes")
+    .eq("user_id", userId)
+    .gte("date", mondayIso)
+    .lte("date", todayIso);
+  if (umErr) {
+    console.warn("[strava/weekly-z2] unified_metrics fallback read:", umErr.message);
+  } else if (umRows?.length) {
+    const z2 = Math.round(umRows.reduce((sum, r) => sum + (Number(r.z2_minutes) || 0), 0));
+    const z3 = Math.round(umRows.reduce((sum, r) => sum + (Number(r.z3_minutes) || 0), 0));
+    const z4_plus = Math.round(umRows.reduce((sum, r) => sum + (Number(r.z4_plus_minutes) || 0), 0));
+    console.log("[strava/weekly-z2] rate limited, fell back to unified_metrics:", { z2, z3, z4_plus });
+    return res.status(200).json({
+      weeklyZ2Minutes: z2,
+      weeklyZoneMinutes: { z2, z3, z4_plus },
+      activities: [],
+      week_start_date: mondayIso,
+      fromCache: false,
+      source: "unified_metrics_fallback",
+      rateLimited: true,
+      weeklyZ2Hours: (z2 / 60).toFixed(1),
+      totalMinutes: z2,
+      targetMinutes: 240,
+    });
+  }
+
   const parsed = parseZ2JsonCacheForWeek(cachedRow, weekStartYmd, 60);
   if (parsed) {
     return res.status(200).json({
@@ -475,7 +505,7 @@ export default async function handler(req, res) {
 
     if (activitiesRes.status === 429) {
       console.warn("[weekly-z2] rate limited (activities), returning cache:", cachedMinutes);
-      return respondRateLimited(res, cachedRow, weekStartYmd, bustCache);
+      return respondRateLimited(res, appUserId, cachedRow, weekStartYmd, todayYmd, bustCache);
     }
     if (!activitiesRes.ok) {
       const cm =
@@ -516,7 +546,7 @@ export default async function handler(req, res) {
         };
         if (metrics.rateLimited) {
           console.warn("[weekly-z2] rate limited (zones), returning cache:", cachedMinutes);
-          return respondRateLimited(res, cachedRow, weekStartYmd, bustCache);
+          return respondRateLimited(res, appUserId, cachedRow, weekStartYmd, todayYmd, bustCache);
         }
 
         const date = activityLocalYmd(a);
