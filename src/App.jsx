@@ -3419,48 +3419,54 @@ export default function App() {
   }, [whoopData, planBlocks]);
 
   useEffect(() => {
-    if (!session?.access_token) return;
+    if (!session?.access_token || !profile?.user_id) return;
+
     let cancelled = false;
-    (async () => {
+
+    const fetchSynthesis = async () => {
       setCoachBriefLoading(true);
       try {
         const res = await fetch("/api/synthesis/daily", {
           headers: { Authorization: `Bearer ${session.access_token}` },
         });
 
+        if (cancelled) return;
+
         console.log("[synthesis/today] status:", res.status);
 
         if (!res.ok) {
           const errText = await res.text();
-          console.error("[synthesis/today] error response:", res.status, errText);
+          console.error("[synthesis/today] error:", res.status, errText);
           if (!cancelled) setCoachSynthesis(null);
           return;
         }
 
         const data = await res.json();
+        if (cancelled) return;
+
         console.log("[synthesis/today] response:", JSON.stringify(data).slice(0, 200));
 
-        if (!cancelled && data?.headline) {
-          setCoachSynthesis({
-            headline: data.headline,
-            summary: typeof data.summary === "string" ? data.summary : "",
-            action: typeof data.action === "string" ? data.action : "",
-          });
+        if (data?.headline) {
+          setCoachSynthesis(data);
         } else {
-          console.warn("[synthesis/today] no headline in response:", data);
+          console.warn("[synthesis/today] no headline in response");
           if (!cancelled) setCoachSynthesis(null);
         }
       } catch (err) {
-        console.error("[synthesis/today] fetch failed:", err?.message || err);
-        if (!cancelled) setCoachSynthesis(null);
+        if (!cancelled) {
+          console.error("[synthesis/today] fetch failed:", err?.message || err);
+          setCoachSynthesis(null);
+        }
       } finally {
         if (!cancelled) setCoachBriefLoading(false);
       }
-    })();
+    };
+
+    fetchSynthesis();
     return () => {
       cancelled = true;
     };
-  }, [session?.access_token, profile?.user_id, profile?.time_zone]);
+  }, [session?.access_token, profile?.user_id]);
 
   // Proactive Coaching: check HRV trend + Sunday weekly review
   useEffect(() => {
