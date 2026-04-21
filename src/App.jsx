@@ -14,6 +14,8 @@ import { RecoveryDeepDive } from "./features/today/RecoveryDeepDive.jsx";
 import { Z2DeepDive } from "./features/today/Z2DeepDive.jsx";
 import { SleepDeepDive } from "./features/today/SleepDeepDive.jsx";
 import { DailyCallCard } from "./features/today/DailyCallCard.jsx";
+import { InfoPop } from "./components/InfoPop.jsx";
+import { metricExplainers } from "./features/explainers/metrics.js";
 
 const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
 const supabaseKey = import.meta.env.VITE_SUPABASE_ANON_KEY;
@@ -2692,6 +2694,7 @@ export default function App() {
   const [planLoading, setPlanLoading] = useState(true);
   const [planVariants, setPlanVariants] = useState([]);
   const [activeVariantId, setActiveVariantId] = useState(null);
+  const [metricBaselines, setMetricBaselines] = useState(null);
   const [supplements, setSupplements] = useState([]);
   const [suppsLoading, setSuppsLoading] = useState(true);
   const [synthesisNote, setSynthesisNote] = useState(null);
@@ -2754,6 +2757,29 @@ export default function App() {
     const { data } = await supabase.from("user_profiles").select("*").eq("user_id", session.user.id).single();
     if (data) setProfile(data);
   }, [session?.user?.id]);
+
+  useEffect(() => {
+    if (!session?.access_token) {
+      setMetricBaselines(null);
+      return;
+    }
+    let cancelled = false;
+    (async () => {
+      try {
+        const res = await fetch("/api/metrics/baselines", {
+          headers: { Authorization: `Bearer ${session.access_token}` },
+        });
+        const json = await res.json().catch(() => ({}));
+        if (cancelled || !json || json.error) return;
+        setMetricBaselines(json);
+      } catch {
+        if (!cancelled) setMetricBaselines(null);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [session?.access_token]);
 
   useEffect(() => {
     if (!session?.user?.id) return;
@@ -4186,6 +4212,14 @@ export default function App() {
           || (Number(whoopData?.sleep?.hours || 0) > 0 ? Math.round(Number(whoopData.sleep.hours) * 3600000) : 0);
         const sleepHoursDisp = inBedMs > 0 ? Math.floor(inBedMs / 3600000) : 0;
         const sleepMinsDisp = inBedMs > 0 ? Math.floor((inBedMs % 3600000) / 60000) : 0;
+        const sleepDurationMinutes =
+          inBedMs > 0 ? Math.round(inBedMs / 60000) : sleepHours > 0 ? Math.round(Number(sleepHours) * 60) : null;
+        const deepSleepMinToday =
+          sleepStageMs && sleepStageMs.deep > 0 ? Math.round(sleepStageMs.deep / 60000) : null;
+        const recReadinessNum =
+          Number.isFinite(Number(rec)) && Number(rec) > 0 ? Math.round(Number(rec)) : null;
+        const hrvMetricNum = Number.isFinite(hrv) && hrv > 0 ? Math.round(hrv) : null;
+        const rhrMetricNum = Number.isFinite(rhr) && rhr > 0 ? Math.round(rhr) : null;
         const openConnectionsDrawer = () => {
           setDrawerSection("connections");
           setDrawerOpen(true);
@@ -4342,7 +4376,22 @@ export default function App() {
                     </div>
                   </div>
                   <div style={{ display: "flex", alignItems: "flex-end", justifyContent: "space-between", marginBottom: 16 }}>
-                    <div style={{ fontFamily: C.serif, fontSize: 76, color: DS.base, lineHeight: 1, letterSpacing: "-3px", fontWeight: 400 }}>{recDisp}</div>
+                    <div style={{ display: "flex", alignItems: "flex-end", gap: 6 }}>
+                      <div style={{ fontFamily: C.serif, fontSize: 76, color: DS.base, lineHeight: 1, letterSpacing: "-3px", fontWeight: 400 }}>{recDisp}</div>
+                      <InfoPop
+                        title={metricExplainers.readiness.title}
+                        short={metricExplainers.readiness.short}
+                        detailed={metricExplainers.readiness.detailed}
+                        userContext={
+                          recReadinessNum != null
+                            ? metricExplainers.readiness.userContext(profile, recReadinessNum)
+                            : null
+                        }
+                        icon="i"
+                        size={11}
+                        color="rgba(13,14,16,0.32)"
+                      />
+                    </div>
                     <div style={{ textAlign: "right", paddingBottom: 10 }}>
                       <div style={{ fontSize: 12, fontWeight: 600, color: recoveryBadge.fg, marginBottom: 4, fontFamily: C.fs }}>{gateWord}</div>
                       <div style={{ fontSize: 10, color: "rgba(13,14,16,0.38)", fontFamily: C.fs }}>Execute as programmed</div>
@@ -4350,15 +4399,84 @@ export default function App() {
                   </div>
                   <div style={{ display: "flex", borderTop: "1px solid rgba(13,14,16,0.08)", paddingTop: 14 }}>
                     {[
-                      ["HRV", hrvDisp],
-                      ["RHR", rhrDisp],
-                      ["Sleep", sleepDisp],
-                    ].map(([lbl, val]) => (
-                      <div key={lbl} style={{ flex: 1, textAlign: "center", borderRight: lbl !== "Sleep" ? "1px solid rgba(13,14,16,0.08)" : "none" }}>
-                        <div style={{ fontSize: 20, fontWeight: 600, color: DS.base, letterSpacing: "-0.5px", lineHeight: 1, marginBottom: 3, fontFamily: C.fs }}>{val}</div>
-                        <div style={{ fontSize: 8, fontWeight: 600, color: "rgba(13,14,16,0.3)", letterSpacing: "1.5px", textTransform: "uppercase", fontFamily: C.fs }}>{lbl}</div>
+                      ["HRV", hrvDisp, metricExplainers.hrv, hrvMetricNum, metricBaselines?.baseline_hrv_rmssd],
+                      ["RHR", rhrDisp, metricExplainers.rhr, rhrMetricNum, metricBaselines?.baseline_resting_hr],
+                    ].map(([lbl, val, expl, metricVal, baselineVal]) => (
+                      <div
+                        key={lbl}
+                        style={{
+                          flex: 1,
+                          textAlign: "center",
+                          borderRight: "1px solid rgba(13,14,16,0.08)",
+                        }}
+                      >
+                        <div
+                          style={{
+                            fontSize: 20,
+                            fontWeight: 600,
+                            color: DS.base,
+                            letterSpacing: "-0.5px",
+                            lineHeight: 1,
+                            marginBottom: 3,
+                            fontFamily: C.fs,
+                          }}
+                        >
+                          {val}
+                        </div>
+                        <div
+                          style={{
+                            display: "inline-flex",
+                            alignItems: "center",
+                            justifyContent: "center",
+                            gap: 2,
+                            fontSize: 8,
+                            fontWeight: 600,
+                            color: "rgba(13,14,16,0.3)",
+                            letterSpacing: "1.5px",
+                            textTransform: "uppercase",
+                            fontFamily: C.fs,
+                          }}
+                        >
+                          <span>{lbl}</span>
+                          <InfoPop
+                            title={expl.title}
+                            short={expl.short}
+                            detailed={expl.detailed}
+                            userContext={expl.userContext?.(profile, metricVal, baselineVal)}
+                            icon="i"
+                            size={10}
+                            color="rgba(13,14,16,0.32)"
+                          />
+                        </div>
                       </div>
                     ))}
+                    <div style={{ flex: 1, textAlign: "center" }}>
+                      <div
+                        style={{
+                          fontSize: 20,
+                          fontWeight: 600,
+                          color: DS.base,
+                          letterSpacing: "-0.5px",
+                          lineHeight: 1,
+                          marginBottom: 3,
+                          fontFamily: C.fs,
+                        }}
+                      >
+                        {sleepDisp}
+                      </div>
+                      <div
+                        style={{
+                          fontSize: 8,
+                          fontWeight: 600,
+                          color: "rgba(13,14,16,0.3)",
+                          letterSpacing: "1.5px",
+                          textTransform: "uppercase",
+                          fontFamily: C.fs,
+                        }}
+                      >
+                        Sleep
+                      </div>
+                    </div>
                   </div>
                 </div>
               </div>
@@ -4377,7 +4495,17 @@ export default function App() {
               <div style={{ position: "absolute", top: -20, right: -20, width: 120, height: 120, background: "radial-gradient(circle,rgba(210,190,155,0.10) 0%,transparent 70%)", pointerEvents: "none" }} />
               <div style={{ padding: "16px 20px 18px", position: "relative", zIndex: 1 }}>
                 <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 12, gap: 8 }}>
-                  <div style={{ fontSize: 9, fontWeight: 600, color: "rgba(255,255,255,0.22)", letterSpacing: "2.5px", textTransform: "uppercase", fontFamily: C.fs }}>Weekly Z2 Time</div>
+                  <div style={{ display: "flex", alignItems: "center", gap: 4 }}>
+                    <div style={{ fontSize: 9, fontWeight: 600, color: "rgba(255,255,255,0.22)", letterSpacing: "2.5px", textTransform: "uppercase", fontFamily: C.fs }}>Weekly Z2 Time</div>
+                    <InfoPop
+                      title={metricExplainers.z2.title}
+                      short={metricExplainers.z2.short}
+                      detailed={metricExplainers.z2.detailed}
+                      userContext={metricExplainers.z2.userContext(profile, weeklyZ2Minutes, TARGET_Z2_MIN)}
+                      icon="i"
+                      size={11}
+                    />
+                  </div>
                   <div style={{ display: "flex", flexDirection: "column", alignItems: "flex-end", gap: 4, flexShrink: 0 }}>
                     <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
                       <div style={{ fontSize: 8, fontWeight: 600, color: "rgba(255,255,255,0.18)", letterSpacing: "1.5px", textTransform: "uppercase" }}>
@@ -4653,7 +4781,17 @@ export default function App() {
                   <div style={{ padding: "20px 22px 16px", position: "relative", zIndex: 1 }}>
                     <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 14 }}>
                       <div>
-                        <div style={lbl}>{"Last Night's Sleep"}</div>
+                        <div style={{ display: "flex", alignItems: "center", gap: 4, marginBottom: 4 }}>
+                          <div style={lbl}>{"Last Night's Sleep"}</div>
+                          <InfoPop
+                            title={metricExplainers.sleep_duration.title}
+                            short={metricExplainers.sleep_duration.short}
+                            detailed={metricExplainers.sleep_duration.detailed}
+                            userContext={metricExplainers.sleep_duration.userContext(profile, sleepDurationMinutes)}
+                            icon="i"
+                            size={10}
+                          />
+                        </div>
                         <div style={{ fontFamily: "'DM Serif Display',serif", fontSize: 44, color: "#fff", letterSpacing: "-2px", lineHeight: 1 }}>
                           {sleepHoursDisp}
                           <span style={{ fontSize: 20 }}>h</span>
@@ -4699,6 +4837,20 @@ export default function App() {
                             <div key={label} style={{ display: "flex", alignItems: "center", gap: 4 }}>
                               <span style={{ width: 8, height: 8, borderRadius: 2, background: color, display: "inline-block", flexShrink: 0 }} />
                               <span style={{ fontSize: 9, color: "rgba(255,255,255,0.3)" }}>{label} {time}</span>
+                              {label === "Deep" ? (
+                                <InfoPop
+                                  title={metricExplainers.deep_sleep.title}
+                                  short={metricExplainers.deep_sleep.short}
+                                  detailed={metricExplainers.deep_sleep.detailed}
+                                  userContext={metricExplainers.deep_sleep.userContext(
+                                    profile,
+                                    deepSleepMinToday,
+                                    metricBaselines?.baseline_sleep_deep_min,
+                                  )}
+                                  icon="i"
+                                  size={10}
+                                />
+                              ) : null}
                             </div>
                           ))}
                         </div>
@@ -4730,18 +4882,21 @@ export default function App() {
         onClose={() => setRecoveryModalOpen(false)}
         supabase={supabase}
         dataSources={dataSources}
+        profile={profile}
       />
       <Z2DeepDive
         open={z2ModalOpen}
         onClose={() => setZ2ModalOpen(false)}
         supabase={supabase}
         dataSources={dataSources}
+        profile={profile}
       />
       <SleepDeepDive
         open={sleepModalOpen}
         onClose={() => setSleepModalOpen(false)}
         supabase={supabase}
         dataSources={dataSources}
+        profile={profile}
       />
 
       {nav === "plan" && planLoading && (

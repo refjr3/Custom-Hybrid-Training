@@ -2,13 +2,31 @@ import { useState, useEffect } from "react";
 import { DeepDiveModal } from "./DeepDiveModal.jsx";
 import { TrendDots, StatTile, SectionLabel, InsightCard } from "./DeepDiveCharts.jsx";
 import { evaluateHRV, evaluateRHR, evaluateReadiness } from "../../../api/lib/thresholds.js";
+import { InfoPop } from "../../components/InfoPop.jsx";
+import { metricExplainers } from "../explainers/metrics.js";
 
 function normalizeBaselinesPayload(json) {
   if (!json || typeof json !== "object" || json.error) return null;
   return json;
 }
 
-export const RecoveryDeepDive = ({ open, onClose, supabase, dataSources }) => {
+const sectionLabelRowStyle = {
+  display: "flex",
+  alignItems: "center",
+  gap: 6,
+  marginTop: 28,
+  marginBottom: 12,
+};
+const sectionLabelTextStyle = {
+  flex: 1,
+  fontSize: 9,
+  fontWeight: 600,
+  color: "rgba(255,255,255,0.3)",
+  letterSpacing: "2.5px",
+  textTransform: "uppercase",
+};
+
+export const RecoveryDeepDive = ({ open, onClose, supabase, dataSources, profile }) => {
   const [metrics, setMetrics] = useState([]);
   const [baselines, setBaselines] = useState(null);
   const [loading, setLoading] = useState(true);
@@ -194,7 +212,19 @@ export const RecoveryDeepDive = ({ open, onClose, supabase, dataSources }) => {
         <StatTile label="Red" value={redDays} unit="days" accent="#FF6B6B" />
       </div>
 
-      <SectionLabel>{validCount >= 10 ? "HRV · 30 Days" : validCount >= 7 ? `HRV · last ${validCount} days` : "HRV"}</SectionLabel>
+      <div style={sectionLabelRowStyle}>
+        <div style={sectionLabelTextStyle}>
+          {validCount >= 10 ? "HRV · 30 Days" : validCount >= 7 ? `HRV · last ${validCount} days` : "HRV"}
+        </div>
+        <InfoPop
+          title={metricExplainers.hrv.title}
+          short={metricExplainers.hrv.short}
+          detailed={metricExplainers.hrv.detailed}
+          userContext={metricExplainers.hrv.userContext(profile, today?.hrv_rmssd, baselines?.baseline_hrv_rmssd)}
+          icon="i"
+          size={11}
+        />
+      </div>
       <TrendDots
         data={hrvDots}
         heightBand={70}
@@ -226,7 +256,17 @@ export const RecoveryDeepDive = ({ open, onClose, supabase, dataSources }) => {
         />
       </div>
 
-      <SectionLabel>Resting Heart Rate</SectionLabel>
+      <div style={sectionLabelRowStyle}>
+        <div style={sectionLabelTextStyle}>Resting Heart Rate</div>
+        <InfoPop
+          title={metricExplainers.rhr.title}
+          short={metricExplainers.rhr.short}
+          detailed={metricExplainers.rhr.detailed}
+          userContext={metricExplainers.rhr.userContext(profile, today?.resting_hr, baselines?.baseline_resting_hr)}
+          icon="i"
+          size={11}
+        />
+      </div>
       <TrendDots
         data={rhrDots}
         heightBand={60}

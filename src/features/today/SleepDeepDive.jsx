@@ -1,13 +1,15 @@
 import { useState, useEffect } from "react";
 import { DeepDiveModal } from "./DeepDiveModal.jsx";
 import { TrendDots, WeeklyBars, StatTile, SectionLabel, InsightCard } from "./DeepDiveCharts.jsx";
+import { InfoPop } from "../../components/InfoPop.jsx";
+import { metricExplainers } from "../explainers/metrics.js";
 
 function normalizeBaselinesPayload(json) {
   if (!json || typeof json !== "object" || json.error) return null;
   return json;
 }
 
-export const SleepDeepDive = ({ open, onClose, supabase, dataSources }) => {
+export const SleepDeepDive = ({ open, onClose, supabase, dataSources, profile }) => {
   const [metrics, setMetrics] = useState([]);
   const [baselines, setBaselines] = useState(null);
   const [loading, setLoading] = useState(false);
@@ -221,6 +223,16 @@ export const SleepDeepDive = ({ open, onClose, supabase, dataSources }) => {
           <div style={{ display: "flex", gap: 8, marginTop: 16 }}>
             <StatTile
               label="Duration"
+              labelRight={
+                <InfoPop
+                  title={metricExplainers.sleep_duration.title}
+                  short={metricExplainers.sleep_duration.short}
+                  detailed={metricExplainers.sleep_duration.detailed}
+                  userContext={metricExplainers.sleep_duration.userContext(profile, today?.sleep_total_min)}
+                  icon="i"
+                  size={10}
+                />
+              }
               value={hours != null ? hours.toFixed(1) : "—"}
               unit="hrs"
               accent="#9B8FD1"
@@ -228,6 +240,20 @@ export const SleepDeepDive = ({ open, onClose, supabase, dataSources }) => {
             />
             <StatTile
               label="Deep"
+              labelRight={
+                <InfoPop
+                  title={metricExplainers.deep_sleep.title}
+                  short={metricExplainers.deep_sleep.short}
+                  detailed={metricExplainers.deep_sleep.detailed}
+                  userContext={metricExplainers.deep_sleep.userContext(
+                    profile,
+                    today?.sleep_deep_min,
+                    baselines?.baseline_sleep_deep_min,
+                  )}
+                  icon="i"
+                  size={10}
+                />
+              }
               value={Math.round(today?.sleep_deep_min || 0)}
               unit="min"
               accent="#9B8FD1"

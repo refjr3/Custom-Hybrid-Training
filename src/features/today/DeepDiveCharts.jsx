@@ -521,7 +521,7 @@ export const WeeklyBars = ({
   );
 };
 
-export const StatTile = ({ label, value, unit, accent, trend, threshold }) => {
+export const StatTile = ({ label, value, unit, accent, trend, threshold, labelRight }) => {
   const thresholdColors = {
     green: "#5dffa0",
     amber: "#ffd84d",
@@ -542,15 +542,25 @@ export const StatTile = ({ label, value, unit, accent, trend, threshold }) => {
     >
       <div
         style={{
-          fontSize: 8,
-          fontWeight: 600,
-          color: "rgba(255,255,255,0.22)",
-          letterSpacing: "2px",
-          textTransform: "uppercase",
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "space-between",
+          gap: 6,
           marginBottom: 6,
         }}
       >
-        {label}
+        <div
+          style={{
+            fontSize: 8,
+            fontWeight: 600,
+            color: "rgba(255,255,255,0.22)",
+            letterSpacing: "2px",
+            textTransform: "uppercase",
+          }}
+        >
+          {label}
+        </div>
+        {labelRight || null}
       </div>
       <div
         style={{

@@ -1,6 +1,8 @@
 import { useState, useEffect } from "react";
 import { DeepDiveModal } from "./DeepDiveModal.jsx";
 import { WeeklyBars, StatTile, SectionLabel, InsightCard } from "./DeepDiveCharts.jsx";
+import { InfoPop } from "../../components/InfoPop.jsx";
+import { metricExplainers } from "../explainers/metrics.js";
 
 function startOfIsoWeek(d) {
   const x = new Date(d);
@@ -16,7 +18,23 @@ function normalizeBaselinesPayload(json) {
   return json;
 }
 
-export const Z2DeepDive = ({ open, onClose, supabase, dataSources }) => {
+const z2SectionLabelRowStyle = {
+  display: "flex",
+  alignItems: "center",
+  gap: 6,
+  marginTop: 28,
+  marginBottom: 12,
+};
+const z2SectionLabelTextStyle = {
+  flex: 1,
+  fontSize: 9,
+  fontWeight: 600,
+  color: "rgba(255,255,255,0.3)",
+  letterSpacing: "2.5px",
+  textTransform: "uppercase",
+};
+
+export const Z2DeepDive = ({ open, onClose, supabase, dataSources, profile }) => {
   const [metrics, setMetrics] = useState([]);
   const [baselines, setBaselines] = useState(null);
   const [loading, setLoading] = useState(true);
@@ -227,7 +245,21 @@ export const Z2DeepDive = ({ open, onClose, supabase, dataSources }) => {
         ) : null}
       </div>
 
-      <SectionLabel>{z2WeeksSectionLabel}</SectionLabel>
+      <div style={z2SectionLabelRowStyle}>
+        <div style={z2SectionLabelTextStyle}>{z2WeeksSectionLabel}</div>
+        <InfoPop
+          title={metricExplainers.z2.title}
+          short={metricExplainers.z2.short}
+          detailed={metricExplainers.z2.detailed}
+          userContext={metricExplainers.z2.userContext(
+            profile,
+            Math.round(Number(heroValue)),
+            target,
+          )}
+          icon="i"
+          size={11}
+        />
+      </div>
       <WeeklyBars
         data={weeks}
         maxValue={Math.max(target, baselineWeeklyZ2 || 0, ...weeks.map((w) => w.value))}
