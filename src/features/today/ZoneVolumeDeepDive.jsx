@@ -81,12 +81,18 @@ export const ZoneVolumeDeepDive = ({
         data: { session },
       } = await supabase.auth.getSession();
       if (!session?.user?.id) return;
-      const currentTargets = profile?.zone_targets || {};
-      const { error } = await supabase
+      const currentTargets =
+        profile?.zone_targets && typeof profile.zone_targets === "object" ? profile.zone_targets : {};
+      const newTargets = { ...currentTargets, [selectedZone]: newTarget };
+      console.log("[zone target] saving:", newTargets);
+      const { data: saved, error } = await supabase
         .from("user_profiles")
-        .update({ zone_targets: { ...currentTargets, [selectedZone]: newTarget } })
-        .eq("user_id", session.user.id);
-      if (error) console.error("[ZoneVolumeDeepDive] zone_targets", error);
+        .update({ zone_targets: newTargets })
+        .eq("user_id", session.user.id)
+        .select("zone_targets")
+        .single();
+      console.log("[zone target] save error:", error);
+      console.log("[zone target] saved row zone_targets:", saved?.zone_targets);
       if (refreshProfile) await refreshProfile();
     },
     [supabase, profile?.zone_targets, selectedZone, refreshProfile],

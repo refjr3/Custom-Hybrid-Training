@@ -2757,8 +2757,16 @@ export default function App() {
 
   const refreshProfile = useCallback(async () => {
     if (!session?.user?.id) return;
-    const { data } = await supabase.from("user_profiles").select("*").eq("user_id", session.user.id).single();
-    if (data) setProfile(data);
+    const { data, error } = await supabase
+      .from("user_profiles")
+      .select("*")
+      .eq("user_id", session.user.id)
+      .single();
+    if (error) console.error("[refreshProfile]", error.message);
+    if (data) {
+      console.log("[refreshProfile] zone_targets:", data.zone_targets);
+      setProfile(data);
+    }
   }, [session?.user?.id]);
 
   const handleZoneChange = useCallback(
