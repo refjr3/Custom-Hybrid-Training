@@ -3,6 +3,7 @@ import IntakeShell from "./shared/IntakeShell.jsx";
 import Step1Days from "./Step1Days.jsx";
 import Step2Unavailable from "./Step2Unavailable.jsx";
 import Step3Focus from "./Step3Focus.jsx";
+import Step4Race from "./Step4Race.jsx";
 
 const DAY_SET = new Set([3, 4, 5, 6, 7]);
 
@@ -24,7 +25,7 @@ function needsRaceStep(profile, mainFocus) {
 }
 
 /**
- * Phase 10a — steps 0–4 (race + confirm stubs until 10a.5 / 10a.6).
+ * Phase 10a — steps 0–4 (confirm stub until 10a.6).
  * @param {{ open: boolean, onClose: () => void, supabase: object, session: object | null, profile: object | null, onProfileUpdated?: () => void }} props
  */
 export default function PlanIntakeFlow({ open, onClose, supabase, session, profile, onProfileUpdated }) {
@@ -33,6 +34,7 @@ export default function PlanIntakeFlow({ open, onClose, supabase, session, profi
   const [flexibility, setFlexibility] = useState("flexible");
   const [unavailableDays, setUnavailableDays] = useState([]);
   const [mainFocus, setMainFocus] = useState(null);
+  const [intakeRaceDate, setIntakeRaceDate] = useState(null);
   const [saving, setSaving] = useState(false);
   const [saveError, setSaveError] = useState("");
 
@@ -47,10 +49,13 @@ export default function PlanIntakeFlow({ open, onClose, supabase, session, profi
     if (open) {
       setStep(0);
       setUnavailableDays([]);
+      setIntakeRaceDate(null);
       syncFromProfile();
       setSaveError("");
     }
   }, [open, syncFromProfile]);
+
+  const raceRequired = needsRaceStep(profile, mainFocus);
 
   const saveStep1Profile = async () => {
     const uid = session?.user?.id;
@@ -80,6 +85,7 @@ export default function PlanIntakeFlow({ open, onClose, supabase, session, profi
 
   const handleBack = () => {
     if (step <= 0) onClose?.();
+    else if (step === 4 && !raceRequired) setStep(2);
     else setStep((s) => s - 1);
   };
 
@@ -92,7 +98,6 @@ export default function PlanIntakeFlow({ open, onClose, supabase, session, profi
     setUnavailableDays([]);
   };
 
-  const raceRequired = needsRaceStep(profile, mainFocus);
   const step2Blocked = step === 1 && step2NextDisabled(unavailableDays, daysPerWeek);
   const step3Blocked = step === 2 && !mainFocus;
 
@@ -126,7 +131,7 @@ export default function PlanIntakeFlow({ open, onClose, supabase, session, profi
             ? {
                 stepIndex: 3,
                 title: "When's the race?",
-                subtitle: "Race date step ships in 10a.5 — use Back to edit focus.",
+                subtitle: "Optional — tap \"I don't know yet\" if you're still deciding.",
               }
             : {
                 stepIndex: 4,
@@ -167,9 +172,7 @@ export default function PlanIntakeFlow({ open, onClose, supabase, session, profi
             raceOnProfile={Boolean(profile?.target_race_date)}
           />
         ) : step === 3 ? (
-          <p style={{ margin: 0, fontSize: 14, color: "rgba(255,255,255,0.4)", textAlign: "center", lineHeight: 1.55 }}>
-            Race date picker arrives in 10a.5.
-          </p>
+          <Step4Race raceDate={intakeRaceDate} setRaceDate={setIntakeRaceDate} />
         ) : (
           <p style={{ margin: 0, fontSize: 14, color: "rgba(255,255,255,0.4)", textAlign: "center", lineHeight: 1.55 }}>
             Synthesized confirmation arrives in 10a.6.
