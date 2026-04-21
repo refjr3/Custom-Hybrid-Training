@@ -13,7 +13,7 @@ import { ConnectPrompt } from "./features/today/ConnectPrompt.jsx";
 import { RecoveryDeepDive } from "./features/today/RecoveryDeepDive.jsx";
 import { ZoneVolumeDeepDive } from "./features/today/ZoneVolumeDeepDive.jsx";
 import { ZonePicker } from "./features/today/ZonePicker.jsx";
-import { getZoneConfig, getZoneTarget, getSelectedZone } from "./features/today/zoneConfig.js";
+import { getZoneConfig } from "./features/today/zoneConfig.js";
 import { SleepDeepDive } from "./features/today/SleepDeepDive.jsx";
 import { DailyCallCard } from "./features/today/DailyCallCard.jsx";
 import { InfoPop } from "./components/InfoPop.jsx";
@@ -2688,6 +2688,8 @@ export default function App() {
   const [stravaConnected, setStravaConnected] = useState(false);
   const [stravaWeeklyZ2Minutes, setStravaWeeklyZ2Minutes] = useState(null);
   const [weeklyZoneMinutes, setWeeklyZoneMinutes] = useState({ z2: 0, z3: 0, z4_plus: 0 });
+  const [localSelectedZone, setLocalSelectedZone] = useState("z2");
+  const [localZoneTargets, setLocalZoneTargets] = useState({ z2: 240, z3: 60, z4_plus: 30 });
   const [stravaWeeklyZ2Loading, setStravaWeeklyZ2Loading] = useState(false);
   const [stravaWeeklyZ2Error, setStravaWeeklyZ2Error] = useState("");
   const [stravaBestEfforts, setStravaBestEfforts] = useState(null);
@@ -2769,13 +2771,42 @@ export default function App() {
     }
   }, [session?.user?.id]);
 
+  useEffect(() => {
+    if (profile?.selected_zone) setLocalSelectedZone(profile.selected_zone);
+  }, [profile?.selected_zone]);
+
+  useEffect(() => {
+    if (profile?.zone_targets && typeof profile.zone_targets === "object") {
+      setLocalZoneTargets((prev) => ({ ...prev, ...profile.zone_targets }));
+    }
+  }, [profile?.zone_targets]);
+
   const handleZoneChange = useCallback(
     async (newZone) => {
       if (!session?.user?.id) return;
+      setLocalSelectedZone(newZone);
       await supabase.from("user_profiles").update({ selected_zone: newZone }).eq("user_id", session.user.id);
       await refreshProfile();
     },
     [session?.user?.id, refreshProfile]
+  );
+
+  const handleZoneTargetChange = useCallback(
+    async (newTarget) => {
+      if (!session?.user?.id) return;
+      let mergedForSave;
+      setLocalZoneTargets((prev) => {
+        mergedForSave = { ...prev, [localSelectedZone]: newTarget };
+        return mergedForSave;
+      });
+      const { error } = await supabase
+        .from("user_profiles")
+        .update({ zone_targets: mergedForSave })
+        .eq("user_id", session.user.id);
+      if (error) console.error("[zone target] save", error.message);
+      await refreshProfile();
+    },
+    [session?.user?.id, localSelectedZone, refreshProfile]
   );
 
   useEffect(() => {
@@ -4123,9 +4154,10 @@ export default function App() {
 
       {nav === "today" && (() => {
         const perfHdr = derivePerfPlanHeader(planBlocks);
-        const selectedZone = getSelectedZone(profile);
+        const selectedZone = localSelectedZone;
         const zoneConfig = getZoneConfig(selectedZone);
-        const zoneTarget = getZoneTarget(profile, selectedZone);
+        const zoneTarget =
+          localZoneTargets[selectedZone] ?? getZoneConfig(selectedZone).defaultTarget;
         const selectedZoneMinutes = stravaConnected
           ? Math.max(0, Math.round(Number(weeklyZoneMinutes[selectedZone] ?? 0)))
           : 0;
@@ -4988,10 +5020,12 @@ export default function App() {
         supabase={supabase}
         dataSources={dataSources}
         profile={profile}
-        selectedZone={getSelectedZone(profile)}
-        zoneConfig={getZoneConfig(getSelectedZone(profile))}
-        zoneTarget={getZoneTarget(profile, getSelectedZone(profile))}
-        refreshProfile={refreshProfile}
+        selectedZone={localSelectedZone}
+        zoneConfig={getZoneConfig(localSelectedZone)}
+        zoneTarget={
+          localZoneTargets[localSelectedZone] ?? getZoneConfig(localSelectedZone).defaultTarget
+        }
+        onTargetChange={handleZoneTargetChange}
       />
       <SleepDeepDive
         open={sleepModalOpen}

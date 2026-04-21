@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useRef } from "react";
+import { useState, useEffect, useRef } from "react";
 import { DeepDiveModal } from "./DeepDiveModal.jsx";
 import { WeeklyBars, StatTile, SectionLabel, InsightCard } from "./DeepDiveCharts.jsx";
 import { InfoPop } from "../../components/InfoPop.jsx";
@@ -55,7 +55,7 @@ export const ZoneVolumeDeepDive = ({
   selectedZone,
   zoneConfig,
   zoneTarget,
-  refreshProfile,
+  onTargetChange,
 }) => {
   const [metrics, setMetrics] = useState([]);
   const [baselines, setBaselines] = useState(null);
@@ -74,29 +74,6 @@ export const ZoneVolumeDeepDive = ({
   useEffect(() => {
     if (open) setSelectedWeekIndex(3);
   }, [open]);
-
-  const persistZoneTarget = useCallback(
-    async (newTarget) => {
-      const {
-        data: { session },
-      } = await supabase.auth.getSession();
-      if (!session?.user?.id) return;
-      const currentTargets =
-        profile?.zone_targets && typeof profile.zone_targets === "object" ? profile.zone_targets : {};
-      const newTargets = { ...currentTargets, [selectedZone]: newTarget };
-      console.log("[zone target] saving:", newTargets);
-      const { data: saved, error } = await supabase
-        .from("user_profiles")
-        .update({ zone_targets: newTargets })
-        .eq("user_id", session.user.id)
-        .select("zone_targets")
-        .single();
-      console.log("[zone target] save error:", error);
-      console.log("[zone target] saved row zone_targets:", saved?.zone_targets);
-      if (refreshProfile) await refreshProfile();
-    },
-    [supabase, profile?.zone_targets, selectedZone, refreshProfile],
-  );
 
   useEffect(() => {
     if (!open) return;
@@ -420,12 +397,16 @@ export const ZoneVolumeDeepDive = ({
               localTargetRef.current = v;
             }
           }}
-          onMouseUp={(e) => {
+          onMouseUp={async (e) => {
             const v = parseInt(e.currentTarget.value, 10);
-            if (Number.isFinite(v)) persistZoneTarget(v);
+            if (!Number.isFinite(v) || !onTargetChange) return;
+            setLocalTarget(v);
+            localTargetRef.current = v;
+            await onTargetChange(v);
           }}
-          onTouchEnd={() => {
-            persistZoneTarget(localTargetRef.current);
+          onTouchEnd={async () => {
+            if (!onTargetChange) return;
+            await onTargetChange(localTargetRef.current);
           }}
           style={{
             width: "100%",
