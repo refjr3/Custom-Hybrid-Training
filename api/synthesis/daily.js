@@ -122,8 +122,26 @@ export default async function handler(req, res) {
 
     const activeVariantId = await getActiveVariantId(supabase, user.id);
 
+    const selectedZone = profile?.selected_zone || "z2";
+    const zoneTargets =
+      profile?.zone_targets && typeof profile.zone_targets === "object"
+        ? profile.zone_targets
+        : { z2: 240, z3: 60, z4_plus: 30 };
+    const zoneTargetRaw = zoneTargets[selectedZone];
+    const zoneTarget =
+      zoneTargetRaw != null && Number.isFinite(Number(zoneTargetRaw))
+        ? Math.round(Number(zoneTargetRaw))
+        : selectedZone === "z3"
+          ? 60
+          : selectedZone === "z4_plus"
+            ? 30
+            : 240;
+
     const weekStart = mondayIsoOnOrBefore(today, tz);
     const weekMetrics = await resolveMetricsRange(user.id, weekStart, today);
+    const zoneMinField =
+      selectedZone === "z2" ? "z2_minutes" : selectedZone === "z3" ? "z3_minutes" : "z4_plus_minutes";
+    const weeklyZoneMin = weekMetrics.reduce((sum, m) => sum + (m[zoneMinField] || 0), 0);
     const weeklyZ2 = weekMetrics.reduce((sum, m) => sum + (m.z2_minutes || 0), 0);
 
     const { data: dayRows } = await applyTrainingVariantFilter(
@@ -142,7 +160,12 @@ export default async function handler(req, res) {
       sleep_score: evaluateSleepScore(todayMetrics?.sleep_score),
       sleep_deep: evaluateSleepStage(todayMetrics?.sleep_deep_min, baselines?.baseline_sleep_deep_min, "Deep"),
       sleep_awake: evaluateSleepAwake(todayMetrics?.sleep_awake_min, baselines?.baseline_sleep_awake_min),
-      z2_weekly: evaluateZ2Weekly(weeklyZ2, 240, jsWeekdayFromTz(tz), baselines?.baseline_z2_weekly_min),
+      z2_weekly: evaluateZ2Weekly(
+        weeklyZoneMin,
+        zoneTarget,
+        jsWeekdayFromTz(tz),
+        selectedZone === "z2" ? baselines?.baseline_z2_weekly_min : null,
+      ),
     };
 
     const bodyFlagColors = [
@@ -202,14 +225,14 @@ COACHING PHILOSOPHY:
   * RHR up more than 8 bpm above baseline, OR
   * Sleep under 6 hours total, OR
   * Multiple amber flags pointing the same direction
-- Pacing metrics (Z2 weekly behind pace on Mon/Tue/Wed) are NOT reasons to pull back from today's planned session. Mention them as callouts but don't override the session.
+- Pacing metrics (weekly zone volume behind pace on Mon/Tue/Wed) are NOT reasons to pull back from today's planned session. Mention them as callouts but don't override the session.
 - When body signals are green or mixed-green, call for full execution.
 - When body signals are mixed with one yellow, note it but keep the session.
 - When body signals are clearly red, pull back specifically and briefly.
 
 ${bodyContext}
 - Awake: ${todayMetrics?.sleep_awake_min != null ? todayMetrics.sleep_awake_min.toFixed(0) : "n/a"}min
-- Weekly Z2: ${weeklyZ2}min of 240 target (day ${dayOfWeek} of 7 — ${dayOfWeek <= 2 ? "week just started" : dayOfWeek >= 5 ? "late in week" : "mid-week"})
+- Weekly ${selectedZone === "z2" ? "Z2" : selectedZone === "z3" ? "Z3" : "Z4+"}: ${weeklyZoneMin}min of ${zoneTarget} target (day ${dayOfWeek} of 7 — ${dayOfWeek <= 2 ? "week just started" : dayOfWeek >= 5 ? "late in week" : "mid-week"})
 
 Today's plan: ${plannedSession}
 
@@ -268,6 +291,9 @@ Be direct. Use the athlete's name occasionally, not every time. No fluff. When b
       metrics_snapshot: {
         readiness: todayMetrics?.readiness_score,
         sleep_hours: todayMetrics?.sleep_total_min ? todayMetrics.sleep_total_min / 60 : null,
+        selected_zone: selectedZone,
+        weekly_zone_minutes: weeklyZoneMin,
+        zone_target: zoneTarget,
         weekly_z2: weeklyZ2,
         z2_target: 240,
         day_of_week: dayIdx,
