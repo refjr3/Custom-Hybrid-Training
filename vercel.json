@@ -2,6 +2,9 @@
   "functions": {
     "api/plan/generate.js": {
       "maxDuration": 300
+    },
+    "api/plan/generate-v2.js": {
+      "maxDuration": 300
     }
   },
   "rewrites": [
