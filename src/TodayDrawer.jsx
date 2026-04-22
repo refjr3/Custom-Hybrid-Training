@@ -461,10 +461,7 @@ function DrawerPlans({ setDrawerSection, planVariants, activeVariantId, onSwitch
 
         <button
           type="button"
-          onClick={() => {
-            onClose?.();
-            onStartNewPlan?.();
-          }}
+          onClick={() => onStartNewPlan?.()}
           style={{
             width: "100%",
             background: "rgba(201,168,117,0.12)",
