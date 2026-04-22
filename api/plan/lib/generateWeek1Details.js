@@ -2,7 +2,7 @@
  * Stage 3 — full exercise blocks for week 1 only (lazy detail for later weeks later).
  */
 
-const DEFAULT_MODEL = process.env.ANTHROPIC_PLAN_MODEL || "claude-3-5-sonnet-20241022";
+import { PLAN_GENERATION_MODEL } from "./generateSkeleton.js";
 
 function stripJsonFences(text) {
   return String(text || "")
@@ -94,7 +94,7 @@ Only include keys for days that have real sessions (not rest). Example shape:
 Adjust to equipment and experience level. Blocks must be a JSON array suitable for the client.`;
 
   const message = await anthropic.messages.create({
-    model: DEFAULT_MODEL,
+    model: PLAN_GENERATION_MODEL,
     max_tokens: 6000,
     messages: [{ role: "user", content: prompt }],
   });

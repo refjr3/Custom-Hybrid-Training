@@ -2,7 +2,7 @@
  * Stage 2 — session-level scaffolding for every week in the block.
  */
 
-const DEFAULT_MODEL = process.env.ANTHROPIC_PLAN_MODEL || "claude-3-5-sonnet-20241022";
+import { PLAN_GENERATION_MODEL } from "./generateSkeleton.js";
 
 function stripJsonFences(text) {
   return String(text || "")
@@ -70,7 +70,7 @@ IMPORTANT:
 - Athlete experience: ${profile.experience || "unknown"}; respect conservative progression if beginner.`;
 
   const message = await anthropic.messages.create({
-    model: DEFAULT_MODEL,
+    model: PLAN_GENERATION_MODEL,
     max_tokens: 8000,
     messages: [{ role: "user", content: prompt }],
   });

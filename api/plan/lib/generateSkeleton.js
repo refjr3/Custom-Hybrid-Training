@@ -3,7 +3,7 @@
  * Context shape matches `buildIntakeGenerationContext` in the app (profile / intake / baselines).
  */
 
-const DEFAULT_MODEL = process.env.ANTHROPIC_PLAN_MODEL || "claude-3-5-sonnet-20241022";
+export const PLAN_GENERATION_MODEL = process.env.ANTHROPIC_PLAN_MODEL || "claude-sonnet-4-6";
 
 function stripJsonFences(text) {
   return String(text || "")
@@ -123,7 +123,7 @@ IMPORTANT:
 - Session types must be from: strength, z2_aerobic, threshold, long_run, hyrox, recovery, brick, rest`;
 
   const message = await anthropic.messages.create({
-    model: DEFAULT_MODEL,
+    model: PLAN_GENERATION_MODEL,
     max_tokens: 3000,
     messages: [{ role: "user", content: prompt }],
   });
@@ -140,5 +140,3 @@ IMPORTANT:
     throw new Error("skeleton_parse_failed");
   }
 }
-
-export { DEFAULT_MODEL as PLAN_GENERATION_MODEL };
