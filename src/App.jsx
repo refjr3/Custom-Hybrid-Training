@@ -6348,9 +6348,12 @@ export default function App() {
         session={session}
         profile={profile}
         onProfileUpdated={refreshProfile}
-        onIntakeComplete={({ message }) => {
+        onIntakeComplete={async (payload) => {
           setShowPlanIntake(false);
-          console.log("[intake complete]", message);
+          const tok = session?.access_token;
+          if (tok) await fetchPlan(tok);
+          await refreshProfile();
+          console.log("[intake complete]", payload?.message, payload?.variantId, payload?.activated);
         }}
       />
 

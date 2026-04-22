@@ -6,6 +6,8 @@ import Step3Focus from "./Step3Focus.jsx";
 import Step4Race from "./Step4Race.jsx";
 import Step5Confirm from "./Step5Confirm.jsx";
 import { buildIntakeGenerationContext } from "./shared/synthesizeIntake.js";
+import { GenerationLoadingScreen } from "./GenerationLoadingScreen.jsx";
+import { PlanPreviewScreen } from "./PlanPreviewScreen.jsx";
 
 const DAY_SET = new Set([3, 4, 5, 6, 7]);
 
@@ -28,7 +30,7 @@ function needsRaceStep(profile, mainFocus) {
 
 /**
  * Phase 10a — steps 0–4 (confirm stub until 10a.6).
- * @param {{ open: boolean, onClose: () => void, supabase: object, session: object | null, profile: object | null, onProfileUpdated?: () => void, onIntakeComplete?: (payload: { message: string }) => void }} props
+ * @param {{ open: boolean, onClose: () => void, supabase: object, session: object | null, profile: object | null, onProfileUpdated?: () => void, onIntakeComplete?: (payload: { message: string, variantId?: string, activated?: boolean }) => void }} props
  */
 export default function PlanIntakeFlow({ open, onClose, supabase, session, profile, onProfileUpdated, onIntakeComplete }) {
   const [step, setStep] = useState(0);
@@ -46,9 +48,20 @@ export default function PlanIntakeFlow({ open, onClose, supabase, session, profi
 
   /** False while closed; set true on first paint after open so we only reset local state when the modal opens, not when `profile` updates mid-flow. */
   const intakeWasOpenRef = useRef(false);
+  /** intake → generating (POST generate-v2) → preview (activate or defer) */
+  const [generationPhase, setGenerationPhase] = useState("intake");
+  const [pendingRequestId, setPendingRequestId] = useState(null);
+  const [generatedVariantId, setGeneratedVariantId] = useState(null);
 
   useEffect(() => {
-    if (open && !intakeWasOpenRef.current) {
+    if (!open) {
+      intakeWasOpenRef.current = false;
+      setGenerationPhase("intake");
+      setPendingRequestId(null);
+      setGeneratedVariantId(null);
+      return;
+    }
+    if (!intakeWasOpenRef.current) {
       intakeWasOpenRef.current = true;
       setStep(0);
       setUnavailableDays([]);
@@ -60,8 +73,10 @@ export default function PlanIntakeFlow({ open, onClose, supabase, session, profi
       else setMainFocus(null);
       setSaveError("");
       setReturnToConfirm(false);
+      setGenerationPhase("intake");
+      setPendingRequestId(null);
+      setGeneratedVariantId(null);
     }
-    if (!open) intakeWasOpenRef.current = false;
   }, [open, profile]);
 
   useEffect(() => {
@@ -161,20 +176,25 @@ export default function PlanIntakeFlow({ open, onClose, supabase, session, profi
         mainFocus,
         raceDate: raceForRow,
       });
-      const { error: insErr } = await supabase.from("plan_generation_requests").insert({
-        user_id: uid,
-        days_per_week: daysPerWeek,
-        schedule_flexibility: flexibility,
-        unavailable_days: unavailableDays,
-        main_focus: mainFocus,
-        race_date: raceForRow,
-        generation_context: generationContext,
-        status: "intake_complete",
-      });
+      const { data: inserted, error: insErr } = await supabase
+        .from("plan_generation_requests")
+        .insert({
+          user_id: uid,
+          days_per_week: daysPerWeek,
+          schedule_flexibility: flexibility,
+          unavailable_days: unavailableDays,
+          main_focus: mainFocus,
+          race_date: raceForRow,
+          generation_context: generationContext,
+          status: "intake_complete",
+        })
+        .select("id")
+        .single();
       if (insErr) throw new Error(insErr.message);
+      if (!inserted?.id) throw new Error("missing_request_id");
       onProfileUpdated?.();
-      onIntakeComplete?.({ message: "Plan intake saved. Generation coming soon." });
-      onClose?.();
+      setPendingRequestId(inserted.id);
+      setGenerationPhase("generating");
     } catch (e) {
       setSaveError(e?.message || "Save failed");
     } finally {
@@ -183,6 +203,57 @@ export default function PlanIntakeFlow({ open, onClose, supabase, session, profi
   };
 
   if (!open) return null;
+
+  if (generationPhase === "generating" && pendingRequestId) {
+    return (
+      <GenerationLoadingScreen
+        requestId={pendingRequestId}
+        supabase={supabase}
+        onComplete={(result) => {
+          if (result?.variant_id) {
+            setGeneratedVariantId(result.variant_id);
+            setGenerationPhase("preview");
+          } else {
+            setSaveError("Generation finished but no plan id returned.");
+            setGenerationPhase("intake");
+            setPendingRequestId(null);
+          }
+        }}
+        onError={(err) => {
+          console.error("[plan generation]", err);
+          setSaveError(typeof err === "string" ? err : "Plan generation failed. Please try again.");
+          setGenerationPhase("intake");
+          setPendingRequestId(null);
+        }}
+      />
+    );
+  }
+
+  if (generationPhase === "preview" && generatedVariantId) {
+    return (
+      <PlanPreviewScreen
+        variantId={generatedVariantId}
+        supabase={supabase}
+        onActivate={() => {
+          onProfileUpdated?.();
+          onIntakeComplete?.({
+            message: "Plan activated",
+            variantId: generatedVariantId,
+            activated: true,
+          });
+          onClose?.();
+        }}
+        onClose={() => {
+          onIntakeComplete?.({
+            message: "Plan saved but not activated",
+            variantId: generatedVariantId,
+            activated: false,
+          });
+          onClose?.();
+        }}
+      />
+    );
+  }
 
   const shellByStep =
     step === 0
