@@ -2,14 +2,7 @@
  * Stage 3 — full exercise blocks for week 1 only (lazy detail for later weeks later).
  */
 
-import { PLAN_GENERATION_MODEL } from "./generateSkeleton.js";
-
-function stripJsonFences(text) {
-  return String(text || "")
-    .replace(/```json\n?/gi, "")
-    .replace(/```\n?/g, "")
-    .trim();
-}
+import { PLAN_GENERATION_MODEL, extractJsonObject } from "./generateSkeleton.js";
 
 const TO_UPPER = {
   mon: "MON",
@@ -100,13 +93,13 @@ Adjust to equipment and experience level. Blocks must be a JSON array suitable f
   });
 
   const text = message.content?.[0]?.type === "text" ? message.content[0].text : "";
-  const cleaned = stripJsonFences(text);
 
   let details;
   try {
-    details = JSON.parse(cleaned);
+    details = extractJsonObject(text);
   } catch (e) {
-    console.error("[week1 details] parse failed:", cleaned.slice(0, 500));
+    console.error("[week1 details] RAW CLAUDE RESPONSE:", text);
+    console.error("[week1 details] parse error:", e?.message || e);
     return;
   }
 

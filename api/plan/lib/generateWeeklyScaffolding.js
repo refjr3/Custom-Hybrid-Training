@@ -4,11 +4,21 @@
 
 import { PLAN_GENERATION_MODEL } from "./generateSkeleton.js";
 
-function stripJsonFences(text) {
-  return String(text || "")
+function extractJsonArray(text) {
+  let cleaned = String(text || "")
     .replace(/```json\n?/gi, "")
     .replace(/```\n?/g, "")
     .trim();
+
+  const firstBracket = cleaned.indexOf("[");
+  const lastBracket = cleaned.lastIndexOf("]");
+
+  if (firstBracket === -1 || lastBracket === -1 || lastBracket <= firstBracket) {
+    throw new Error("no_json_array_found");
+  }
+
+  const jsonStr = cleaned.slice(firstBracket, lastBracket + 1);
+  return JSON.parse(jsonStr);
 }
 
 /**
@@ -71,19 +81,19 @@ IMPORTANT:
 
   const message = await anthropic.messages.create({
     model: PLAN_GENERATION_MODEL,
-    max_tokens: 8000,
+    max_tokens: 16000,
     messages: [{ role: "user", content: prompt }],
   });
 
   const text = message.content?.[0]?.type === "text" ? message.content[0].text : "";
-  const cleaned = stripJsonFences(text);
 
   try {
-    const parsed = JSON.parse(cleaned);
+    const parsed = extractJsonArray(text);
     if (!Array.isArray(parsed)) throw new Error("weeks_not_array");
     return parsed;
   } catch (e) {
-    console.error("[weeks] JSON parse failed:", cleaned.slice(0, 500));
+    console.error("[weeks] RAW CLAUDE RESPONSE:", text);
+    console.error("[weeks] parse error:", e?.message || e);
     throw new Error("weeks_parse_failed");
   }
 }

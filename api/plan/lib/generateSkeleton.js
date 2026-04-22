@@ -5,11 +5,18 @@
 
 export const PLAN_GENERATION_MODEL = process.env.ANTHROPIC_PLAN_MODEL || "claude-sonnet-4-6";
 
-function stripJsonFences(text) {
-  return String(text || "")
+/** First `{` … last `}` so preamble after JSON or prose before JSON does not break parse. */
+export function extractJsonObject(text) {
+  let cleaned = String(text || "")
     .replace(/```json\n?/gi, "")
     .replace(/```\n?/g, "")
     .trim();
+  const firstBrace = cleaned.indexOf("{");
+  const lastBrace = cleaned.lastIndexOf("}");
+  if (firstBrace === -1 || lastBrace === -1 || lastBrace <= firstBrace) {
+    throw new Error("no_json_object_found");
+  }
+  return JSON.parse(cleaned.slice(firstBrace, lastBrace + 1));
 }
 
 function formatEquipment(equipment) {
@@ -129,14 +136,14 @@ IMPORTANT:
   });
 
   const text = message.content?.[0]?.type === "text" ? message.content[0].text : "";
-  const cleaned = stripJsonFences(text);
 
   try {
-    const parsed = JSON.parse(cleaned);
+    const parsed = extractJsonObject(text);
     if (!parsed || typeof parsed !== "object") throw new Error("empty_skeleton");
     return parsed;
   } catch (e) {
-    console.error("[skeleton] JSON parse failed:", cleaned.slice(0, 500));
+    console.error("[skeleton] RAW CLAUDE RESPONSE:", text);
+    console.error("[skeleton] parse error:", e?.message || e);
     throw new Error("skeleton_parse_failed");
   }
 }
