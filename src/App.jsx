@@ -1331,7 +1331,9 @@ const cloneSpecialBlock = (block) => ({
   })),
 });
 
-const normalizePlanBlocks = (blocks = []) => {
+const normalizePlanBlocks = (blocks = [], options = {}) => {
+  const { skipSpecials = false } = options;
+
   const regularBlocks = blocks.map((block) => ({
     ...block,
     label: normalizePhaseLabel(block.label || block.id),
@@ -1341,7 +1343,27 @@ const normalizePlanBlocks = (blocks = []) => {
     })),
   }));
 
-  const merged = [...SPECIAL_PLAN_BLOCKS.map(cloneSpecialBlock), ...regularBlocks];
+  const seen = new Set();
+  const deduplicated = [];
+  for (const b of regularBlocks) {
+    const key = (b.label || "").toUpperCase();
+    if (seen.has(key)) continue;
+    seen.add(key);
+    deduplicated.push(b);
+  }
+
+  if (skipSpecials) {
+    return [...deduplicated].sort((a, b) => {
+      const ai = PLAN_BLOCK_ORDER.indexOf(a.label);
+      const bi = PLAN_BLOCK_ORDER.indexOf(b.label);
+      return (ai === -1 ? 99 : ai) - (bi === -1 ? 99 : bi);
+    });
+  }
+
+  const existingLabels = new Set(deduplicated.map((b) => (b.label || "").toUpperCase()));
+  const specialsToAdd = SPECIAL_PLAN_BLOCKS.filter((s) => !existingLabels.has((s.label || "").toUpperCase())).map(cloneSpecialBlock);
+
+  const merged = [...specialsToAdd, ...deduplicated];
   return merged.sort((a, b) => {
     const ai = PLAN_BLOCK_ORDER.indexOf(a.label);
     const bi = PLAN_BLOCK_ORDER.indexOf(b.label);
@@ -3431,7 +3453,9 @@ export default function App() {
         headers: token ? { "Authorization": `Bearer ${token}` } : {},
       });
       const data = await res.json().catch(() => ({}));
-      const normalizedBlocks = normalizePlanBlocks(data.blocks || []);
+      const activeVariant = planVariants?.find((v) => v.id === activeVariantId);
+      const isAiGenerated = activeVariant?.variant_source === "ai_generated";
+      const normalizedBlocks = normalizePlanBlocks(data.blocks || [], { skipSpecials: isAiGenerated });
       const hasDays = normalizedBlocks?.some(b => b.weeks?.some(w => w.days?.length > 0));
       if (res.ok && hasDays) {
         setPlanBlocks(normalizedBlocks);
