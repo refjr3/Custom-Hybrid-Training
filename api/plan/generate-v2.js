@@ -95,6 +95,7 @@ export default async function handler(req, res) {
 
     console.log("[generate-v2] weeks complete:", trimmedWeeks.length, "weeks scaffolded");
 
+    // One training_block per skeleton phase; week1WeekId targets week 1 wherever that week landed.
     const { week1WeekId } = await persistWeeklyStructure(supabase, user.id, variant.id, skeleton, trimmedWeeks);
 
     await supabase.from("plan_generation_requests").update({ stage: "generating_week1" }).eq("id", requestId);
