@@ -1316,7 +1316,11 @@ const SPECIAL_PLAN_BLOCKS = [
 ];
 
 const normalizePhaseLabel = (value) => {
-  const normalized = String(value || "").trim().toUpperCase();
+  const normalized = String(value || "")
+    .trim()
+    .replace(/[_-]+/g, " ")
+    .replace(/\s+/g, " ")
+    .toUpperCase();
   if (normalized === "PEAK & TEST") return "PEAK";
   return normalized;
 };
@@ -3477,29 +3481,31 @@ export default function App() {
     }
   };
 
-  useEffect(() => {
-    if (!session?.user?.id) {
+  const loadPlanVariants = useCallback(async (userId = session?.user?.id) => {
+    if (!userId) {
       setPlanVariants([]);
       setActiveVariantId(null);
-      return;
+      return [];
     }
-    let cancelled = false;
-    supabase
+    const { data, error } = await supabase
       .from("plan_variants")
       .select("*")
-      .eq("user_id", session.user.id)
-      .order("created_at", { ascending: false })
-      .then(({ data }) => {
-        if (cancelled) return;
-        const rows = data || [];
-        setPlanVariants(rows);
-        const active = rows.find((v) => v.is_active);
-        setActiveVariantId(active?.id || null);
-      });
-    return () => {
-      cancelled = true;
-    };
+      .eq("user_id", userId)
+      .order("created_at", { ascending: false });
+    if (error) {
+      console.error("[loadPlanVariants]", error);
+      return [];
+    }
+    const rows = data || [];
+    setPlanVariants(rows);
+    const active = rows.find((v) => v.is_active);
+    setActiveVariantId(active?.id || null);
+    return rows;
   }, [session?.user?.id]);
+
+  useEffect(() => {
+    loadPlanVariants(session?.user?.id);
+  }, [session?.user?.id, loadPlanVariants]);
 
   useEffect(() => {
     if (!session?.user?.id) {
@@ -6374,10 +6380,11 @@ export default function App() {
         onProfileUpdated={refreshProfile}
         onIntakeComplete={async (payload) => {
           setShowPlanIntake(false);
+          console.log("[intake complete]", payload?.message, payload?.variantId, payload?.activated);
+          await loadPlanVariants(session?.user?.id);
           const tok = session?.access_token;
           if (tok) await fetchPlan(tok);
           await refreshProfile();
-          console.log("[intake complete]", payload?.message, payload?.variantId, payload?.activated);
         }}
       />
 
