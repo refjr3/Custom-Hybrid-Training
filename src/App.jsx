@@ -1899,16 +1899,20 @@ const AIChat = ({ whoopData, currentWeek, recentActivities, onPlanChange, userNa
     }
   }, [messages, loading, answeredQuestions, answeredQuestionIds, answeredQuestionValues, autoSubmittedQuestionBlocks]);
 
-  const sendMessage = async () => {
-    if ((!input.trim() && !attachment) || loading) return;
-    const userMsg = input.trim();
-    const currentAttachment = attachment;
+  // overrideText: optional value from chip taps — bypasses the textarea so only
+  // the selected chip label is sent, avoiding stale-closure / all-labels bugs.
+  const sendMessage = async (overrideText) => {
+    const userMsg = overrideText !== undefined ? overrideText : input.trim();
+    const currentAttachment = overrideText !== undefined ? null : attachment;
     const activeSessionId = chatSessionId || createSessionId();
     if (!chatSessionId) setChatSessionId(activeSessionId);
-    setInput("");
-    setAttachment(null);
-    if (fileInputRef.current) fileInputRef.current.value = "";
-    if (textareaRef.current) textareaRef.current.style.height = "auto";
+    if ((!userMsg && !currentAttachment) || loading) return;
+    if (overrideText === undefined) {
+      setInput("");
+      setAttachment(null);
+      if (fileInputRef.current) fileInputRef.current.value = "";
+      if (textareaRef.current) textareaRef.current.style.height = "auto";
+    }
     setMessages(prev => [...prev, { role:"user", content:userMsg || `[${currentAttachment?.name}]`, planChange:null, attachment:currentAttachment }]);
     setLoading(true);
     try {
@@ -2188,7 +2192,7 @@ const AIChat = ({ whoopData, currentWeek, recentActivities, onPlanChange, userNa
       </div>
       <div style={{ padding:"8px 20px 0", display:"flex", gap:8, overflowX:"auto", scrollbarWidth:"none", flexShrink:0 }}>
         {["What should I do today?","Adjust for my WHOOP score","Log new blood work","How was my last run?"].map((p,i) => (
-          <button key={i} onClick={() => setInput(p)} style={{ flexShrink:0, padding:"6px 12px", background:C.card, border:`1px solid ${C.border}`, borderRadius:20, cursor:"pointer", fontFamily:C.fm, fontSize:8, color:C.muted, letterSpacing:1, whiteSpace:"nowrap" }}>{p}</button>
+          <button key={i} onClick={() => sendMessage(p)} style={{ flexShrink:0, padding:"6px 12px", background:C.card, border:`1px solid ${C.border}`, borderRadius:20, cursor:"pointer", fontFamily:C.fm, fontSize:8, color:C.muted, letterSpacing:1, whiteSpace:"nowrap" }}>{p}</button>
         ))}
       </div>
       {attachment && (
