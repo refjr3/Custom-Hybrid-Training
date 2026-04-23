@@ -3,6 +3,44 @@ import { createPortal } from "react-dom";
 
 const DAY_KEYS = ["mon", "tue", "wed", "thu", "fri", "sat", "sun"];
 
+/** Race endpoint for preview — NOT a training phase (comes from intake snapshot on variant). */
+function getPlanRaceMeta(variant) {
+  const ctx = variant?.generation_context;
+  if (!ctx || typeof ctx !== "object") return null;
+  const raw = ctx.intake?.raceDate ?? ctx.profile?.race_date ?? null;
+  if (!raw) return null;
+  const dateStr = String(raw).slice(0, 10);
+  const t = new Date(`${dateStr}T12:00:00`);
+  if (Number.isNaN(t.getTime())) return null;
+  const raceName = ctx.profile?.race || ctx.profile?.race_name || null;
+  return { dateStr, raceName: typeof raceName === "string" && raceName.trim() ? raceName.trim() : null };
+}
+
+/** Weekly pattern lines can echo week-19 style session titles (e.g. "Race week — …"); keep those out of this list so they are not mistaken for phases. */
+function filterWeeklyLinesForPreview(lines) {
+  if (!Array.isArray(lines)) return [];
+  return lines.filter((line) => {
+    const rest = String(line).split(":").slice(1).join(":").trim();
+    return rest && !/^race\s*week\b/i.test(rest);
+  });
+}
+
+function SectionLabel({ children }) {
+  return (
+    <div
+      style={{
+        fontSize: 9,
+        fontWeight: 600,
+        color: "rgba(255,255,255,0.4)",
+        letterSpacing: "2.5px",
+        marginBottom: 14,
+      }}
+    >
+      {children}
+    </div>
+  );
+}
+
 function summarizeWeeklyPattern(pattern) {
   if (!pattern || typeof pattern !== "object") return null;
   const desc = pattern.description;
@@ -49,6 +87,12 @@ export function PlanPreviewScreen({ variantId, supabase, onActivate, onClose }) 
       cancelled = true;
     };
   }, [variantId, supabase]);
+
+  useEffect(() => {
+    if (!variant) return;
+    console.log("[preview] phases to render:", JSON.stringify(variant.phases));
+    console.log("[preview] variant name:", variant.variant_name);
+  }, [variant]);
 
   const handleActivate = async () => {
     if (!variant?.user_id || !variantId || !supabase || activating) return;
@@ -111,6 +155,8 @@ export function PlanPreviewScreen({ variantId, supabase, onActivate, onClose }) 
   const phases = Array.isArray(variant.phases) ? variant.phases : [];
   const pattern = variant.weekly_pattern || {};
   const patternSummary = summarizeWeeklyPattern(pattern);
+  const weeklyLinesPreview = filterWeeklyLinesForPreview(patternSummary?.lines || []);
+  const raceMeta = getPlanRaceMeta(variant);
 
   return createPortal(
     <div
@@ -166,7 +212,7 @@ export function PlanPreviewScreen({ variantId, supabase, onActivate, onClose }) 
           {patternSummary?.description ? ` · ${patternSummary.description}` : ""}
         </div>
 
-        {patternSummary?.lines ? (
+        {weeklyLinesPreview.length > 0 ? (
           <div
             style={{
               background: "rgba(255,255,255,0.03)",
@@ -174,20 +220,12 @@ export function PlanPreviewScreen({ variantId, supabase, onActivate, onClose }) 
               borderRadius: 16,
               padding: "16px 18px",
               marginBottom: 24,
+              cursor: "default",
+              userSelect: "none",
             }}
           >
-            <div
-              style={{
-                fontSize: 9,
-                fontWeight: 600,
-                color: "rgba(255,255,255,0.4)",
-                letterSpacing: "2.5px",
-                marginBottom: 10,
-              }}
-            >
-              WEEKLY PATTERN
-            </div>
-            {patternSummary.lines.map((line, idx) => (
+            <SectionLabel>WEEKLY PATTERN</SectionLabel>
+            {weeklyLinesPreview.map((line, idx) => (
               <div key={`pat-${idx}`} style={{ fontSize: 12, color: "rgba(255,255,255,0.55)", lineHeight: 1.6 }}>
                 {line}
               </div>
@@ -202,19 +240,11 @@ export function PlanPreviewScreen({ variantId, supabase, onActivate, onClose }) 
             borderRadius: 18,
             padding: "20px 22px",
             marginBottom: 24,
+            cursor: "default",
+            userSelect: "none",
           }}
         >
-          <div
-            style={{
-              fontSize: 9,
-              fontWeight: 600,
-              color: "rgba(255,255,255,0.4)",
-              letterSpacing: "2.5px",
-              marginBottom: 14,
-            }}
-          >
-            PHASES
-          </div>
+          <SectionLabel>PHASES</SectionLabel>
           {phases.length === 0 ? (
             <div style={{ fontSize: 13, color: "rgba(255,255,255,0.45)" }}>Phase details will appear in your calendar.</div>
           ) : (
@@ -238,6 +268,60 @@ export function PlanPreviewScreen({ variantId, supabase, onActivate, onClose }) 
             ))
           )}
         </div>
+
+        {raceMeta ? (
+          <div
+            style={{
+              background: "linear-gradient(135deg, rgba(201,168,117,0.15), rgba(201,168,117,0.05))",
+              border: "1px solid rgba(201,168,117,0.35)",
+              borderRadius: 16,
+              padding: "16px 18px",
+              marginBottom: 24,
+              display: "flex",
+              alignItems: "center",
+              gap: 12,
+              cursor: "default",
+              userSelect: "none",
+            }}
+          >
+            <div
+              style={{
+                width: 36,
+                height: 36,
+                borderRadius: "50%",
+                background: "rgba(201,168,117,0.2)",
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center",
+                fontSize: 18,
+                flexShrink: 0,
+              }}
+            >
+              🏁
+            </div>
+            <div>
+              <div
+                style={{
+                  fontSize: 9,
+                  fontWeight: 700,
+                  color: "rgba(201,168,117,0.7)",
+                  letterSpacing: "2px",
+                  textTransform: "uppercase",
+                }}
+              >
+                RACE DAY
+              </div>
+              <div style={{ fontSize: 14, color: "#fff", fontWeight: 600, marginTop: 2 }}>
+                {raceMeta.raceName || "Your race"} ·{" "}
+                {new Date(`${raceMeta.dateStr}T12:00:00`).toLocaleDateString("en-US", {
+                  month: "long",
+                  day: "numeric",
+                  year: "numeric",
+                })}
+              </div>
+            </div>
+          </div>
+        ) : null}
 
         <button
           type="button"
