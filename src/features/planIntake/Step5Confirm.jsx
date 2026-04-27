@@ -94,6 +94,7 @@ export default function Step5Confirm({
   flexibility,
   unavailableDays,
   mainFocus,
+  intakeRaceName,
   intakeRaceDate,
   onJumpToStep,
   onLooksGood,
@@ -101,6 +102,8 @@ export default function Step5Confirm({
   submitting,
 }) {
   const effectiveRace = intakeRaceDate || profile?.target_race_date || null;
+  const effectiveRaceName =
+    String(intakeRaceName || profile?.target_race_name || "").trim() || "No race selected";
   const summary = synthesizeIntake({
     daysPerWeek,
     flexibility,
@@ -143,16 +146,16 @@ export default function Step5Confirm({
         {mainFocus === "train_for_race" ? (
           <ContextRow
             label="Race"
-            value={
+            value={effectiveRaceName}
+            sublabel={
               effectiveRace
                 ? new Date(`${String(effectiveRace).slice(0, 10)}T12:00:00`).toLocaleDateString("en-US", {
                     month: "long",
                     day: "numeric",
                     year: "numeric",
                   })
-                : "No date set"
+                : "Date not set"
             }
-            sublabel={profile?.target_race_name}
             onEdit={() => onJumpToStep(3)}
           />
         ) : null}

@@ -10,6 +10,8 @@ import { GenerationLoadingScreen } from "./GenerationLoadingScreen.jsx";
 import { PlanPreviewScreen } from "./PlanPreviewScreen.jsx";
 
 const DAY_SET = new Set([3, 4, 5, 6, 7]);
+const RACE_STEP = 3;
+const CONFIRM_STEP = 4;
 
 function parseDaysPerWeek(profile) {
   const n = Number(profile?.days_per_week);
@@ -24,8 +26,8 @@ function step2NextDisabled(unavailableDays, daysPerWeek) {
   return daysAvailable < daysPerWeek;
 }
 
-function needsRaceStep(profile, mainFocus) {
-  return mainFocus === "train_for_race" && !profile?.target_race_date;
+function needsRaceStep(mainFocus) {
+  return mainFocus === "train_for_race";
 }
 
 /**
@@ -38,12 +40,13 @@ export default function PlanIntakeFlow({ open, onClose, supabase, session, profi
   const [flexibility, setFlexibility] = useState("flexible");
   const [unavailableDays, setUnavailableDays] = useState([]);
   const [mainFocus, setMainFocus] = useState(null);
+  const [intakeRaceName, setIntakeRaceName] = useState("");
   const [intakeRaceDate, setIntakeRaceDate] = useState(null);
   const [userBaselines, setUserBaselines] = useState(null);
   const [saving, setSaving] = useState(false);
   const [intakeSubmitting, setIntakeSubmitting] = useState(false);
   const [saveError, setSaveError] = useState("");
-  /** True when user opened the race step from confirmation to edit date — Next returns to step 5. */
+  /** True when user opened race step from confirmation edit, so Next routes back to confirm. */
   const [returnToConfirm, setReturnToConfirm] = useState(false);
 
   /** False while closed; set true on first paint after open so we only reset local state when the modal opens, not when `profile` updates mid-flow. */
@@ -65,11 +68,12 @@ export default function PlanIntakeFlow({ open, onClose, supabase, session, profi
       intakeWasOpenRef.current = true;
       setStep(0);
       setUnavailableDays([]);
-      setIntakeRaceDate(null);
+      setIntakeRaceName(profile?.target_race_name ? String(profile.target_race_name) : "");
+      setIntakeRaceDate(profile?.target_race_date ? String(profile.target_race_date).slice(0, 10) : null);
       setUserBaselines(null);
       setDaysPerWeek(parseDaysPerWeek(profile));
       setFlexibility(profile?.schedule_flexibility === "strict" ? "strict" : "flexible");
-      if (profile?.target_race_date) setMainFocus("train_for_race");
+      if (profile?.target_race_name || profile?.target_race_date) setMainFocus("train_for_race");
       else setMainFocus(null);
       setSaveError("");
       setReturnToConfirm(false);
@@ -80,7 +84,7 @@ export default function PlanIntakeFlow({ open, onClose, supabase, session, profi
   }, [open, profile]);
 
   useEffect(() => {
-    if (!open || step !== 4 || !session?.user?.id) return;
+    if (!open || step !== CONFIRM_STEP || !session?.user?.id) return;
     let cancelled = false;
     (async () => {
       const { data } = await supabase.from("user_baselines").select("*").eq("user_id", session.user.id).maybeSingle();
@@ -91,7 +95,7 @@ export default function PlanIntakeFlow({ open, onClose, supabase, session, profi
     };
   }, [open, step, session?.user?.id, supabase]);
 
-  const raceRequired = needsRaceStep(profile, mainFocus);
+  const raceRequired = needsRaceStep(mainFocus);
 
   const saveStep1Profile = async () => {
     const uid = session?.user?.id;
@@ -120,10 +124,10 @@ export default function PlanIntakeFlow({ open, onClose, supabase, session, profi
 
   const handleBack = () => {
     if (step <= 0) onClose?.();
-    else if (step === 4 && !raceRequired) setStep(2);
-    else if (step === 3 && returnToConfirm) {
+    else if (step === CONFIRM_STEP && !raceRequired) setStep(2);
+    else if (step === RACE_STEP && returnToConfirm) {
       setReturnToConfirm(false);
-      setStep(4);
+      setStep(CONFIRM_STEP);
     } else setStep((s) => s - 1);
   };
 
@@ -141,14 +145,40 @@ export default function PlanIntakeFlow({ open, onClose, supabase, session, profi
 
   const advanceFromStep2 = () => {
     setReturnToConfirm(false);
-    if (raceRequired) setStep(3);
-    else setStep(4);
+    if (raceRequired) setStep(RACE_STEP);
+    else setStep(CONFIRM_STEP);
   };
 
   const jumpToStep = (i) => {
-    const t = Math.max(0, Math.min(4, i));
-    setReturnToConfirm(step === 4 && t === 3);
+    const t = Math.max(0, Math.min(CONFIRM_STEP, i));
+    setReturnToConfirm(step === CONFIRM_STEP && t === RACE_STEP);
     setStep(t);
+  };
+
+  const applyRaceUpdate = async (patch) => {
+    const nextName = patch?.target_race_name !== undefined ? patch.target_race_name : intakeRaceName;
+    const nextDate = patch?.target_race_date !== undefined ? patch.target_race_date : intakeRaceDate;
+    if (patch?.target_race_name !== undefined) {
+      setIntakeRaceName(nextName ? String(nextName) : "");
+    }
+    if (patch?.target_race_date !== undefined) {
+      setIntakeRaceDate(nextDate || null);
+    }
+    const uid = session?.user?.id;
+    if (!uid) return;
+    const { error } = await supabase
+      .from("user_profiles")
+      .update({
+        target_race_name: nextName ? String(nextName).trim() : null,
+        target_race_date: nextDate || null,
+      })
+      .eq("user_id", uid);
+    if (error) {
+      setSaveError(error.message || "Could not save race");
+      return;
+    }
+    setSaveError("");
+    onProfileUpdated?.();
   };
 
   const handleLooksGood = async () => {
@@ -160,15 +190,20 @@ export default function PlanIntakeFlow({ open, onClose, supabase, session, profi
       const raceForRow =
         intakeRaceDate ||
         (profile?.target_race_date ? String(profile.target_race_date).slice(0, 10) : null);
-      if (intakeRaceDate) {
-        const { error: upErr } = await supabase
-          .from("user_profiles")
-          .update({ target_race_date: intakeRaceDate })
-          .eq("user_id", uid);
-        if (upErr) throw new Error(upErr.message);
-      }
+      const { error: upErr } = await supabase
+        .from("user_profiles")
+        .update({
+          target_race_name: intakeRaceName ? String(intakeRaceName).trim() : null,
+          target_race_date: intakeRaceDate || null,
+        })
+        .eq("user_id", uid);
+      if (upErr) throw new Error(upErr.message);
       const generationContext = buildIntakeGenerationContext({
-        profile,
+        profile: {
+          ...profile,
+          target_race_name: intakeRaceName ? String(intakeRaceName).trim() : null,
+          target_race_date: raceForRow,
+        },
         userBaselines,
         daysPerWeek,
         flexibility,
@@ -319,7 +354,14 @@ export default function PlanIntakeFlow({ open, onClose, supabase, session, profi
             raceOnProfile={Boolean(profile?.target_race_date)}
           />
         ) : step === 3 ? (
-          <Step4Race raceDate={intakeRaceDate} setRaceDate={setIntakeRaceDate} />
+          <Step4Race
+            profile={profile}
+            supabase={supabase}
+            raceName={intakeRaceName}
+            raceDate={intakeRaceDate}
+            raceCity={profile?.race_city || ""}
+            onRaceUpdate={applyRaceUpdate}
+          />
         ) : (
           <Step5Confirm
             profile={profile}
@@ -327,6 +369,7 @@ export default function PlanIntakeFlow({ open, onClose, supabase, session, profi
             flexibility={flexibility}
             unavailableDays={unavailableDays}
             mainFocus={mainFocus}
+            intakeRaceName={intakeRaceName}
             intakeRaceDate={intakeRaceDate}
             onJumpToStep={jumpToStep}
             onLooksGood={handleLooksGood}
@@ -367,12 +410,16 @@ export default function PlanIntakeFlow({ open, onClose, supabase, session, profi
             <button type="button" onClick={advanceFromStep2} disabled={step3Blocked} style={primaryBtn(step3Blocked)}>
               Next
             </button>
-          ) : step === 3 ? (
+          ) : step === RACE_STEP ? (
             <button
               type="button"
               onClick={() => {
-                setReturnToConfirm(false);
-                setStep(4);
+                if (returnToConfirm) {
+                  setReturnToConfirm(false);
+                  setStep(CONFIRM_STEP);
+                  return;
+                }
+                setStep(CONFIRM_STEP);
               }}
               style={primaryBtn(false)}
             >
