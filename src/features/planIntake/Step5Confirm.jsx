@@ -96,7 +96,9 @@ export default function Step5Confirm({
   mainFocus,
   intakeRaceName,
   intakeRaceDate,
+  intakeEquipment,
   onJumpToStep,
+  onEditEquipment,
   onLooksGood,
   onBackFullEdit,
   submitting,
@@ -113,7 +115,7 @@ export default function Step5Confirm({
     profile,
   });
 
-  const eqKeys = equipmentKeys(profile);
+  const eqKeys = equipmentKeys({ equipment_access: intakeEquipment });
   const hours = profile?.weekly_training_hours;
   const timeDisplay =
     hours != null && String(hours).trim() !== "" ? `${String(hours).trim()} hrs per week` : "—";
@@ -160,24 +162,53 @@ export default function Step5Confirm({
           />
         ) : null}
 
-        <div
+        <button
+          type="button"
+          onClick={onEditEquipment}
           style={{
             paddingTop: 16,
             borderTop: "1px solid rgba(255,255,255,0.06)",
             marginTop: 16,
+            width: "100%",
+            background: "none",
+            borderLeft: "none",
+            borderRight: "none",
+            borderBottom: "none",
+            textAlign: "left",
+            paddingLeft: 0,
+            paddingRight: 0,
+            cursor: "pointer",
           }}
         >
           <div
             style={{
-              fontSize: 9,
-              fontWeight: 600,
-              color: "rgba(255,255,255,0.4)",
-              letterSpacing: "2px",
-              textTransform: "uppercase",
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "space-between",
               marginBottom: 10,
             }}
           >
-            Equipment
+            <div
+              style={{
+                fontSize: 9,
+                fontWeight: 600,
+                color: "rgba(255,255,255,0.4)",
+                letterSpacing: "2px",
+                textTransform: "uppercase",
+              }}
+            >
+              Equipment
+            </div>
+            <div
+              style={{
+                fontSize: 11,
+                color: "rgba(201,168,117,0.6)",
+                fontWeight: 500,
+                flexShrink: 0,
+              }}
+            >
+              Edit →
+            </div>
           </div>
           {eqKeys.length ? (
             <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
@@ -199,9 +230,9 @@ export default function Step5Confirm({
               ))}
             </div>
           ) : (
-            <div style={{ fontSize: 13, color: "rgba(255,255,255,0.35)" }}>—</div>
+            <div style={{ fontSize: 13, color: "rgba(255,255,255,0.35)" }}>Tap to choose equipment</div>
           )}
-        </div>
+        </button>
 
         <div
           style={{

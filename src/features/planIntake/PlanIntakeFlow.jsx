@@ -5,6 +5,7 @@ import Step2Unavailable from "./Step2Unavailable.jsx";
 import Step3Focus from "./Step3Focus.jsx";
 import Step4Race from "./Step4Race.jsx";
 import Step5Confirm from "./Step5Confirm.jsx";
+import Step6Equipment from "./Step6Equipment.jsx";
 import { buildIntakeGenerationContext } from "./shared/synthesizeIntake.js";
 import { GenerationLoadingScreen } from "./GenerationLoadingScreen.jsx";
 import { PlanPreviewScreen } from "./PlanPreviewScreen.jsx";
@@ -30,6 +31,12 @@ function needsRaceStep(mainFocus) {
   return mainFocus === "train_for_race";
 }
 
+function normalizeEquipment(value) {
+  if (Array.isArray(value)) return value.filter(Boolean).map(String);
+  if (value && typeof value === "object") return Object.keys(value).filter((k) => value[k]);
+  return [];
+}
+
 /**
  * Phase 10a — steps 0–4 (confirm stub until 10a.6).
  * @param {{ open: boolean, onClose: () => void, supabase: object, session: object | null, profile: object | null, onProfileUpdated?: () => void, onIntakeComplete?: (payload: { message: string, variantId?: string, activated?: boolean }) => void }} props
@@ -42,6 +49,8 @@ export default function PlanIntakeFlow({ open, onClose, supabase, session, profi
   const [mainFocus, setMainFocus] = useState(null);
   const [intakeRaceName, setIntakeRaceName] = useState("");
   const [intakeRaceDate, setIntakeRaceDate] = useState(null);
+  const [intakeEquipment, setIntakeEquipment] = useState([]);
+  const [equipmentOverlayOpen, setEquipmentOverlayOpen] = useState(false);
   const [userBaselines, setUserBaselines] = useState(null);
   const [saving, setSaving] = useState(false);
   const [intakeSubmitting, setIntakeSubmitting] = useState(false);
@@ -70,6 +79,8 @@ export default function PlanIntakeFlow({ open, onClose, supabase, session, profi
       setUnavailableDays([]);
       setIntakeRaceName(profile?.target_race_name ? String(profile.target_race_name) : "");
       setIntakeRaceDate(profile?.target_race_date ? String(profile.target_race_date).slice(0, 10) : null);
+      setIntakeEquipment(normalizeEquipment(profile?.equipment_access));
+      setEquipmentOverlayOpen(false);
       setUserBaselines(null);
       setDaysPerWeek(parseDaysPerWeek(profile));
       setFlexibility(profile?.schedule_flexibility === "strict" ? "strict" : "flexible");
@@ -181,6 +192,23 @@ export default function PlanIntakeFlow({ open, onClose, supabase, session, profi
     onProfileUpdated?.();
   };
 
+  const applyEquipmentUpdate = async (equipment) => {
+    const normalized = normalizeEquipment(equipment);
+    setIntakeEquipment(normalized);
+    const uid = session?.user?.id;
+    if (!uid) return;
+    const { error } = await supabase
+      .from("user_profiles")
+      .update({ equipment_access: normalized })
+      .eq("user_id", uid);
+    if (error) {
+      setSaveError(error.message || "Could not save equipment");
+      return;
+    }
+    setSaveError("");
+    onProfileUpdated?.();
+  };
+
   const handleLooksGood = async () => {
     const uid = session?.user?.id;
     if (!uid || intakeSubmitting) return;
@@ -195,6 +223,7 @@ export default function PlanIntakeFlow({ open, onClose, supabase, session, profi
         .update({
           target_race_name: intakeRaceName ? String(intakeRaceName).trim() : null,
           target_race_date: intakeRaceDate || null,
+          equipment_access: intakeEquipment,
         })
         .eq("user_id", uid);
       if (upErr) throw new Error(upErr.message);
@@ -203,6 +232,7 @@ export default function PlanIntakeFlow({ open, onClose, supabase, session, profi
           ...profile,
           target_race_name: intakeRaceName ? String(intakeRaceName).trim() : null,
           target_race_date: raceForRow,
+          equipment_access: intakeEquipment,
         },
         userBaselines,
         daysPerWeek,
@@ -371,7 +401,9 @@ export default function PlanIntakeFlow({ open, onClose, supabase, session, profi
             mainFocus={mainFocus}
             intakeRaceName={intakeRaceName}
             intakeRaceDate={intakeRaceDate}
+            intakeEquipment={intakeEquipment}
             onJumpToStep={jumpToStep}
+            onEditEquipment={() => setEquipmentOverlayOpen(true)}
             onLooksGood={handleLooksGood}
             onBackFullEdit={() => setStep(0)}
             submitting={intakeSubmitting}
@@ -430,6 +462,14 @@ export default function PlanIntakeFlow({ open, onClose, supabase, session, profi
           )}
         </div>
       </IntakeShell>
+
+      {equipmentOverlayOpen ? (
+        <Step6Equipment
+          currentEquipment={intakeEquipment}
+          onChange={applyEquipmentUpdate}
+          onClose={() => setEquipmentOverlayOpen(false)}
+        />
+      ) : null}
     </div>
   );
 }
