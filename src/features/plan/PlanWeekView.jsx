@@ -2,7 +2,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { PhaseHeaderStrip } from "./components/PhaseHeaderStrip.jsx";
 import { WeekGrid } from "./components/WeekGrid.jsx";
 import PlanBlockTimeline from "./PlanBlockTimeline.jsx";
-import { getPhaseGradient, getSessionIntent } from "./components/intentConfig.js";
+import { getPhaseGradient, getPhaseStatusLabel, getSessionIntent } from "./components/intentConfig.js";
 import { SessionHeroCard } from "./components/SessionHeroCard.jsx";
 import { SessionFeedbackSheet } from "./components/SessionFeedbackSheet.jsx";
 import {
@@ -30,8 +30,8 @@ function mapRpeBucketForDb(key) {
 function extractWeekTypeFromNotes(days) {
   for (const d of days || []) {
     const text = String(d?.note ?? d?.note2a ?? "");
-    const m = text.match(/WEEK\s*TYPE\s*:\s*([A-Za-z]+)/i);
-    if (m) return m[1].toUpperCase();
+    const m = text.match(/WEEK\s*TYPE\s*:\s*([A-Za-z ]+)/i);
+    if (m) return String(m[1] || "").trim().toUpperCase();
   }
   return "STANDARD";
 }
@@ -43,6 +43,12 @@ function structureIntentBucket(day) {
   if (intent.label === "Strength") return "strength";
   if (intent.label === "Recovery") return "recovery";
   return "conditioning";
+}
+
+function getWeekTypeColor(weekType) {
+  if (weekType === "BRICK") return "#FF8A6C";
+  if (weekType === "DELOAD") return "rgba(255,255,255,0.45)";
+  return "rgba(201,168,117,0.85)";
 }
 
 function normalizeDays(week) {
@@ -179,7 +185,10 @@ export default function PlanWeekView({
 
   const weeklyStructure = useMemo(() => {
     const days = daysState;
-    const weekType = extractWeekTypeFromNotes(days);
+    let weekType = extractWeekTypeFromNotes(days);
+    if (weekType === "STANDARD" && /deload/i.test(String(currentWeek?.subtitle || ""))) {
+      weekType = "DELOAD";
+    }
     let plannedSessions = 0;
     let completedCount = 0;
     let nStrength = 0;
@@ -206,21 +215,16 @@ export default function PlanWeekView({
     const pct = plannedSessions ? (completedCount / plannedSessions) * 100 : 0;
     const complianceColor =
       pct >= 80 ? "rgba(120,200,180,0.95)" : pct >= 50 ? "#C9A875" : "rgba(255,255,255,0.35)";
-    const weekTypeColor =
-      weekType === "BRICK"
-        ? "#FF8A6C"
-        : weekType === "DELOAD"
-          ? "rgba(255,255,255,0.45)"
-          : "rgba(201,168,117,0.85)";
     return {
       weekType,
-      weekTypeColor,
+      weekTypeColor: getWeekTypeColor(weekType),
       plannedSessions,
       completedCount,
       sessionBreakdown: sessionBreakdown || "—",
       complianceColor,
+      compliancePercent: pct,
     };
-  }, [daysState]);
+  }, [daysState, currentWeek?.subtitle]);
 
   const isOnTodayInThisWeek = isCurrentWeek && selectedDayIndex === todayIndex;
 
@@ -548,7 +552,7 @@ export default function PlanWeekView({
           <div
             style={{
               height: "100%",
-              width: `${weeklyStructure.plannedSessions ? (weeklyStructure.completedCount / weeklyStructure.plannedSessions) * 100 : 0}%`,
+              width: `${weeklyStructure.compliancePercent}%`,
               background: weeklyStructure.complianceColor,
             }}
           />
