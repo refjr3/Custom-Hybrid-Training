@@ -1,11 +1,11 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { PhaseHeaderStrip } from "./components/PhaseHeaderStrip.jsx";
 import { WeekGrid } from "./components/WeekGrid.jsx";
 import PlanBlockTimeline from "./PlanBlockTimeline.jsx";
 import { getPhaseGradient } from "./components/intentConfig.js";
 import { SessionHeroCard } from "./components/SessionHeroCard.jsx";
 import {
-  extractDayNumber,
+  computePhaseProgress,
   getCurrentWeek,
   getDayIndex,
   parseWeekDates,
@@ -51,7 +51,6 @@ function normalizeDays(week) {
       am_session_blocks: Array.isArray(day?.am_session_blocks) ? day.am_session_blocks : [],
       _iso: iso,
       _dayIndex: idx,
-      _dateNum: extractDayNumber(dateLabel),
       _dateObj: iso ? new Date(`${iso}T12:00:00`) : null,
     };
   });
@@ -72,6 +71,8 @@ export default function PlanWeekView({
   const [selectedDayIndex, setSelectedDayIndex] = useState(null);
   const [showBlockTimeline, setShowBlockTimeline] = useState(false);
   const [feedbackTargetDayId, setFeedbackTargetDayId] = useState(null);
+  const [daysState, setDaysState] = useState([]);
+  const discardWarnedRef = useRef(false);
 
   const activeVariant = useMemo(
     () => (planVariants || []).find((v) => v.id === activeVariantId) || null,
@@ -109,7 +110,7 @@ export default function PlanWeekView({
 
   const totalWeeks = allWeeks.length;
   const currentWeek = allWeeks[currentWeekIdx] || null;
-  const days = useMemo(() => normalizeDays(currentWeek), [currentWeek]);
+  const normalizedDays = useMemo(() => normalizeDays(currentWeek), [currentWeek]);
   const todayDate = useMemo(() => new Date(), [currentWeekIdx, allWeeks.length]);
   const todayIso = todayDate.toISOString().slice(0, 10);
   const todayInfo = useMemo(() => getCurrentWeek(allWeeks, todayDate), [allWeeks, todayDate]);
@@ -119,12 +120,16 @@ export default function PlanWeekView({
     [isCurrentWeek, todayDate],
   );
   const selectedDay =
-    selectedDayIndex != null && selectedDayIndex >= 0 && selectedDayIndex < days.length
-      ? days[selectedDayIndex]
+    selectedDayIndex != null && selectedDayIndex >= 0 && selectedDayIndex < daysState.length
+      ? daysState[selectedDayIndex]
       : null;
 
   useEffect(() => {
-    if (!days.length) {
+    setDaysState(normalizedDays);
+  }, [normalizedDays, currentWeek?.id]);
+
+  useEffect(() => {
+    if (!daysState.length) {
       setSelectedDayIndex(null);
       return;
     }
@@ -133,38 +138,28 @@ export default function PlanWeekView({
       return;
     }
     setSelectedDayIndex(0);
-  }, [days, todayIndex, currentWeekIdx, isCurrentWeek]);
+  }, [daysState, todayIndex, currentWeekIdx, isCurrentWeek]);
   const currentWeekOrder = currentWeek?._weekOrder || currentWeekIdx + 1;
   const phases = Array.isArray(activeVariant?.phases) ? activeVariant.phases : [];
   const phaseCtx = useMemo(() => {
-    const currentName = String(currentWeek?._blockLabel || currentWeek?.phase || "").trim();
-    const normalizedCurrent = normalizePhaseKey(currentName);
-    let match =
-      phases.find((p) => normalizePhaseKey(p?.name) === normalizedCurrent) ||
-      phases.find((p) => {
-        const start = Number(p?.start_week);
-        const end = Number(p?.end_week);
-        if (!Number.isFinite(start) || !Number.isFinite(end)) return false;
-        return currentWeekOrder >= start && currentWeekOrder <= end;
-      }) ||
-      null;
-    if (!match && phases.length > 0) match = phases[0];
-    const start = Number(match?.start_week);
-    const end = Number(match?.end_week);
-    const phaseStart = Number.isFinite(start) && start > 0 ? start : currentWeekOrder;
-    const phaseEnd = Number.isFinite(end) && end >= phaseStart ? end : phaseStart;
-    const total = Math.max(1, phaseEnd - phaseStart + 1);
-    const inPhase = Math.max(1, Math.min(total, currentWeekOrder - phaseStart + 1));
-    const percent = Math.max(0, Math.min(100, Math.round((inPhase / total) * 100)));
+    const base = computePhaseProgress(allWeeks, currentWeekOrder, phases);
+    const currentName = String(currentWeek?._blockLabel || currentWeek?.phase || base?.phase?.name || "").trim();
+    const progress = base || {
+      phase: { name: currentName || "Base" },
+      phaseTotalWeeks: 1,
+      currentWeekInPhase: 1,
+      phaseProgressPercent: 100,
+      phaseStatusLabel: "Wk 1 of 1",
+    };
     return {
       isDeloadWeek: /deload/i.test(String(currentWeek?.subtitle || "")),
-      currentWeekInPhase: inPhase,
-      phaseTotalWeeks: total,
-      phaseProgressPercent: percent,
-      phaseStatusLabel: getPhaseStatusLabel(inPhase, total),
-      phaseGradient: getPhaseGradient(match?.name || currentName),
+      currentWeekInPhase: progress.currentWeekInPhase,
+      phaseTotalWeeks: progress.phaseTotalWeeks,
+      phaseProgressPercent: progress.phaseProgressPercent,
+      phaseStatusLabel: progress.phaseStatusLabel || getPhaseStatusLabel(progress.currentWeekInPhase, progress.phaseTotalWeeks),
+      phaseGradient: getPhaseGradient(progress.phase?.name || currentName),
     };
-  }, [phases, currentWeek?._blockLabel, currentWeek?.phase, currentWeek?.subtitle, currentWeekOrder]);
+  }, [allWeeks, phases, currentWeek?._blockLabel, currentWeek?.phase, currentWeek?.subtitle, currentWeekOrder]);
 
   const isOnTodayInThisWeek = isCurrentWeek && selectedDayIndex === todayIndex;
 
@@ -181,22 +176,13 @@ export default function PlanWeekView({
       console.error("[PlanWeekView] save edit:", error.message);
       return;
     }
-    const nextDays = days.map((d, i) =>
+    const nextDays = daysState.map((d, i) =>
       i === selectedDayIndex
         ? { ...d, am_session_blocks: editedBlocks, is_user_modified: true }
         : d,
     );
-    const nextWeeks = allWeeks.map((w) =>
-      w.id === currentWeek?.id ? { ...w, days: nextDays } : w,
-    );
-    const idx = nextWeeks.findIndex((w) => w.id === currentWeek?.id);
-    if (idx >= 0) {
-      const updated = nextWeeks[idx];
-      setSelectedDayIndex((prev) => (prev == null ? 0 : prev));
-      // force rerender through week index update no-op + stable data path
-      setCurrentWeekIdx(idx);
-      nextWeeks[idx] = updated;
-    }
+    setDaysState(nextDays);
+    setSelectedDayIndex((prev) => (prev == null ? 0 : prev));
   }
 
   function jumpToToday() {
@@ -378,10 +364,15 @@ export default function PlanWeekView({
       </div>
 
       <WeekGrid
-        days={days}
+        days={daysState}
         selectedDayIndex={selectedDayIndex}
         todayIndex={todayIndex}
-        onSelectDay={setSelectedDayIndex}
+        onSelectDay={(idx) => {
+          if (!discardWarnedRef.current) {
+            discardWarnedRef.current = true;
+          }
+          setSelectedDayIndex(idx);
+        }}
       />
 
       {selectedDay ? (
@@ -405,6 +396,7 @@ export default function PlanWeekView({
             if (idx >= 0) {
               setCurrentWeekIdx(idx);
               const nextDays = normalizeDays(allWeeks[idx]);
+              setDaysState(nextDays);
               const nextToday = getCurrentWeek([allWeeks[idx]], todayDate);
               if (nextToday?.week?.id === allWeeks[idx].id) setSelectedDayIndex(getDayIndex(todayDate));
               else setSelectedDayIndex(nextDays.length ? 0 : null);
