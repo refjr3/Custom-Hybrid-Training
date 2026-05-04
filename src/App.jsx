@@ -9,6 +9,7 @@ import OnboardingFlow from "./features/onboarding/OnboardingFlow.jsx";
 import PlanBuilder from "./PlanBuilder";
 import TodayDrawer from "./TodayDrawer.jsx";
 import PlanIntakeFlow from "./features/planIntake/PlanIntakeFlow.jsx";
+import PlanWeekView from "./features/plan/PlanWeekView.jsx";
 import { useDataSources } from "./features/today/useDataSources.js";
 import { ConnectPrompt } from "./features/today/ConnectPrompt.jsx";
 import { RecoveryDeepDive } from "./features/today/RecoveryDeepDive.jsx";
@@ -5195,13 +5196,27 @@ export default function App() {
         profile={profile}
       />
 
-      {nav === "plan" && planLoading && (
+      {nav === "plan" && (
+        <PlanWeekView
+          user={session?.user || null}
+          supabase={supabase}
+          profile={profile}
+          planVariants={planVariants}
+          activeVariantId={activeVariantId}
+          planBlocks={planBlocks}
+          planLoading={planLoading}
+          onOpenPlanBuilder={() => setPlanBuilderOpen(true)}
+          onSwitchVariant={switchVariant}
+        />
+      )}
+
+      {false && nav === "plan" && planLoading && (
         <div style={{ display:"flex", alignItems:"center", justifyContent:"center", padding:60 }}>
           <div style={{ fontFamily:C.ff, fontSize:16, color:C.muted, letterSpacing:4 }}>LOADING PLAN...</div>
         </div>
       )}
 
-      {nav === "plan" && !planLoading && planBlocks.length === 0 && !planBuilderDismissed && (
+      {false && nav === "plan" && !planLoading && planBlocks.length === 0 && !planBuilderDismissed && (
         <div style={{ textAlign: "center", padding: "60px 24px" }}>
           <div style={{ fontFamily: C.fm, color: C.muted, letterSpacing: 3, fontSize: 10, marginBottom: 16, textTransform: "uppercase" }}>NO TRAINING PLAN FOUND</div>
           <button
@@ -5220,7 +5235,7 @@ export default function App() {
         </div>
       )}
 
-      {nav === "plan" && !planLoading && planBlocks.length > 0 && (
+      {false && nav === "plan" && !planLoading && planBlocks.length > 0 && (
         <div style={{ padding:"0 16px 24px", background:C.bg }}>
           <div style={{ paddingTop:16 }}>
             {planVariants.length > 1 && (
