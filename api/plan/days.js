@@ -108,15 +108,20 @@ export default async function handler(req, res) {
     const weekDays = (daysByWeek[week.week_id] || [])
       .sort((a, b) => (DAY_ORDER[a.day_name] ?? 99) - (DAY_ORDER[b.day_name] ?? 99))
       .map((d) => ({
+        id: d.id,
         day: d.day_name,
         date: d.date_label,
         am: d.am_session,
         pm: d.pm_session,
+        am_session: d.am_session,
+        pm_session: d.pm_session,
         am_session_blocks: d.am_session_blocks || [],
         pm_session_blocks: d.pm_session_blocks || [],
         am_session_custom: d.am_session_custom || null,
         pm_session_custom: d.pm_session_custom || null,
+        note: d.note ?? null,
         note2a: d.note,
+        am_completed_at: d.am_completed_at ?? null,
         isRaceDay: d.is_race_day,
         isSunday: d.is_sunday,
         ai_modified: d.ai_modified || false,
@@ -124,6 +129,8 @@ export default async function handler(req, res) {
       }));
     blockMap[blockId].weeks.push({
       id: week.id,
+      week_id: week.week_id,
+      week_order: week.week_order,
       label: week.label,
       dates: week.dates,
       phase: week.phase,

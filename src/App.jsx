@@ -19,6 +19,12 @@ import { SleepDeepDive } from "./features/today/SleepDeepDive.jsx";
 import { DailyCallCard } from "./features/today/DailyCallCard.jsx";
 import { InfoPop } from "./components/InfoPop.jsx";
 import { metricExplainers } from "./features/explainers/metrics.js";
+import { parseExerciseLine, normalizeWorkoutBlocks } from "./features/plan/lib/normalizeWorkoutBlocks.js";
+import { computePhaseProgress, getCalendarCurrentWeekFromPlan } from "./features/plan/lib/weekDateUtils.js";
+import { PhaseHeaderStrip } from "./features/plan/components/PhaseHeaderStrip.jsx";
+import { SessionHeroCard } from "./features/plan/components/SessionHeroCard.jsx";
+import { PlanBlockTimeline } from "./features/plan/components/PlanBlockTimeline.jsx";
+import { SessionFeedbackSheet } from "./features/plan/components/SessionFeedbackSheet.jsx";
 
 const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
 const supabaseKey = import.meta.env.VITE_SUPABASE_ANON_KEY;
@@ -1398,60 +1404,6 @@ function getSessionIcon(amSession, customSession) {
   return { icon: "—", color: "#444" };
 }
 
-const parseExerciseLine = (line) => {
-  const raw = String(line || "").trim();
-  if (!raw) return { name: "", detail: "" };
-  if (raw.includes(" · ")) {
-    const [name, ...rest] = raw.split(" · ");
-    return { name: name.trim(), detail: rest.join(" · ").trim() };
-  }
-  const m = raw.match(/^(.*?)(?:\s{2,}|\s+)(\d+\s*[x×].*|.*\/side.*|.*sec.*|.*min.*|@.*|RPE.*)$/i);
-  if (m) return { name: m[1].trim(), detail: m[2].trim() };
-  return { name: raw, detail: "" };
-};
-
-const normalizeWorkoutBlocks = (sessionBlocks, workout) => {
-  if (Array.isArray(sessionBlocks) && sessionBlocks.length > 0) {
-    return sessionBlocks.map((block, bi) => {
-      const exercises = Array.isArray(block?.exercises) ? block.exercises : [];
-      const items = exercises.map((ex) => {
-        if (typeof ex === "string") return parseExerciseLine(ex);
-        const name = ex?.name || ex?.exercise || ex?.title || "Exercise";
-        const detailParts = [];
-        if (ex?.sets) detailParts.push(`${ex.sets}x`);
-        if (ex?.reps) detailParts.push(String(ex.reps));
-        if (ex?.distance) detailParts.push(String(ex.distance));
-        if (ex?.duration) detailParts.push(String(ex.duration));
-        if (ex?.target) detailParts.push(String(ex.target));
-        if (ex?.note) detailParts.push(String(ex.note));
-        return { name, detail: detailParts.join(" · ") };
-      });
-      return {
-        title: String(block?.type || block?.name || `Block ${bi + 1}`).replace(/_/g, " ").toUpperCase(),
-        rounds: Number(block?.rounds) || null,
-        items: items.filter((i) => i.name),
-      };
-    });
-  }
-
-  const steps = Array.isArray(workout?.steps) ? workout.steps : [];
-  if (steps.length === 0) return [];
-  const blocks = [];
-  let current = { title: "WORKOUT", rounds: null, items: [] };
-  steps.forEach((step) => {
-    if (typeof step !== "string") return;
-    if (step.startsWith("—")) {
-      if (current.items.length > 0) blocks.push(current);
-      current = { title: step.replace(/—/g, "").trim().toUpperCase() || "WORKOUT", rounds: null, items: [] };
-      return;
-    }
-    const parsed = parseExerciseLine(step);
-    if (parsed.name) current.items.push(parsed);
-  });
-  if (current.items.length > 0) blocks.push(current);
-  return blocks;
-};
-
 const inferWorkoutSport = (sessionName, sessionKey) => {
   const s = String(sessionName || "").toLowerCase();
   if (s.includes("ski")) return "ski_erg";
@@ -2339,7 +2291,10 @@ const SessionModal = ({ name, dayData, sess, weekId, onClose, onSessSwitch, sund
   const [editToast, setEditToast] = useState(null);
   const [dragIdx, setDragIdx] = useState(null);
 
-  if (!name && !dayData?.isSunday && !dayData?.isRaceDay) return null;
+  const rawBlocks = sess === "am" ? dayData?.am_session_blocks : dayData?.pm_session_blocks;
+  const hasDocBlocks = Array.isArray(rawBlocks) && rawBlocks.length > 0;
+  const hasDocNote = !!(String(dayData?.note || dayData?.note2a || "").trim());
+  if (!name && !dayData?.isSunday && !dayData?.isRaceDay && !hasDocBlocks && !hasDocNote) return null;
   const w = name ? WL[name] : null;
   const accent = name ? getAccent(name) : C.muted;
   const customContent = sess === "am" ? dayData?.am_session_custom : dayData?.pm_session_custom;
@@ -2354,7 +2309,7 @@ const SessionModal = ({ name, dayData, sess, weekId, onClose, onSessSwitch, sund
     setEditName(name || "");
     setEditType(w?.type || "");
     setEditDuration(w?.duration?.replace(/[^0-9]/g,"") || "");
-    setEditNote(dayData?.note2a || w?.note || "");
+    setEditNote((dayData?.note ?? dayData?.note2a ?? w?.note) || "");
     const existing = sess === "am" ? dayData?.am_session_blocks : dayData?.pm_session_blocks;
     if (existing && existing.length > 0) {
       setEditBlocks(JSON.parse(JSON.stringify(existing)));
@@ -2379,11 +2334,14 @@ const SessionModal = ({ name, dayData, sess, weekId, onClose, onSessSwitch, sund
     const ordered = editBlocks.map((b,i) => ({ ...b, order:i }));
     const manuallyEditedBlocks = ordered.map((b) => ({ ...b, is_modified: true, is_ai_generated: false }));
     const update = {
-      [blocksKey]: manuallyEditedBlocks,
       note: editNote,
       ai_modified: false,
       ai_modification_note: null,
+      is_user_modified: true,
     };
+    if (ordered.length > 0) {
+      update[blocksKey] = manuallyEditedBlocks;
+    }
     try {
       const { data: vRow } = await supabase
         .from("plan_variants")
@@ -2510,13 +2468,35 @@ const SessionModal = ({ name, dayData, sess, weekId, onClose, onSessSwitch, sund
                 </div>
               </div>
             </div>
-            <div>
-              <div style={{ fontFamily:C.fm, fontSize:7, color:C.muted, letterSpacing:3, marginBottom:4 }}>NOTE</div>
-              <textarea value={editNote} onChange={e => setEditNote(e.target.value)} rows={2} style={{ ...inputStyle, resize:"vertical" }} />
-            </div>
+            {editBlocks.length > 0 && (
+              <div>
+                <div style={{ fontFamily:C.fm, fontSize:7, color:C.muted, letterSpacing:3, marginBottom:4 }}>NOTE</div>
+                <textarea value={editNote} onChange={e => setEditNote(e.target.value)} rows={2} style={{ ...inputStyle, resize:"vertical" }} />
+              </div>
+            )}
           </div>
 
           <div style={{ padding:"0 20px" }}>
+            {editBlocks.length === 0 ? (
+              <div style={{ marginBottom:20 }}>
+                <div style={{ fontFamily:C.fm, fontSize:7, color:C.muted, letterSpacing:3, marginBottom:8 }}>SESSION DETAIL</div>
+                <textarea
+                  value={editNote}
+                  onChange={e => setEditNote(e.target.value)}
+                  style={{
+                    width:"100%", minHeight:200,
+                    background:"rgba(255,255,255,0.04)",
+                    border:"0.5px solid rgba(201,168,117,0.25)",
+                    borderRadius:10, padding:"12px 14px",
+                    fontSize:13, color:"#fff",
+                    fontFamily:"inherit", lineHeight:1.6,
+                    resize:"vertical", whiteSpace:"pre-wrap",
+                    boxSizing:"border-box",
+                  }}
+                />
+              </div>
+            ) : (
+              <>
             <div style={{ fontFamily:C.fm, fontSize:7, color:C.muted, letterSpacing:3, marginBottom:10 }}>WORKOUT BLOCKS</div>
             {editBlocks.map((block, bi) => (
               <div key={block.id} draggable onDragStart={() => handleDragStart(bi)} onDragOver={e => handleDragOver(e, bi)} onDrop={() => handleDrop(bi)}
@@ -2577,6 +2557,8 @@ const SessionModal = ({ name, dayData, sess, weekId, onClose, onSessSwitch, sund
               </div>
             ))}
             <button onClick={addBlock} style={{ width:"100%", padding:"12px", background:"transparent", border:`1px dashed ${C.cyan}44`, borderRadius:12, cursor:"pointer", fontFamily:C.ff, fontSize:12, color:C.cyan, letterSpacing:2, marginBottom:20 }}>+ ADD BLOCK</button>
+              </>
+            )}
           </div>
         </div>
         {toast && (
@@ -2598,11 +2580,15 @@ const SessionModal = ({ name, dayData, sess, weekId, onClose, onSessSwitch, sund
               <div style={{ fontFamily:C.ff, fontSize:36, color:C.red, lineHeight:1 }}>RACE DAY<br/>MIAMI 🏁</div>
             ) : w ? (
               <div style={{ fontFamily:C.ff, fontSize:28, color:C.text, letterSpacing:0.5, lineHeight:1.1 }}>{name.split(" — ")[1] || name}</div>
+            ) : hasDocNote ? (
+              <div style={{ fontFamily:C.ff, fontSize:24, color:C.text, letterSpacing:0.5, lineHeight:1.15 }}>
+                {(dayData?.am_session_custom || "").split("\n")[0] || dayData?.am || dayData?.am_session || "SESSION"}
+              </div>
             ) : (
               <div style={{ fontFamily:C.ff, fontSize:24, color:C.muted }}>SUNDAY SESSION</div>
             )}
             {w && <div style={{ fontFamily:C.fm, fontSize:8, color:C.muted, marginTop:4 }}>{w.duration}</div>}
-            {!dayData?.isRaceDay && (name || customContent) && (
+            {!dayData?.isRaceDay && (name || customContent || hasDocNote) && (
               <div
                 style={{
                   display: "inline-block",
@@ -2691,6 +2677,10 @@ const SessionModal = ({ name, dayData, sess, weekId, onClose, onSessSwitch, sund
                 <div style={{ fontFamily:C.fs, fontSize:13, color:C.muted, lineHeight:1.8 }}>{dayData?.note2a || w.note}</div>
               </div>
             </>
+          ) : hasDocNote ? (
+            <div style={{ fontFamily:C.fs, fontSize:14, color:C.text, lineHeight:1.65, whiteSpace:"pre-wrap", padding:"4px 0 8px" }}>
+              {dayData?.note ?? dayData?.note2a}
+            </div>
           ) : null}
         </div>
       </div>
@@ -2761,6 +2751,10 @@ export default function App() {
   const [planBuilderDismissUntil, setPlanBuilderDismissUntil] = useState(0);
   const [showRecoveryGates, setShowRecoveryGates] = useState(false);
   const [showAiAdjustments, setShowAiAdjustments] = useState(true);
+  const [planTimelineOpen, setPlanTimelineOpen] = useState(false);
+  const [feedbackOpen, setFeedbackOpen] = useState(false);
+  const [feedbackDay, setFeedbackDay] = useState(null);
+  const [planEditModal, setPlanEditModal] = useState(null);
   const [labContext, setLabContext] = useState("");
   const [labTargetDay, setLabTargetDay] = useState(null);
   const [cqSelections, setCqSelections] = useState({});
@@ -4005,6 +3999,7 @@ export default function App() {
   const getSessionNameForDay = (d, slot = "am") => (slot === "am" ? getEffAm(d) : d?.pm);
   const getDayDateKey = (d) => d?.date?.split(" ")[0] || "";
   const isDayCompleted = (d) => {
+    if (d?.am_completed_at) return true;
     const dayDateKey = getDayDateKey(d);
     if (!dayDateKey) return false;
     return garminActivities.some((a) => a.start_time?.startsWith(dayDateKey));
@@ -4066,6 +4061,27 @@ export default function App() {
   const selectedWhoopRule = dayData?.note || "Execute as programmed.";
   const selectedWhoopGate = whoopLabel(whoopData?.recovery?.score ?? 0);
   const selectedDayName = dayData?.day || selectedDayKey || "";
+
+  const WHOOP_RULES_DEFAULT = "Green: Execute as programmed.\nYellow: Reduce 30–40% volume.\nRed: Full rest.";
+  const blocksAmHero = dayData?.am_session_blocks;
+  const hasHeroStructuredBlocks = Array.isArray(blocksAmHero) && blocksAmHero.length > 0;
+  const whoopRulesForHero =
+    dayData?.ai_modification_note ||
+    (hasHeroStructuredBlocks ? (dayData?.note || WHOOP_RULES_DEFAULT) : WHOOP_RULES_DEFAULT);
+
+  const calWeekMeta = getCalendarCurrentWeekFromPlan(planBlocks);
+  const phaseNameKey = calWeekMeta?.week?.phase || week?.phase;
+  const allPlanWeeksFlat = planBlocks.flatMap((b) => b.weeks || []);
+  const weeksMatchingPhase = phaseNameKey
+    ? allPlanWeeksFlat.filter((w) => w.phase === phaseNameKey)
+    : weeks;
+  const phaseOrderForBar =
+    calWeekMeta?.weekOrder != null
+      ? calWeekMeta.weekOrder
+      : week?.week_order != null
+        ? Number(week.week_order)
+        : null;
+  const phaseProgress = computePhaseProgress(weeksMatchingPhase, phaseOrderForBar);
 
   const weeklyAiAdjustments = (week?.days || [])
     .filter((d) => d?.ai_modified === true)
@@ -4299,13 +4315,6 @@ export default function App() {
         const perfHdr = derivePerfPlanHeader(planBlocks);
         const normalizedZone = normalizeZoneKey(localSelectedZone);
         const cardMinutes = weeklyZoneMinutes[normalizedZone] ?? 0;
-        console.log("[CARD RENDER]", {
-          localSelectedZone,
-          normalizedZone,
-          weeklyZoneMinutes,
-          cardMinutes,
-          zoneTargets: localZoneTargets,
-        });
         const zoneConfig = getZoneConfig(normalizedZone);
         const zoneTarget =
           localZoneTargets[normalizedZone] ?? getZoneConfig(normalizedZone).defaultTarget;
@@ -5161,6 +5170,75 @@ export default function App() {
         );
       })()}
 
+      {planEditModal && (
+        <SessionModal
+          name={planEditModal.name}
+          dayData={planEditModal.dayData}
+          sess={planEditModal.sess}
+          weekId={planEditModal.weekUuid}
+          onClose={() => setPlanEditModal(null)}
+          onSessSwitch={(s) => setPlanEditModal((m) => (m ? { ...m, sess: s } : null))}
+          sundayChoice={sundayChoice}
+          setSundayChoice={setSundayChoice}
+          supabase={supabase}
+          session={session}
+          onSaved={() => {
+            fetchPlan(session?.access_token);
+            setPlanEditModal(null);
+          }}
+        />
+      )}
+      <PlanBlockTimeline
+        open={planTimelineOpen}
+        onClose={() => setPlanTimelineOpen(false)}
+        planBlocks={planBlocks}
+        currentWeekId={calWeekMeta?.weekId}
+        onSelectWeek={(bid, wid) => {
+          setBlockId(bid);
+          setWeekId(wid);
+          setSelDay(null);
+        }}
+      />
+      {feedbackOpen && feedbackDay && session?.user?.id && (
+        <SessionFeedbackSheet
+          slot="am"
+          onClose={() => {
+            setFeedbackOpen(false);
+            setFeedbackDay(null);
+          }}
+          onSave={async (feedback) => {
+            const userId = session.user.id;
+            const { error: e1 } = await supabase.from("session_feedback").insert({
+              user_id: userId,
+              training_day_id: feedbackDay.id,
+              session_slot: "am",
+              rpe_bucket: feedback.rpe_bucket,
+              rpe_numeric: feedback.rpe_numeric,
+              notes: feedback.notes,
+              completed_at: new Date().toISOString(),
+            });
+            if (e1) throw e1;
+            let dayQ = supabase
+              .from("training_days")
+              .update({ am_completed_at: new Date().toISOString() })
+              .eq("id", feedbackDay.id)
+              .eq("user_id", userId);
+            const { data: vRow } = await supabase
+              .from("plan_variants")
+              .select("id")
+              .eq("user_id", userId)
+              .eq("is_active", true)
+              .maybeSingle();
+            const activeVid = vRow?.id ?? null;
+            dayQ = activeVid ? dayQ.or(`variant_id.eq.${activeVid},variant_id.is.null`) : dayQ.is("variant_id", null);
+            const { error: e2 } = await dayQ;
+            if (e2) throw e2;
+            setFeedbackOpen(false);
+            setFeedbackDay(null);
+            await fetchPlan(session?.access_token);
+          }}
+        />
+      )}
       <RecoveryDeepDive
         open={recoveryModalOpen}
         onClose={() => setRecoveryModalOpen(false)}
@@ -5330,6 +5408,26 @@ export default function App() {
             })}
           </div>
 
+          <div style={{ marginTop: 10, display: "flex", justifyContent: "flex-end" }}>
+            <button
+              type="button"
+              onClick={() => setPlanTimelineOpen(true)}
+              style={{
+                fontFamily: C.fm,
+                fontSize: 8,
+                letterSpacing: 2,
+                color: C.cyan,
+                background: "transparent",
+                border: "none",
+                cursor: "pointer",
+                textTransform: "uppercase",
+              }}
+            >
+              Block timeline
+            </button>
+          </div>
+          <PhaseHeaderStrip phaseProgress={phaseProgress} />
+
           <div style={{ marginTop:16, marginBottom:16 }}>
             <div style={{ fontFamily:C.fm, fontSize:9, color:phaseColor, letterSpacing:3, textTransform:"uppercase", marginBottom:4 }}>{week.phase}</div>
             <div style={{ fontFamily:C.ff, fontSize:28, color:C.text, letterSpacing:1 }}>{week.label}</div>
@@ -5412,54 +5510,66 @@ export default function App() {
           {dayData && (
             <div
               style={{
-                ...glassCard,
                 marginTop: 16,
                 marginBottom: 0,
                 overflow: "hidden",
-                maxHeight: dayData ? 520 : 0,
+                maxHeight: dayData ? 720 : 0,
                 opacity: dayData ? 1 : 0,
                 transform: dayData ? "translateY(0)" : "translateY(-6px)",
                 transition: "max-height 200ms ease, opacity 200ms ease, transform 200ms ease",
               }}
             >
-              <div style={specularTop()} />
               {dayData.pm && (
-                <div style={{ display:"flex", borderBottom:`1px solid ${C.border}`, position:"relative", zIndex:1 }}>
-                  {[["am","AM"],["pm","PM"]].map(([s,l]) => (
-                    <button
-                      key={s}
-                      onClick={() => setSess(s)}
-                      style={{ flex:1, padding:"10px 12px", background:"transparent", border:"none", borderBottom: sess===s ? `1.5px solid ${DS.gold}` : "1.5px solid transparent", color: sess===s ? C.text : C.muted, cursor:"pointer", fontFamily:C.fm, fontSize:9, letterSpacing:3, textTransform:"uppercase" }}
-                    >
-                      {l}
-                    </button>
-                  ))}
+                <div style={{ ...glassCard, borderBottom: `1px solid ${C.border}`, marginBottom: 0, borderRadius: `${C.radius}px ${C.radius}px 0 0` }}>
+                  <div style={specularTop()} />
+                  <div style={{ display: "flex", position: "relative", zIndex: 1 }}>
+                    {[["am", "AM"], ["pm", "PM"]].map(([s, l]) => (
+                      <button
+                        key={s}
+                        type="button"
+                        onClick={() => setSess(s)}
+                        style={{
+                          flex: 1,
+                          padding: "10px 12px",
+                          background: "transparent",
+                          border: "none",
+                          borderBottom: sess === s ? `1.5px solid ${DS.gold}` : "1.5px solid transparent",
+                          color: sess === s ? C.text : C.muted,
+                          cursor: "pointer",
+                          fontFamily: C.fm,
+                          fontSize: 9,
+                          letterSpacing: 3,
+                          textTransform: "uppercase",
+                        }}
+                      >
+                        {l}
+                      </button>
+                    ))}
+                  </div>
                 </div>
               )}
-
-              <div style={{ padding:"14px 14px 16px", display:"flex", flexDirection:"column", gap:12, position:"relative", zIndex:1 }}>
-                <div style={{ display:"flex", alignItems:"center", gap:10 }}>
-                  <span style={{ fontFamily:C.fm, fontSize:8, color:selectedMeta.color, letterSpacing:2, textTransform:"uppercase", background:`${selectedMeta.color}22`, border:`1px solid ${selectedMeta.color}55`, borderRadius:4, padding:"2px 8px" }}>{selectedMeta.tag}</span>
-                  {dayData?.ai_modified && <span style={{ fontFamily:C.fm, fontSize:8, color:"#9b59b6", letterSpacing:2, textTransform:"uppercase" }}>✦ AI MODIFIED</span>}
-                </div>
-
-                <div style={{ fontFamily:C.ff, fontSize:24, color:C.text, lineHeight:1.1, letterSpacing:0.6 }}>
-                  {detailTitle}
-                </div>
-
-                <div style={{ fontFamily:C.fs, fontSize:13, color:"#aaa", lineHeight:1.55, whiteSpace:"pre-wrap" }}>
-                  {selectedCoachingNote || "Execute with controlled effort and clean transitions."}
-                </div>
-
-                <div style={{ background:C.card2, border:`1px solid ${C.border}`, borderRadius:12, padding:"10px 12px" }}>
-                  <div style={{ fontFamily:C.fm, fontSize:9, color:C.cyan, letterSpacing:2, textTransform:"uppercase", marginBottom:6 }}>
-                    WHOOP GATE RULES · {selectedWhoopGate}
-                  </div>
-                  <div style={{ fontFamily:C.fs, fontSize:12, color:C.muted, lineHeight:1.6, whiteSpace:"pre-wrap" }}>
-                    {selectedWhoopRule || "Green: Execute as programmed.\nYellow: Reduce 30–40% volume.\nRed: Full rest."}
-                  </div>
-                </div>
-              </div>
+              <SessionHeroCard
+                day={dayData}
+                sess={sess}
+                theme={{ C, glassCard, specularTop, DS }}
+                selectedMeta={selectedMeta}
+                detailTitle={detailTitle}
+                selectedWorkout={selectedWorkout}
+                selectedWhoopGate={selectedWhoopGate}
+                selectedWhoopRule={whoopRulesForHero}
+                supabase={supabase}
+                authSession={session}
+                onSaved={() => fetchPlan(session?.access_token)}
+                onMarkComplete={(d) => {
+                  setFeedbackDay(d);
+                  setFeedbackOpen(true);
+                }}
+                onOpenBlockEditor={() => {
+                  const n = getSessionNameForDay(dayData, sess);
+                  if (n) setPlanEditModal({ name: n, dayData, weekUuid: weekId, sess });
+                }}
+                completed={isDayCompleted(dayData)}
+              />
             </div>
           )}
 
