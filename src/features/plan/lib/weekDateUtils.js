@@ -1,23 +1,119 @@
+import { formatEasternYmdFromDate } from "../../../../lib/getLocalToday.js";
+
+// Parse "Apr 27 – May 3" or "May 4 – May 10" (en/em dash separator, no year)
+export function parseWeekDates(datesStr, yearHint) {
+  if (!datesStr) return null;
+  const normalized = String(datesStr).replace(/[–—-]/g, "|");
+  const parts = normalized.split("|").map((s) => s.trim());
+  if (parts.length !== 2) return null;
+
+  const year = yearHint || new Date().getFullYear();
+  const startStr = `${parts[0]} ${year}`;
+  let endStr = `${parts[1]} ${year}`;
+
+  const endHasMonth = /^[A-Za-z]+/.test(parts[1]);
+  if (!endHasMonth) {
+    const startMonth = parts[0].match(/^[A-Za-z]+/)?.[0] || "";
+    endStr = `${startMonth} ${parts[1]} ${year}`;
+  }
+
+  const start = new Date(startStr);
+  const end = new Date(endStr);
+  if (Number.isNaN(start.getTime()) || Number.isNaN(end.getTime())) return null;
+  end.setHours(23, 59, 59, 999);
+
+  if (end < start) end.setFullYear(end.getFullYear() + 1);
+  return { start, end };
+}
+
+export function getDayIndex(date) {
+  const day = date.getDay();
+  return day === 0 ? 6 : day - 1;
+}
+
+export function getCurrentWeek(weeks, today = new Date()) {
+  if (!Array.isArray(weeks) || weeks.length === 0) return null;
+  const yearHint = today.getFullYear();
+  const todayIso = formatEasternYmdFromDate(today);
+
+  for (const week of weeks) {
+    const range = parseWeekDates(week?.dates, yearHint) || deriveRangeFromDays(week, yearHint);
+    if (!range) continue;
+    const startIso = formatEasternYmdFromDate(range.start);
+    const endIso = formatEasternYmdFromDate(range.end);
+    if (todayIso >= startIso && todayIso <= endIso) {
+      return { week, range, todayDayIndex: getDayIndex(today) };
+    }
+  }
+
+  for (const week of weeks) {
+    const range = parseWeekDates(week?.dates, yearHint) || deriveRangeFromDays(week, yearHint);
+    if (!range) continue;
+    const startIso = formatEasternYmdFromDate(range.start);
+    if (startIso > todayIso) {
+      return { week, range, todayDayIndex: 0, fallback: "before_block" };
+    }
+  }
+
+  const lastWeek = weeks[weeks.length - 1];
+  return {
+    week: lastWeek,
+    range: parseWeekDates(lastWeek?.dates, yearHint) || deriveRangeFromDays(lastWeek, yearHint),
+    todayDayIndex: 6,
+    fallback: "after_block",
+  };
+}
+
+function parseDayLabelToIso(label, yearHint) {
+  if (!label) return null;
+  const parsed = new Date(`${String(label).trim()} ${yearHint}`);
+  if (Number.isNaN(parsed.getTime())) return null;
+  return formatEasternYmdFromDate(parsed);
+}
+
+function deriveRangeFromDays(week, yearHint) {
+  const dayRows = Array.isArray(week?.days) ? week.days : [];
+  const isos = dayRows
+    .map((d) => parseDayLabelToIso(d?.date_label || d?.date, yearHint))
+    .filter(Boolean)
+    .sort();
+  if (!isos.length) return null;
+  const start = new Date(`${isos[0]}T00:00:00`);
+  const end = new Date(`${isos[isos.length - 1]}T23:59:59.999`);
+  return { start, end };
+}
+
+export function extractDayNumber(dateLabel) {
+  if (!dateLabel) return "—";
+  const match = String(dateLabel).match(/(\d+)/);
+  return match ? match[1] : "—";
+}
+
+function weekOrderNum(w) {
+  const n = Number(w?.week_order ?? w?._weekOrder);
+  return Number.isFinite(n) ? n : null;
+}
+
 /**
- * Phase progress from `training_weeks.phase` across loaded week rows
- * (not from plan variant `phases` jsonb — often empty in production).
+ * Phase progress from `training_weeks.phase` on loaded week rows
+ * (not plan variant `phases` jsonb — often empty in production).
  */
 export function computePhaseProgress(weeks, currentWeekOrder) {
   if (!weeks || currentWeekOrder == null || Number.isNaN(Number(currentWeekOrder))) return null;
 
-  const currentWeek = weeks.find((w) => Number(w.week_order) === Number(currentWeekOrder));
+  const curOrd = Number(currentWeekOrder);
+  const currentWeek = weeks.find((w) => weekOrderNum(w) === curOrd) || weeks.find((w) => Number(w.week_order) === curOrd);
   if (!currentWeek?.phase) return null;
 
   const phaseName = currentWeek.phase;
   const weeksInPhase = weeks
     .filter((w) => w.phase === phaseName)
-    .sort((a, b) => Number(a.week_order) - Number(b.week_order));
+    .sort((a, b) => (weekOrderNum(a) ?? 0) - (weekOrderNum(b) ?? 0));
 
   if (weeksInPhase.length === 0) return null;
 
-  const phaseStart = Number(weeksInPhase[0].week_order);
+  const phaseStart = weekOrderNum(weeksInPhase[0]) ?? curOrd;
   const phaseTotalWeeks = weeksInPhase.length;
-  const curOrd = Number(currentWeekOrder);
   const currentWeekInPhase = curOrd - phaseStart + 1;
   const phaseProgressPercent = (currentWeekInPhase / phaseTotalWeeks) * 100;
 
@@ -26,6 +122,7 @@ export function computePhaseProgress(weeks, currentWeekOrder) {
 
   return {
     phaseName,
+    phase: { name: phaseName },
     currentWeekInPhase,
     phaseTotalWeeks,
     phaseProgressPercent,
@@ -33,7 +130,7 @@ export function computePhaseProgress(weeks, currentWeekOrder) {
   };
 }
 
-/** Calendar "today" week within loaded plan blocks (Mon–Sun span), or first week. */
+/** Calendar-current week in loaded blocks (fallback first week). */
 export function getCalendarCurrentWeekFromPlan(planBlocks) {
   if (!Array.isArray(planBlocks) || planBlocks.length === 0) return null;
 
@@ -41,10 +138,7 @@ export function getCalendarCurrentWeekFromPlan(planBlocks) {
     if (!label || typeof label !== "string") return null;
     const p = new Date(`${label.trim()} ${y}`);
     if (Number.isNaN(p.getTime())) return null;
-    const yy = p.getFullYear();
-    const mm = String(p.getMonth() + 1).padStart(2, "0");
-    const dd = String(p.getDate()).padStart(2, "0");
-    return `${yy}-${mm}-${dd}`;
+    return formatEasternYmdFromDate(p);
   };
 
   const mondayOf = (iso) => {
@@ -53,20 +147,14 @@ export function getCalendarCurrentWeekFromPlan(planBlocks) {
     const day = d.getDay();
     const diff = day === 0 ? -6 : 1 - day;
     d.setDate(d.getDate() + diff);
-    const yy = d.getFullYear();
-    const mm = String(d.getMonth() + 1).padStart(2, "0");
-    const dd = String(d.getDate()).padStart(2, "0");
-    return `${yy}-${mm}-${dd}`;
+    return formatEasternYmdFromDate(d);
   };
 
   const sunAfterMon = (monIso) => {
     const d = new Date(`${monIso}T12:00:00`);
     if (Number.isNaN(d.getTime())) return null;
     d.setDate(d.getDate() + 6);
-    const yy = d.getFullYear();
-    const mm = String(d.getMonth() + 1).padStart(2, "0");
-    const dd = String(d.getDate()).padStart(2, "0");
-    return `${yy}-${mm}-${dd}`;
+    return formatEasternYmdFromDate(d);
   };
 
   const y = new Date().getFullYear();
@@ -100,7 +188,7 @@ export function getCalendarCurrentWeekFromPlan(planBlocks) {
   return {
     blockId: hit.block?.id,
     weekId: hit.week?.id,
-    weekOrder: hit.week?.week_order != null ? Number(hit.week.week_order) : null,
+    weekOrder: hit.week?.week_order != null ? Number(hit.week.week_order) : weekOrderNum(hit.week),
     week: hit.week,
     block: hit.block,
   };

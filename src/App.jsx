@@ -9,6 +9,7 @@ import OnboardingFlow from "./features/onboarding/OnboardingFlow.jsx";
 import PlanBuilder from "./PlanBuilder";
 import TodayDrawer from "./TodayDrawer.jsx";
 import PlanIntakeFlow from "./features/planIntake/PlanIntakeFlow.jsx";
+import PlanWeekView from "./features/plan/PlanWeekView.jsx";
 import { useDataSources } from "./features/today/useDataSources.js";
 import { ConnectPrompt } from "./features/today/ConnectPrompt.jsx";
 import { RecoveryDeepDive } from "./features/today/RecoveryDeepDive.jsx";
@@ -23,8 +24,6 @@ import { parseExerciseLine, normalizeWorkoutBlocks } from "./features/plan/lib/n
 import { computePhaseProgress, getCalendarCurrentWeekFromPlan } from "./features/plan/lib/weekDateUtils.js";
 import { PhaseHeaderStrip } from "./features/plan/components/PhaseHeaderStrip.jsx";
 import { SessionHeroCard } from "./features/plan/components/SessionHeroCard.jsx";
-import { PlanBlockTimeline } from "./features/plan/components/PlanBlockTimeline.jsx";
-import { SessionFeedbackSheet } from "./features/plan/components/SessionFeedbackSheet.jsx";
 
 const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
 const supabaseKey = import.meta.env.VITE_SUPABASE_ANON_KEY;
@@ -1244,21 +1243,6 @@ const SESSION_ICONS = {
   travel: "→",
 };
 
-const MONTH_TO_INDEX = {
-  jan: 0,
-  feb: 1,
-  mar: 2,
-  apr: 3,
-  may: 4,
-  jun: 5,
-  jul: 6,
-  aug: 7,
-  sep: 8,
-  oct: 9,
-  nov: 10,
-  dec: 11,
-};
-
 const SESSION_COLORS = {
   hyrox: "#9b59b6",
   strength: "#e07b3a",
@@ -1270,130 +1254,6 @@ const SESSION_COLORS = {
   rest: "#444444",
   mobility: "#1abc9c",
   travel: "#4a90c4",
-};
-
-const SPECIAL_BLOCK_ACCENTS = {
-  race_week: C.yellow,
-  recovery: "#6b7280",
-};
-
-const makeSpecialDay = (day, date, title, note, { isRaceDay = false } = {}) => ({
-  day,
-  date,
-  am: null,
-  pm: null,
-  am_session_custom: title || null,
-  pm_session_custom: null,
-  am_session_blocks: [],
-  pm_session_blocks: [],
-  note2a: note || "",
-  isRaceDay,
-  isSunday: false,
-  ai_modified: false,
-  ai_modification_note: null,
-});
-
-const SPECIAL_PLAN_BLOCKS = [
-  {
-    id: "race_week",
-    label: "RACE WEEK",
-    weeks: [
-      {
-        id: "race_week_w1",
-        label: "RACE WEEK",
-        dates: "Apr 1 – Apr 5",
-        phase: "RACE WEEK",
-        subtitle: "Race execution protocol",
-        days: [
-          makeSpecialDay("WED", "Apr 1", "Travel Prep", "Morning creatine, 30min Z2 Echo Bike + SkiErg, Liquid IV. Depart 11am. Evening: light walk, simple carbs + protein, Liquid IV, Zinc + Mag 8:30pm, early bed."),
-          makeSpecialDay("THU", "Apr 2", "Travel Day", "Morning creatine, 30min Z2 Echo Bike + SkiErg, Liquid IV. Depart 11am. Evening: light walk, simple carbs + protein, Liquid IV, Zinc + Mag 8:30pm, early bed."),
-          makeSpecialDay("FRI", "Apr 3", "Shakeout Day", "Morning creatine, 20-30min Z2 SkiErg or easy run. Walk venue, visualize stations, feet up. Evening: Beetroot shot #1, simple carb dinner, Zinc + Mag 8:30pm, early bed. Tonight's sleep matters most."),
-          makeSpecialDay("SAT", "Apr 4", "Race Day 8:10am", "5:30am wake, Beetroot shot #2. Breakfast: oatmeal or white rice, banana, PB, 2 eggs, Liquid IV. 6:00am Creatine. 6:30am Sodium Bicarb + water. 6:30am Adderall. 7:00am arrive venue. 7:30am light activation warmup. 7:50am Wall Ball primer, wet hands, fatigued reps. 8:10am GUN. In-race: Neversecond C30+ CAF at Row or Farmers Carry station 5-6, carry 2 gels take 1 mid-race. Skip Beta Alanine.", { isRaceDay: true }),
-          makeSpecialDay("SUN", "Apr 5", "Rest", "Travel home. Full off day."),
-          makeSpecialDay("MON", "Apr 6", null, "Rest day."),
-          makeSpecialDay("TUE", "Apr 7", null, "Rest day."),
-        ],
-      },
-    ],
-  },
-  {
-    id: "recovery",
-    label: "RECOVERY",
-    weeks: [
-      {
-        id: "recovery_w1",
-        label: "RECOVERY WEEK",
-        dates: "Apr 6 – Apr 12",
-        phase: "RECOVERY",
-        subtitle: "Post-race recovery protocol",
-        days: [
-          makeSpecialDay("MON", "Apr 6", "Rest or Easy Walk", "Rest or 20min easy walk only. Assess soreness."),
-          makeSpecialDay("TUE", "Apr 7", "Light Z2 Erg", "Light Z2 erg 20min if feeling good. No running."),
-          makeSpecialDay("WED", "Apr 8", "Light Upper Body", "Light upper body only. No lower, no erg cardio."),
-          makeSpecialDay("THU", "Apr 9", "Z2 Erg / Walk", "Z2 erg or easy walk 20-30min. WHOOP dependent."),
-          makeSpecialDay("FRI", "Apr 10", "Rest or Mobility", "Rest or light mobility."),
-          makeSpecialDay("SAT", "Apr 11", "Optional Easy Z2 Run", "Optional easy Z2 run 20-25min. Shakeout before Monday."),
-          makeSpecialDay("SUN", "Apr 12", "Rest", "Rest. Full reset. Block starts tomorrow."),
-        ],
-      },
-    ],
-  },
-];
-
-const normalizePhaseLabel = (value) => {
-  const normalized = String(value || "").trim().toUpperCase();
-  if (normalized === "PEAK & TEST") return "PEAK";
-  return normalized;
-};
-
-const PLAN_BLOCK_ORDER = ["RACE WEEK", "RECOVERY", "ACCUMULATION", "BASE REBUILD", "INTENSIFICATION", "PEAK"];
-
-const cloneSpecialBlock = (block) => ({
-  ...block,
-  weeks: (block.weeks || []).map((week) => ({
-    ...week,
-    days: (week.days || []).map((day) => ({ ...day })),
-  })),
-});
-
-const normalizePlanBlocks = (blocks = [], options = {}) => {
-  const { skipSpecials = false } = options;
-
-  const regularBlocks = blocks.map((block) => ({
-    ...block,
-    label: normalizePhaseLabel(block.label || block.id),
-    weeks: (block.weeks || []).map((week) => ({
-      ...week,
-      phase: normalizePhaseLabel(week.phase),
-    })),
-  }));
-
-  const seen = new Set();
-  const deduplicated = [];
-  for (const b of regularBlocks) {
-    const key = (b.label || "").toUpperCase();
-    if (seen.has(key)) continue;
-    seen.add(key);
-    deduplicated.push(b);
-  }
-
-  if (skipSpecials) {
-    return [...deduplicated].sort((a, b) => {
-      const ai = PLAN_BLOCK_ORDER.indexOf(a.label);
-      const bi = PLAN_BLOCK_ORDER.indexOf(b.label);
-      return (ai === -1 ? 99 : ai) - (bi === -1 ? 99 : bi);
-    });
-  }
-
-  const existingLabels = new Set(deduplicated.map((b) => (b.label || "").toUpperCase()));
-  const specialsToAdd = SPECIAL_PLAN_BLOCKS.filter((s) => !existingLabels.has((s.label || "").toUpperCase())).map(cloneSpecialBlock);
-
-  const merged = [...specialsToAdd, ...deduplicated];
-  return merged.sort((a, b) => {
-    const ai = PLAN_BLOCK_ORDER.indexOf(a.label);
-    const bi = PLAN_BLOCK_ORDER.indexOf(b.label);
-    return (ai === -1 ? 99 : ai) - (bi === -1 ? 99 : bi);
-  });
 };
 
 const resolveSessionKey = (sessionName, dayRow) => {
@@ -2709,10 +2569,7 @@ const SessionModal = ({ name, dayData, sess, weekId, onClose, onSessSwitch, sund
 
 export default function App() {
   const [nav, setNav]         = useState("today");
-  const [blockId, setBlockId] = useState("taper");
   const [weekId, setWeekId]   = useState("tw1");
-  const [selDay, setSelDay]   = useState(null);
-  const [sess, setSess]       = useState("am");
   const [sundayChoice, setSundayChoice] = useState({});
   const [whoopData, setWhoopData]       = useState(null);
   const [whoopLoading, setWhoopLoading] = useState(true);
@@ -2770,9 +2627,6 @@ export default function App() {
   const [planBuilderDismissUntil, setPlanBuilderDismissUntil] = useState(0);
   const [showRecoveryGates, setShowRecoveryGates] = useState(false);
   const [showAiAdjustments, setShowAiAdjustments] = useState(true);
-  const [planTimelineOpen, setPlanTimelineOpen] = useState(false);
-  const [feedbackOpen, setFeedbackOpen] = useState(false);
-  const [feedbackDay, setFeedbackDay] = useState(null);
   const [planEditModal, setPlanEditModal] = useState(null);
   const [labContext, setLabContext] = useState("");
   const [labTargetDay, setLabTargetDay] = useState(null);
@@ -2942,9 +2796,6 @@ export default function App() {
       clearTimeout(t5);
     };
   }, []);
-
-  useEffect(() => {
-  }, [selDay, weekId, sess]);
 
   // Initialise auth on mount; listen for session changes
   useEffect(() => {
@@ -3419,45 +3270,6 @@ export default function App() {
     void fetchWhoopData();
   }, [nav, session?.access_token]);
 
-  const selectDefaultPlanPosition = (blocks) => {
-    if (!Array.isArray(blocks) || blocks.length === 0) return null;
-    const todayIso = getLocalToday();
-    const currentYear = parseInt(String(todayIso || "").slice(0, 4), 10) || new Date().getFullYear();
-    let earliestWeek = null;
-
-    const labelToPlanIso = (label) => {
-      if (!label) return null;
-      const parsed = new Date(`${String(label).trim()} ${currentYear}`);
-      if (Number.isNaN(parsed.getTime())) return null;
-      return formatEasternYmdFromDate(parsed);
-    };
-
-    for (const block of blocks) {
-      for (const wk of (block?.weeks || [])) {
-        const weekIsos = (wk?.days || [])
-          .map((d) => labelToPlanIso(d?.date || d?.date_label))
-          .filter(Boolean)
-          .sort();
-        if (!weekIsos.length) continue;
-        const weekLo = weekIsos[0];
-        const weekHi = weekIsos[weekIsos.length - 1];
-
-        if (!earliestWeek || weekLo < earliestWeek.weekLo) {
-          earliestWeek = { blockId: block.id, weekId: wk.id, weekLo };
-        }
-
-        if (todayIso >= weekLo && todayIso <= weekHi) {
-          return { blockId: block.id, weekId: wk.id };
-        }
-      }
-    }
-
-    if (earliestWeek) {
-      return { blockId: earliestWeek.blockId, weekId: earliestWeek.weekId };
-    }
-    return null;
-  };
-
   // Fix #5: accept token as a parameter so callers always pass the live token —
   // avoids stale-closure reads of session?.access_token captured at definition time.
   const fetchPlan = async (token) => {
@@ -3466,22 +3278,12 @@ export default function App() {
         headers: token ? { "Authorization": `Bearer ${token}` } : {},
       });
       const data = await res.json().catch(() => ({}));
-      const activeVariant = planVariants?.find((v) => v.id === activeVariantId);
-      const isAiGenerated = activeVariant?.variant_source === "ai_generated";
-      const normalizedBlocks = normalizePlanBlocks(data.blocks || [], { skipSpecials: isAiGenerated });
-      const hasDays = normalizedBlocks?.some(b => b.weeks?.some(w => w.days?.length > 0));
+      const blocks = Array.isArray(data.blocks) ? data.blocks : [];
+      const hasDays = blocks.some((b) => (b?.weeks || []).some((w) => (w?.days || []).length > 0));
       if (res.ok && hasDays) {
-        setPlanBlocks(normalizedBlocks);
-        const hasCurrentSelection = normalizedBlocks.some(
-          (b) => b.id === blockId && (b.weeks || []).some((w) => w.id === weekId)
-        );
-        if (!hasCurrentSelection) {
-          const target = selectDefaultPlanPosition(normalizedBlocks);
-          if (target) {
-            setBlockId(target.blockId);
-            setWeekId(target.weekId);
-          }
-        }
+        setPlanBlocks(blocks);
+      } else if (res.ok) {
+        setPlanBlocks([]);
       }
     } catch (e) {
       console.error("[fetchPlan]", e);
@@ -3490,29 +3292,31 @@ export default function App() {
     }
   };
 
-  useEffect(() => {
-    if (!session?.user?.id) {
+  const loadPlanVariants = useCallback(async (userId = session?.user?.id) => {
+    if (!userId) {
       setPlanVariants([]);
       setActiveVariantId(null);
-      return;
+      return [];
     }
-    let cancelled = false;
-    supabase
+    const { data, error } = await supabase
       .from("plan_variants")
       .select("*")
-      .eq("user_id", session.user.id)
-      .order("created_at", { ascending: false })
-      .then(({ data }) => {
-        if (cancelled) return;
-        const rows = data || [];
-        setPlanVariants(rows);
-        const active = rows.find((v) => v.is_active);
-        setActiveVariantId(active?.id || null);
-      });
-    return () => {
-      cancelled = true;
-    };
+      .eq("user_id", userId)
+      .order("created_at", { ascending: false });
+    if (error) {
+      console.error("[loadPlanVariants]", error);
+      return [];
+    }
+    const rows = data || [];
+    setPlanVariants(rows);
+    const active = rows.find((v) => v.is_active);
+    setActiveVariantId(active?.id || null);
+    return rows;
   }, [session?.user?.id]);
+
+  useEffect(() => {
+    loadPlanVariants(session?.user?.id);
+  }, [session?.user?.id, loadPlanVariants]);
 
   useEffect(() => {
     if (!session?.user?.id) {
@@ -3992,30 +3796,12 @@ export default function App() {
     );
   }
 
-  const sortedBlocks = [...planBlocks].sort(
-    (a, b) => Number(a?.order ?? Number.MAX_SAFE_INTEGER) - Number(b?.order ?? Number.MAX_SAFE_INTEGER)
-  );
-  const block   = sortedBlocks.find(b => b.id === blockId) || sortedBlocks[0] || null;
-  const weeks   = block?.weeks || [];
-  const week    = weeks.find(w => w.id === weekId) || weeks[0] || null;
-  const weekDays = week?.days || [];
-  const todayDateLabel = new Date().toLocaleDateString("en-US", { month: "short", day: "numeric" });
-  const isCurrentRealWeek = weekDays.some((d) => (d?.date || "").trim() === todayDateLabel);
-  const defaultSelectedDay = weekDays.length
-    ? (isCurrentRealWeek
-      ? (weekDays.find((d) => (d?.date || "").trim() === todayDateLabel)?.day || weekDays[0]?.day)
-      : weekDays[0]?.day)
-    : null;
-  const selectedDayKey = selDay || defaultSelectedDay;
-  const dayData = selectedDayKey ? (weekDays.find((d) => d.day === selectedDayKey) || null) : null;
-  const phaseColor = SPECIAL_BLOCK_ACCENTS[block?.id] || C.green;
-
   const getSundayWo = (wid) => {
     const c = sundayChoice[wid];
     return c === "mobility" ? "SUNDAY — Mobility Protocol" : c === "plyo" ? "SUNDAY — Plyo & Core" : null;
   };
-  const getEffAm = (d) => d.isSunday ? getSundayWo(weekId) : d.am;
-  const getSessionNameForDay = (d, slot = "am") => (slot === "am" ? getEffAm(d) : d?.pm);
+  const getEffAm = (d, wid = weekId) => d?.isSunday ? getSundayWo(wid) : d?.am;
+  const getSessionNameForDay = (d, slot = "am", wid = weekId) => (slot === "am" ? getEffAm(d, wid) : d?.pm);
   const getDayDateKey = (d) => d?.date?.split(" ")[0] || "";
   const isDayCompleted = (d) => {
     if (d?.am_completed_at) return true;
@@ -4068,40 +3854,7 @@ export default function App() {
     return getTypeLabel(d?.am || d?.am_session || d?.pm || d?.pm_session) || "REST";
   };
 
-  const selectedSessionName = dayData ? getSessionNameForDay(dayData, sess) : null;
-  const selectedWorkout = selectedSessionName ? WL[selectedSessionName] : null;
-  const selectedMeta = deriveSessionMeta(selectedSessionName, dayData);
-  const detailTitle = dayData?.am_session_custom?.split("\n")[0] || selectedMeta?.label || "SESSION";
-  const selectedCustomContent = sess === "am" ? dayData?.am_session_custom : dayData?.pm_session_custom;
-  const selectedShowCustom = !!(selectedCustomContent && dayData?.ai_modified);
-  const selectedCanViewWorkout = !!(dayData?.isRaceDay || selectedShowCustom || selectedWorkout);
-  const selectedCoachingNote = dayData?.ai_modification_note || dayData?.note2a || dayData?.note || selectedWorkout?.note || "";
-  const selectedKeyPoints = selectedWorkout?.steps?.filter((s) => !s.startsWith("—")).slice(0, 5) || [];
-  const selectedWhoopRule = dayData?.note || "Execute as programmed.";
-  const selectedWhoopGate = whoopLabel(whoopData?.recovery?.score ?? 0);
-  const selectedDayName = dayData?.day || selectedDayKey || "";
-
-  const WHOOP_RULES_DEFAULT = "Green: Execute as programmed.\nYellow: Reduce 30–40% volume.\nRed: Full rest.";
-  const blocksAmHero = dayData?.am_session_blocks;
-  const hasHeroStructuredBlocks = Array.isArray(blocksAmHero) && blocksAmHero.length > 0;
-  const whoopRulesForHero =
-    dayData?.ai_modification_note ||
-    (hasHeroStructuredBlocks ? (dayData?.note || WHOOP_RULES_DEFAULT) : WHOOP_RULES_DEFAULT);
-
-  const calWeekMeta = getCalendarCurrentWeekFromPlan(planBlocks);
-  const phaseNameKey = calWeekMeta?.week?.phase || week?.phase;
-  const allPlanWeeksFlat = planBlocks.flatMap((b) => b.weeks || []);
-  const weeksMatchingPhase = phaseNameKey
-    ? allPlanWeeksFlat.filter((w) => w.phase === phaseNameKey)
-    : weeks;
-  const phaseOrderForBar =
-    calWeekMeta?.weekOrder != null
-      ? calWeekMeta.weekOrder
-      : week?.week_order != null
-        ? Number(week.week_order)
-        : null;
-  const phaseProgress = computePhaseProgress(weeksMatchingPhase, phaseOrderForBar);
-
+  const week = planBlocks?.[0]?.weeks?.[0] || null;
   const weeklyAiAdjustments = (week?.days || [])
     .filter((d) => d?.ai_modified === true)
     .map((d) => ({
@@ -4974,10 +4727,6 @@ export default function App() {
                       onClick={() => {
                         if (!todayCardData) return;
                         setNav("plan");
-                        if (todayEntry?.block?.id) setBlockId(todayEntry.block.id);
-                        if (todayEntry?.week?.id) setWeekId(todayEntry.week.id);
-                        setSelDay(todayCardData.day);
-                        setSess("am");
                       }}
                       style={{ background: "transparent", border: "none", color: DS.gold, fontFamily: C.fs, fontSize: 12, fontWeight: 600, letterSpacing: 2, cursor: "pointer" }}
                     >
@@ -5207,57 +4956,6 @@ export default function App() {
           }}
         />
       )}
-      <PlanBlockTimeline
-        open={planTimelineOpen}
-        onClose={() => setPlanTimelineOpen(false)}
-        planBlocks={planBlocks}
-        currentWeekId={calWeekMeta?.weekId}
-        onSelectWeek={(bid, wid) => {
-          setBlockId(bid);
-          setWeekId(wid);
-          setSelDay(null);
-        }}
-      />
-      {feedbackOpen && feedbackDay && session?.user?.id && (
-        <SessionFeedbackSheet
-          slot="am"
-          onClose={() => {
-            setFeedbackOpen(false);
-            setFeedbackDay(null);
-          }}
-          onSave={async (feedback) => {
-            const userId = session.user.id;
-            const { error: e1 } = await supabase.from("session_feedback").insert({
-              user_id: userId,
-              training_day_id: feedbackDay.id,
-              session_slot: "am",
-              rpe_bucket: feedback.rpe_bucket,
-              rpe_numeric: feedback.rpe_numeric,
-              notes: feedback.notes,
-              completed_at: new Date().toISOString(),
-            });
-            if (e1) throw e1;
-            let dayQ = supabase
-              .from("training_days")
-              .update({ am_completed_at: new Date().toISOString() })
-              .eq("id", feedbackDay.id)
-              .eq("user_id", userId);
-            const { data: vRow } = await supabase
-              .from("plan_variants")
-              .select("id")
-              .eq("user_id", userId)
-              .eq("is_active", true)
-              .maybeSingle();
-            const activeVid = vRow?.id ?? null;
-            dayQ = activeVid ? dayQ.or(`variant_id.eq.${activeVid},variant_id.is.null`) : dayQ.is("variant_id", null);
-            const { error: e2 } = await dayQ;
-            if (e2) throw e2;
-            setFeedbackOpen(false);
-            setFeedbackDay(null);
-            await fetchPlan(session?.access_token);
-          }}
-        />
-      )}
       <RecoveryDeepDive
         open={recoveryModalOpen}
         onClose={() => setRecoveryModalOpen(false)}
@@ -5286,465 +4984,19 @@ export default function App() {
         profile={profile}
       />
 
-      {nav === "plan" && planLoading && (
-        <div style={{ display:"flex", alignItems:"center", justifyContent:"center", padding:60 }}>
-          <div style={{ fontFamily:C.ff, fontSize:16, color:C.muted, letterSpacing:4 }}>LOADING PLAN...</div>
-        </div>
-      )}
-
-      {nav === "plan" && !planLoading && planBlocks.length === 0 && !planBuilderDismissed && (
-        <div style={{ textAlign: "center", padding: "60px 24px" }}>
-          <div style={{ fontFamily: C.fm, color: C.muted, letterSpacing: 3, fontSize: 10, marginBottom: 16, textTransform: "uppercase" }}>NO TRAINING PLAN FOUND</div>
-          <button
-            onClick={() => setPlanBuilderOpen(true)}
-            style={{ background: DS.gold, color: "#1a0f06", border: "none", borderRadius: C.radius, padding: "16px 32px", fontFamily: C.ff, fontSize: 14, fontWeight: 700, letterSpacing: 2, cursor: "pointer" }}
-          >
-            BUILD MY PLAN
-          </button>
-          <button
-            type="button"
-            onClick={dismissPlanBuilderFor24h}
-            style={{ display: "block", margin: "16px auto 0", background: "transparent", color: C.muted, fontSize: 11, border: "none", cursor: "pointer", fontFamily: C.fm, letterSpacing: 2 }}
-          >
-            I&apos;ll do it later
-          </button>
-        </div>
-      )}
-
-      {nav === "plan" && !planLoading && planBlocks.length > 0 && (
-        <div style={{ padding:"0 16px 24px", background:C.bg }}>
-          <div style={{ paddingTop:16 }}>
-            {planVariants.length > 1 && (
-              <div
-                style={{
-                  background: "rgba(255,255,255,0.04)",
-                  border: "1px solid rgba(255,255,255,0.08)",
-                  borderRadius: 14,
-                  padding: "10px 14px",
-                  marginBottom: 16,
-                  display: "flex",
-                  alignItems: "center",
-                  gap: 10,
-                }}
-              >
-                <div
-                  style={{
-                    fontSize: 9,
-                    fontWeight: 600,
-                    color: "rgba(255,255,255,0.4)",
-                    letterSpacing: "2px",
-                  }}
-                >
-                  ACTIVE PLAN
-                </div>
-                <select
-                  value={activeVariantId || ""}
-                  onChange={(e) => switchVariant(e.target.value)}
-                  style={{
-                    flex: 1,
-                    background: "transparent",
-                    border: "none",
-                    color: "#fff",
-                    fontSize: 13,
-                    outline: "none",
-                  }}
-                >
-                  {planVariants.map((v) => (
-                    <option key={v.id} value={v.id} style={{ background: "#1a1a1e" }}>
-                      {v.variant_name}
-                    </option>
-                  ))}
-                </select>
-              </div>
-            )}
-            <div style={{ fontFamily:C.fm, fontSize:9, color:C.muted, letterSpacing:3, textTransform:"uppercase", marginBottom:10 }}>Training Block</div>
-            <div style={{ display:"flex", gap:8, overflowX:"auto", scrollbarWidth:"none", msOverflowStyle:"none" }}>
-              {sortedBlocks.map((b) => {
-                const active = blockId === b.id;
-                return (
-                  <button
-                    key={b.id}
-                    type="button"
-                    onClick={() => {
-                      setBlockId(b.id);
-                      setWeekId(b.weeks[0].id);
-                      setSelDay(null);
-                    }}
-                    style={{
-                      flexShrink:0,
-                      padding:"8px 14px",
-                      cursor:"pointer",
-                      fontFamily:C.fm,
-                      fontSize:9,
-                      letterSpacing:3,
-                      textTransform:"uppercase",
-                      color: active ? DS.gold : C.muted,
-                      borderRadius:18,
-                      border: active ? "1px solid rgba(245,240,232,0.42)" : "1px solid rgba(255,255,255,0.07)",
-                      background: active ? "rgba(255,255,255,0.08)" : "rgba(255,255,255,0.022)",
-                      backdropFilter:"blur(20px)",
-                      WebkitBackdropFilter:"blur(20px)",
-                      opacity: active ? 1 : 0.6,
-                    }}
-                  >
-                    {b.label}
-                  </button>
-                );
-              })}
-            </div>
-          </div>
-
-          <div style={{ marginTop:14, display:"flex", gap:8, overflowX:"auto", scrollbarWidth:"none", msOverflowStyle:"none" }}>
-            {weeks.map((w) => {
-              const active = weekId === w.id;
-              return (
-                <button
-                  key={w.id}
-                  type="button"
-                  onClick={() => {
-                    setWeekId(w.id);
-                    setSelDay(null);
-                  }}
-                  style={{
-                    flexShrink:0,
-                    padding:"8px 12px",
-                    cursor:"pointer",
-                    textAlign:"left",
-                    minWidth:76,
-                    borderRadius:18,
-                    color: active ? DS.gold : C.muted,
-                    border: active ? "1px solid rgba(245,240,232,0.42)" : "1px solid rgba(255,255,255,0.07)",
-                    background: active ? "rgba(255,255,255,0.08)" : "rgba(255,255,255,0.022)",
-                    backdropFilter:"blur(20px)",
-                    WebkitBackdropFilter:"blur(20px)",
-                    opacity: active ? 1 : 0.6,
-                  }}
-                >
-                  <div style={{ fontFamily:C.fm, fontSize:9, letterSpacing:3, textTransform:"uppercase" }}>{w.label.includes("·") ? w.label.split("·")[1]?.trim() : w.label}</div>
-                  <div style={{ fontFamily:C.fm, fontSize:8, color:C.light, letterSpacing:1, marginTop:2 }}>{w.dates}</div>
-                </button>
-              );
-            })}
-          </div>
-
-          {(() => {
-            const dlist = week?.days || [];
-            const weekType = extractWeekTypeFromNotes(dlist);
-            const weekTypeColor =
-              weekType === "BRICK" ? "#C9A875" : weekType === "DELOAD" ? "rgba(255,255,255,0.38)" : "rgba(255,255,255,0.55)";
-            let plannedSessions = 0;
-            let completedCount = 0;
-            let nStrength = 0;
-            let nConditioning = 0;
-            let nRecovery = 0;
-            for (const d of dlist) {
-              const am = d.am || d.am_session;
-              if (!am || !String(am).trim() || String(am).toUpperCase().includes("REST")) continue;
-              plannedSessions += 1;
-              if (d.am_completed_at) completedCount += 1;
-              const nm = getSessionNameForDay(d, "am");
-              const b = bucketSessionIntentForStructure(nm);
-              if (b === "strength") nStrength += 1;
-              else if (b === "recovery") nRecovery += 1;
-              else nConditioning += 1;
-            }
-            const parts = [];
-            if (nStrength) parts.push(`${nStrength} strength`);
-            if (nConditioning) parts.push(`${nConditioning} conditioning`);
-            if (nRecovery) parts.push(`${nRecovery} recovery`);
-            const sessionBreakdown = parts.length ? parts.join(" · ") : "—";
-            const compliancePct = plannedSessions > 0 ? (completedCount / plannedSessions) * 100 : 0;
-            const complianceColor =
-              compliancePct >= 80 ? C.green : compliancePct >= 50 ? "#C9A875" : "rgba(255,255,255,0.35)";
-            const barW = plannedSessions > 0 ? (completedCount / plannedSessions) * 100 : 0;
-            return (
-              <div
-                style={{
-                  background: "rgba(255,255,255,0.025)",
-                  border: "0.5px solid rgba(255,255,255,0.06)",
-                  borderRadius: 14,
-                  padding: "14px 16px",
-                  marginBottom: 14,
-                  marginTop: 4,
-                }}
-              >
-                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 10 }}>
-                  <span style={{ fontSize: 9, fontWeight: 500, color: "rgba(255,255,255,0.5)", letterSpacing: "1.5px" }}>
-                    THIS WEEK
-                  </span>
-                  <span style={{ fontSize: 9, fontWeight: 500, color: weekTypeColor, letterSpacing: "1.5px" }}>{weekType}</span>
-                </div>
-                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline" }}>
-                  <div>
-                    <div style={{ fontSize: 18, fontFamily: "'DM Serif Display', serif", color: "#fff", letterSpacing: "-0.3px" }}>
-                      {plannedSessions} sessions planned
-                    </div>
-                    <div style={{ fontSize: 11, color: "rgba(255,255,255,0.5)", marginTop: 3 }}>{sessionBreakdown}</div>
-                  </div>
-                  <div style={{ textAlign: "right" }}>
-                    <div style={{ fontSize: 9, color: "rgba(255,255,255,0.4)", letterSpacing: "1.5px" }}>COMPLIANCE</div>
-                    <div
-                      style={{
-                        fontSize: 22,
-                        color: complianceColor,
-                        fontWeight: 500,
-                        fontVariantNumeric: "tabular-nums",
-                      }}
-                    >
-                      {completedCount}/{plannedSessions}
-                    </div>
-                  </div>
-                </div>
-                <div style={{ height: 3, background: "rgba(255,255,255,0.06)", borderRadius: 2, marginTop: 10, overflow: "hidden" }}>
-                  <div
-                    style={{
-                      height: "100%",
-                      width: `${barW}%`,
-                      background: complianceColor,
-                    }}
-                  />
-                </div>
-              </div>
-            );
-          })()}
-
-          <div style={{ marginTop: 10, display: "flex", justifyContent: "flex-end" }}>
-            <button
-              type="button"
-              onClick={() => setPlanTimelineOpen(true)}
-              style={{
-                fontFamily: C.fm,
-                fontSize: 8,
-                letterSpacing: 2,
-                color: C.cyan,
-                background: "transparent",
-                border: "none",
-                cursor: "pointer",
-                textTransform: "uppercase",
-              }}
-            >
-              Block timeline
-            </button>
-          </div>
-          <PhaseHeaderStrip phaseProgress={phaseProgress} />
-
-          <div style={{ marginTop:16, marginBottom:16 }}>
-            <div style={{ fontFamily:C.fm, fontSize:9, color:phaseColor, letterSpacing:3, textTransform:"uppercase", marginBottom:4 }}>{week.phase}</div>
-            <div style={{ fontFamily:C.ff, fontSize:28, color:C.text, letterSpacing:1 }}>{week.label}</div>
-            <div style={{ fontFamily:C.fm, fontSize:9, color:C.muted, letterSpacing:1, marginTop:2 }}>{week.subtitle}</div>
-          </div>
-
-          <div style={{ display:"grid", gridTemplateColumns:"repeat(7,minmax(0,1fr))", gap:6 }}>
-            {(week?.days || []).map((d) => {
-              const sessionName = getSessionNameForDay(d, "am");
-              const meta = deriveSessionMeta(sessionName, d);
-              const isSelected = !!dayData && dayData.day === d.day && dayData.date === d.date;
-              const completed = isDayCompleted(d);
-              const dateLabel = d?.date?.split(" ")[1] || d?.date || "";
-              const isToday = isCurrentRealWeek && (d?.date || "").trim() === todayDateLabel;
-              const cardTag = getCardTag(d);
-              const displayTag = String(cardTag || "SESSION").toUpperCase().slice(0, 8);
-              const isRest = !cardTag || cardTag === "REST";
-              const iconMeta = getSessionIcon(d?.am, d?.am_session_custom);
-              return (
-                <button
-                  key={d.day}
-                  type="button"
-                  onClick={() => {
-                    if (isSelected) {
-                      setSelDay(null);
-                      return;
-                    }
-                    setSelDay(d.day);
-                    setSess("am");
-                  }}
-                  style={{
-                    ...glassCard,
-                    minHeight:140,
-                    marginBottom:0,
-                    background:"rgba(255,255,255,0.055)",
-                    border: isSelected
-                      ? "1px solid rgba(245,240,232,0.45)"
-                      : isToday
-                        ? "1px solid rgba(201,168,117,0.4)"
-                        : "1px solid rgba(255,255,255,0.13)",
-                    boxShadow: isToday && !isSelected ? "0 0 22px rgba(201,168,117,0.35)" : isSelected ? "0 0 18px rgba(245,240,232,0.12)" : "none",
-                    borderRadius:C.radius,
-                    padding:"8px 6px",
-                    display:"flex",
-                    flexDirection:"column",
-                    alignItems:"center",
-                    gap:6,
-                    cursor:"pointer",
-                    opacity: completed ? 0.6 : 1,
-                    position:"relative",
-                    overflow:"hidden",
-                  }}
-                >
-                  <div style={specularTop()} />
-                  <div style={{ width:"100%", display:"flex", justifyContent:"space-between", alignItems:"center" }}>
-                    <span style={{ fontFamily:C.fm, fontSize:9, color:C.muted, letterSpacing:3, textTransform:"uppercase" }}>{d.day}</span>
-                    <span style={{ fontFamily:C.fm, fontSize:10, color:C.text }}>{dateLabel}</span>
-                  </div>
-                  {completed && (
-                    <div style={{ position:"absolute", top:6, right:d?.ai_modified ? 20 : 6, fontSize:11, color:C.green }}>
-                      ✓
-                    </div>
-                  )}
-                  {d?.ai_modified && (
-                    <div style={{ position:"absolute", top:6, right:6, fontSize:11, color:"#9b59b6" }}>
-                      ✦
-                    </div>
-                  )}
-                  <div style={{ fontSize:24, lineHeight:1, color:iconMeta.color }}>{iconMeta.icon}</div>
-                  {!isRest && (
-                    <div style={{ background:`${meta.color}22`, border:`1px solid ${meta.color}55`, borderRadius:4, padding:"2px 6px", fontFamily:C.fm, fontSize:7, color:meta.color, letterSpacing:2, textTransform:"uppercase", maxWidth:"100%", overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>
-                      {displayTag}
-                    </div>
-                  )}
-                </button>
-              );
-            })}
-          </div>
-
-          {dayData && (
-            <div
-              style={{
-                marginTop: 16,
-                marginBottom: 0,
-                overflow: "hidden",
-                maxHeight: dayData ? 720 : 0,
-                opacity: dayData ? 1 : 0,
-                transform: dayData ? "translateY(0)" : "translateY(-6px)",
-                transition: "max-height 200ms ease, opacity 200ms ease, transform 200ms ease",
-              }}
-            >
-              {dayData.pm && (
-                <div style={{ ...glassCard, borderBottom: `1px solid ${C.border}`, marginBottom: 0, borderRadius: `${C.radius}px ${C.radius}px 0 0` }}>
-                  <div style={specularTop()} />
-                  <div style={{ display: "flex", position: "relative", zIndex: 1 }}>
-                    {[["am", "AM"], ["pm", "PM"]].map(([s, l]) => (
-                      <button
-                        key={s}
-                        type="button"
-                        onClick={() => setSess(s)}
-                        style={{
-                          flex: 1,
-                          padding: "10px 12px",
-                          background: "transparent",
-                          border: "none",
-                          borderBottom: sess === s ? `1.5px solid ${DS.gold}` : "1.5px solid transparent",
-                          color: sess === s ? C.text : C.muted,
-                          cursor: "pointer",
-                          fontFamily: C.fm,
-                          fontSize: 9,
-                          letterSpacing: 3,
-                          textTransform: "uppercase",
-                        }}
-                      >
-                        {l}
-                      </button>
-                    ))}
-                  </div>
-                </div>
-              )}
-              <SessionHeroCard
-                day={dayData}
-                sess={sess}
-                theme={{ C, glassCard, specularTop, DS }}
-                selectedMeta={selectedMeta}
-                detailTitle={detailTitle}
-                selectedWorkout={selectedWorkout}
-                selectedWhoopGate={selectedWhoopGate}
-                selectedWhoopRule={whoopRulesForHero}
-                supabase={supabase}
-                authSession={session}
-                onSaved={() => fetchPlan(session?.access_token)}
-                onMarkComplete={(d) => {
-                  setFeedbackDay(d);
-                  setFeedbackOpen(true);
-                }}
-                onOpenBlockEditor={() => {
-                  const n = getSessionNameForDay(dayData, sess);
-                  if (n) setPlanEditModal({ name: n, dayData, weekUuid: weekId, sess });
-                }}
-                completed={isDayCompleted(dayData)}
-              />
-            </div>
-          )}
-
-          {weeklyAiAdjustments.length > 0 && (
-            <div style={{ marginTop:16, background:"#9b59b612", border:"1px solid #9b59b655", borderRadius:16, overflow:"hidden" }}>
-              <button onClick={() => setShowAiAdjustments((v) => !v)} style={{ width:"100%", display:"flex", justifyContent:"space-between", alignItems:"center", background:"transparent", border:"none", padding:"12px 14px", cursor:"pointer" }}>
-                <span style={{ fontFamily:C.fm, fontSize:10, color:"#9b59b6", letterSpacing:2, textTransform:"uppercase" }}>✦ AI ADJUSTMENTS THIS WEEK</span>
-                <span style={{ color:"#9b59b6", fontSize:12 }}>{showAiAdjustments ? "⌄" : "›"}</span>
-              </button>
-              {showAiAdjustments && (
-                <div style={{ padding:"0 14px 12px", display:"flex", flexDirection:"column", gap:0 }}>
-                  {weeklyAiAdjustments.map((adj, idx) => (
-                    <div key={`${adj.day}_${idx}`} style={{ padding:"10px 0", borderTop: idx === 0 ? "none" : "1px solid #9b59b633" }}>
-                      <div style={{ fontFamily:C.fm, fontSize:9, color:"#c6a6ff", letterSpacing:2, textTransform:"uppercase", marginBottom:4 }}>{adj.day} · {adj.session}</div>
-                      <div style={{ fontFamily:C.fs, fontSize:12, color:C.muted, lineHeight:1.5 }}>{adj.summary}</div>
-                    </div>
-                  ))}
-                </div>
-              )}
-            </div>
-          )}
-
-          <div style={{ ...glassCard, marginTop:16, borderRadius:16 }}>
-            <div style={specularTop()} />
-            <button type="button" onClick={() => setShowRecoveryGates((v) => !v)} style={{ width:"100%", display:"flex", justifyContent:"space-between", alignItems:"center", background:"transparent", border:"none", padding:"12px 14px", cursor:"pointer", position:"relative", zIndex:1 }}>
-              <span style={{ fontFamily:C.fm, fontSize:10, color:C.cyan, letterSpacing:3, textTransform:"uppercase" }}>Recovery Gates</span>
-              <span style={{ color:C.cyan, fontSize:12 }}>{showRecoveryGates ? "⌄" : "›"}</span>
-            </button>
-            {showRecoveryGates && (
-              <div style={{ padding:"0 14px 12px", display:"flex", flexDirection:"column", gap:8, position:"relative", zIndex:1 }}>
-                {[["GREEN",">66%",C.green,"Execute session as written."],["YELLOW","34–66%","#FFD600","Reduce intensity and shorten quality segments."],["RED","<34%",C.red,"Shift to recovery or mobility only."]].map(([gate, range, color, note]) => {
-                  const active = whoopLabel(rec) === gate;
-                  return (
-                    <div key={gate} style={{ background:C.card2, border:`1px solid ${active ? color : C.border}`, borderRadius:10, padding:"10px 12px" }}>
-                      <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:4 }}>
-                        <div style={{ fontFamily:C.fm, fontSize:9, color, letterSpacing:2, textTransform:"uppercase" }}>{gate}</div>
-                        <div style={{ fontFamily:C.fm, fontSize:8, color:C.muted, letterSpacing:1 }}>{range}</div>
-                      </div>
-                      <div style={{ fontFamily:C.fs, fontSize:12, color:C.muted, lineHeight:1.5 }}>{note}</div>
-                    </div>
-                  );
-                })}
-              </div>
-            )}
-          </div>
-
-          <div style={{ marginTop:16 }}>
-            <div style={{ fontFamily:C.fm, fontSize:10, color:C.cyan, letterSpacing:3, textTransform:"uppercase", marginBottom:8 }}>Weekly Structure</div>
-            <div style={{ ...glassCard, borderRadius:16, marginBottom:0 }}>
-              <div style={specularTop()} />
-              <div style={{ position:"relative", zIndex:1 }}>
-                {(week?.days || []).map((d, idx) => {
-                  const sessionName = getSessionNameForDay(d, "am");
-                  const iconMeta = getSessionIcon(d?.am, d?.am_session_custom);
-                  const rowColor = iconMeta?.color || deriveSessionMeta(sessionName, d).color;
-                  return (
-                    <div key={`${d.day}_${idx}`} style={{ display:"flex", alignItems:"center", gap:10, padding:"10px 12px", borderBottom: idx === (week?.days || []).length - 1 ? "none" : "1px solid #88888833" }}>
-                      <span style={{ width:6, height:6, borderRadius:"50%", background:rowColor, flexShrink:0 }} />
-                      <span style={{ fontFamily:C.fm, fontSize:9, color:C.text, letterSpacing:2, textTransform:"uppercase", minWidth:38 }}>{d.day}</span>
-                      <span style={{ fontFamily:C.fs, fontSize:11, color:"#ccc", lineHeight:1.4, display:"-webkit-box", WebkitLineClamp:2, WebkitBoxOrient:"vertical", overflow:"hidden", flex:1 }}>{getStructureLabel(d)}</span>
-                    </div>
-                  );
-                })}
-              </div>
-            </div>
-          </div>
-
-          <div style={{ marginTop:24 }}>
-            <button onClick={() => { setLabOpen(true); setLabMessages([]); setCqSelections({}); setLabAnsweredQuestions({}); setLabSessionId(createSessionId()); const wk = week?.label?.split("·")[1]?.trim() || week?.label || ""; const selD = selDay || todayDayName; setLabContext(`${wk} · ${selD}`); setLabTargetDay(selD); }}
-              style={{ width:"100%", padding:"14px", background:`${C.cyan}08`, border:`1px solid ${C.cyan}22`, borderRadius:C.radius, cursor:"pointer", display:"flex", alignItems:"center", justifyContent:"center", gap:10, ...C.glass }}>
-              <span style={{ fontSize:16 }}>🧪</span>
-              <span style={{ fontFamily:C.ff, fontSize:14, color:C.cyan, letterSpacing:2 }}>RUN A SCENARIO</span>
-            </button>
-          </div>
-        </div>
+      {nav === "plan" && (
+        <PlanWeekView
+          user={session?.user || null}
+          supabase={supabase}
+          profile={profile}
+          planVariants={planVariants}
+          activeVariantId={activeVariantId}
+          planBlocks={planBlocks}
+          planLoading={planLoading}
+          onOpenPlanBuilder={() => setPlanBuilderOpen(true)}
+          onSwitchVariant={switchVariant}
+          onPlanRefetch={() => fetchPlan(session?.access_token)}
+        />
       )}
 
       {nav === "supps" && (
@@ -6477,10 +5729,11 @@ export default function App() {
         onProfileUpdated={refreshProfile}
         onIntakeComplete={async (payload) => {
           setShowPlanIntake(false);
+          console.log("[intake complete]", payload?.message, payload?.variantId, payload?.activated);
+          await loadPlanVariants(session?.user?.id);
           const tok = session?.access_token;
           if (tok) await fetchPlan(tok);
           await refreshProfile();
-          console.log("[intake complete]", payload?.message, payload?.variantId, payload?.activated);
         }}
       />
 

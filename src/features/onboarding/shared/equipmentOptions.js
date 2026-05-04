@@ -1,0 +1,16 @@
+export const EQUIPMENT_OPTIONS = [
+  { key: "barbell", label: "Barbell" },
+  { key: "squat_rack", label: "Squat rack" },
+  { key: "pullup_bar", label: "Pull-up bar" },
+  { key: "kettlebells", label: "Kettlebells" },
+  { key: "dumbbells", label: "Dumbbells" },
+  { key: "rower", label: "Rower (Concept2 / similar)" },
+  { key: "skierg", label: "SkiErg" },
+  { key: "echo_bike", label: "Echo / Assault bike" },
+  { key: "treadmill", label: "Treadmill" },
+  { key: "running_outside", label: "Running outside" },
+  { key: "pool", label: "Pool" },
+  { key: "sandbag", label: "Sandbag" },
+  { key: "sled", label: "Sled" },
+  { key: "wall_ball", label: "Wall ball target" },
+];

@@ -1,21 +1,5 @@
 import { GlassInput, PrimaryButton, GlassCard } from "./shared/Inputs.jsx";
-
-const EQUIPMENT = [
-  { id: "barbell", label: "Barbell" },
-  { id: "squat_rack", label: "Squat rack" },
-  { id: "pullup_bar", label: "Pull-up bar" },
-  { id: "kettlebells", label: "Kettlebells" },
-  { id: "dumbbells", label: "Dumbbells" },
-  { id: "rower", label: "Rower (Concept2 / similar)" },
-  { id: "skierg", label: "SkiErg" },
-  { id: "echo_bike", label: "Echo / Assault bike" },
-  { id: "treadmill", label: "Treadmill" },
-  { id: "running_outside", label: "Running outside" },
-  { id: "pool", label: "Pool" },
-  { id: "sandbag", label: "Sandbag" },
-  { id: "sled", label: "Sled" },
-  { id: "wall_ball", label: "Wall ball target" },
-];
+import { EQUIPMENT_OPTIONS } from "./shared/equipmentOptions.js";
 
 export default function Step7Environment({ value, onChange, onNext, saving, error }) {
   const v = value || {};
@@ -58,7 +42,7 @@ export default function Step7Environment({ value, onChange, onNext, saving, erro
       <div style={labelStyle}>
         <span>Equipment access</span>
         <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-          {EQUIPMENT.map((item) => (
+          {EQUIPMENT_OPTIONS.map((item) => (
             <label key={item.id} style={{ display: "flex", alignItems: "center", gap: 10, cursor: "pointer", fontSize: 13, color: "rgba(255,255,255,0.75)" }}>
               <input type="checkbox" checked={eq.includes(item.id)} onChange={() => toggleEq(item.id)} style={{ width: 16, height: 16 }} />
               {item.label}
