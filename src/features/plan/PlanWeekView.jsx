@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { PhaseHeaderStrip } from "./components/PhaseHeaderStrip.jsx";
-import { DayCard } from "./components/DayCard.jsx";
+import { WeekGrid } from "./components/WeekGrid.jsx";
 import SessionDetail from "./SessionDetail.jsx";
 import PlanBlockTimeline from "./PlanBlockTimeline.jsx";
 import { getPhaseGradient, getPhaseStatusLabel } from "./components/intentConfig.js";
@@ -78,7 +78,7 @@ export default function PlanWeekView({
   onSwitchVariant,
 }) {
   const [currentWeekIdx, setCurrentWeekIdx] = useState(0);
-  const [selectedDay, setSelectedDay] = useState(null);
+  const [selectedDayIndex, setSelectedDayIndex] = useState(null);
   const [showBlockTimeline, setShowBlockTimeline] = useState(false);
 
   const activeVariant = useMemo(
@@ -106,19 +106,36 @@ export default function PlanWeekView({
   useEffect(() => {
     if (!allWeeks.length) {
       setCurrentWeekIdx(0);
-      setSelectedDay(null);
+      setSelectedDayIndex(null);
       return;
     }
     const todayIso = new Date().toISOString().slice(0, 10);
     const nextIdx = allWeeks.findIndex((week) => normalizeDays(week).some((d) => d._iso === todayIso));
     setCurrentWeekIdx(nextIdx >= 0 ? nextIdx : 0);
-    setSelectedDay(null);
+    setSelectedDayIndex(null);
   }, [allWeeks]);
 
   const totalWeeks = allWeeks.length;
   const currentWeek = allWeeks[currentWeekIdx] || null;
   const days = useMemo(() => normalizeDays(currentWeek), [currentWeek]);
   const todayIso = new Date().toISOString().slice(0, 10);
+  const todayIndex = useMemo(() => days.findIndex((day) => day?._iso === todayIso), [days, todayIso]);
+  const selectedDay =
+    selectedDayIndex != null && selectedDayIndex >= 0 && selectedDayIndex < days.length
+      ? days[selectedDayIndex]
+      : null;
+
+  useEffect(() => {
+    if (!days.length) {
+      setSelectedDayIndex(null);
+      return;
+    }
+    if (todayIndex >= 0) {
+      setSelectedDayIndex(todayIndex);
+      return;
+    }
+    setSelectedDayIndex(0);
+  }, [days, todayIndex, currentWeekIdx]);
   const currentWeekOrder = currentWeek?._weekOrder || currentWeekIdx + 1;
   const phaseCtx = useMemo(() => {
     const phases = Array.isArray(activeVariant?.phases) ? activeVariant.phases : [];
@@ -296,20 +313,17 @@ export default function PlanWeekView({
         </button>
       </div>
 
-      {days.map((day) => (
-        <DayCard
-          key={day.id}
-          day={day}
-          isToday={day._iso === todayIso}
-          isPast={Boolean(day._iso && day._iso < todayIso)}
-          onTap={() => setSelectedDay(day)}
-        />
-      ))}
+      <WeekGrid
+        days={days}
+        selectedDayIndex={selectedDayIndex}
+        todayIndex={todayIndex}
+        onSelectDay={setSelectedDayIndex}
+      />
 
       {selectedDay ? (
         <SessionDetail
           day={selectedDay}
-          onClose={() => setSelectedDay(null)}
+          onClose={() => setSelectedDayIndex(null)}
           supabase={supabase}
           user={user}
         />
