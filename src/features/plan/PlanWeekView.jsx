@@ -2,7 +2,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { PhaseHeaderStrip } from "./components/PhaseHeaderStrip.jsx";
 import { WeekGrid } from "./components/WeekGrid.jsx";
 import PlanBlockTimeline from "./PlanBlockTimeline.jsx";
-import { getPhaseGradient } from "./components/intentConfig.js";
+import { getPhaseGradient, getPhaseStatusLabel } from "./components/intentConfig.js";
 import { SessionHeroCard } from "./components/SessionHeroCard.jsx";
 import {
   computePhaseProgress,

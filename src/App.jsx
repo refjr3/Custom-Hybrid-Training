@@ -1220,6 +1220,19 @@ const SESSION_ICONS = {
   travel: "→",
 };
 
+const SESSION_COLORS = {
+  hyrox: "#9b59b6",
+  strength: "#e07b3a",
+  zone2: "#4a90c4",
+  threshold: "#e74c3c",
+  tempo: "#f39c12",
+  recovery: "#27ae60",
+  race: "#f1c40f",
+  rest: "#444444",
+  mobility: "#1abc9c",
+  travel: "#4a90c4",
+};
+
 const resolveSessionKey = (sessionName, dayRow) => {
   const s = String(sessionName || "").toUpperCase();
   if (dayRow?.isRaceDay || s.includes("RACE")) return "race";
