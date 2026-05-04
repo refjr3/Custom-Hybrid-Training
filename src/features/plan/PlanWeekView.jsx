@@ -3,6 +3,7 @@ import { PhaseHeaderStrip } from "./components/PhaseHeaderStrip.jsx";
 import { DayCard } from "./components/DayCard.jsx";
 import SessionDetail from "./SessionDetail.jsx";
 import PlanBlockTimeline from "./PlanBlockTimeline.jsx";
+import { getPhaseGradient, getPhaseStatusLabel } from "./components/intentConfig.js";
 
 function parseWeekOrder(week, fallbackOrder) {
   const label = String(week?.label || "");
@@ -29,6 +30,14 @@ function parseWeekRange(week) {
     startIso: parseDateLabelToIso(left, year),
     endIso: parseDateLabelToIso(right, year),
   };
+}
+
+function normalizePhaseKey(value) {
+  return String(value || "")
+    .trim()
+    .toLowerCase()
+    .replace(/[_-]+/g, " ")
+    .replace(/\s+/g, " ");
 }
 
 function normalizeDays(week) {
@@ -110,6 +119,37 @@ export default function PlanWeekView({
   const currentWeek = allWeeks[currentWeekIdx] || null;
   const days = useMemo(() => normalizeDays(currentWeek), [currentWeek]);
   const todayIso = new Date().toISOString().slice(0, 10);
+  const currentWeekOrder = currentWeek?._weekOrder || currentWeekIdx + 1;
+  const phaseCtx = useMemo(() => {
+    const phases = Array.isArray(activeVariant?.phases) ? activeVariant.phases : [];
+    const currentName = String(currentWeek?._blockLabel || currentWeek?.phase || "").trim();
+    const normalizedCurrent = normalizePhaseKey(currentName);
+    let match =
+      phases.find((p) => normalizePhaseKey(p?.name) === normalizedCurrent) ||
+      phases.find((p) => {
+        const start = Number(p?.start_week);
+        const end = Number(p?.end_week);
+        if (!Number.isFinite(start) || !Number.isFinite(end)) return false;
+        return currentWeekOrder >= start && currentWeekOrder <= end;
+      }) ||
+      null;
+    if (!match && phases.length > 0) match = phases[0];
+    const start = Number(match?.start_week);
+    const end = Number(match?.end_week);
+    const phaseStart = Number.isFinite(start) && start > 0 ? start : currentWeekOrder;
+    const phaseEnd = Number.isFinite(end) && end >= phaseStart ? end : phaseStart;
+    const total = Math.max(1, phaseEnd - phaseStart + 1);
+    const inPhase = Math.max(1, Math.min(total, currentWeekOrder - phaseStart + 1));
+    const percent = Math.max(0, Math.min(100, Math.round((inPhase / total) * 100)));
+    return {
+      isDeloadWeek: /deload/i.test(String(currentWeek?.subtitle || "")),
+      currentWeekInPhase: inPhase,
+      phaseTotalWeeks: total,
+      phaseProgressPercent: percent,
+      phaseStatusLabel: getPhaseStatusLabel(inPhase, total),
+      phaseGradient: getPhaseGradient(match?.name || currentName),
+    };
+  }, [activeVariant?.phases, currentWeek?._blockLabel, currentWeek?.phase, currentWeek?.subtitle, currentWeekOrder]);
 
   if (planLoading) {
     return (
@@ -204,9 +244,15 @@ export default function PlanWeekView({
 
       <PhaseHeaderStrip
         currentPhaseName={currentWeek?._blockLabel || currentWeek?.phase || "Training"}
-        currentWeekOrder={currentWeek?._weekOrder || currentWeekIdx + 1}
+        currentWeekOrder={currentWeekOrder}
         totalWeeks={totalWeeks}
         raceDate={profile?.target_race_date}
+        isDeloadWeek={phaseCtx.isDeloadWeek}
+        currentWeekInPhase={phaseCtx.currentWeekInPhase}
+        phaseTotalWeeks={phaseCtx.phaseTotalWeeks}
+        phaseProgressPercent={phaseCtx.phaseProgressPercent}
+        phaseStatusLabel={phaseCtx.phaseStatusLabel}
+        phaseGradient={phaseCtx.phaseGradient}
         onTapBlockView={() => setShowBlockTimeline(true)}
       />
 

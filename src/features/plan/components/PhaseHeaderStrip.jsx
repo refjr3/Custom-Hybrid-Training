@@ -1,9 +1,22 @@
+function formatRaceDate(date) {
+  if (!date) return "";
+  const parsed = new Date(`${String(date).slice(0, 10)}T12:00:00`);
+  if (Number.isNaN(parsed.getTime())) return "";
+  return parsed.toLocaleDateString("en-US", { month: "short", day: "numeric" });
+}
+
 export function PhaseHeaderStrip({
   currentPhaseName,
   currentWeekOrder,
   totalWeeks,
   raceDate,
   onTapBlockView,
+  isDeloadWeek = false,
+  currentWeekInPhase = 1,
+  phaseTotalWeeks = 1,
+  phaseProgressPercent = 0,
+  phaseStatusLabel = "",
+  phaseGradient = "linear-gradient(90deg, rgba(201,168,117,0.6) 0%, #C9A875 100%)",
 }) {
   const now = new Date();
   const nowMidday = new Date(
@@ -27,8 +40,8 @@ export function PhaseHeaderStrip({
       onClick={onTapBlockView}
       style={{
         width: "100%",
-        background: "rgba(255,255,255,0.03)",
-        border: "1px solid rgba(255,255,255,0.06)",
+        background: "linear-gradient(180deg, rgba(255,255,255,0.04) 0%, rgba(255,255,255,0.02) 100%)",
+        border: "1px solid rgba(201,168,117,0.2)",
         borderRadius: 16,
         padding: "14px 18px",
         cursor: "pointer",
@@ -37,26 +50,28 @@ export function PhaseHeaderStrip({
         fontFamily: "'DM Sans', sans-serif",
       }}
     >
-      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 12 }}>
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 12 }}>
         <div>
           <div
             style={{
               fontSize: 9,
-              fontWeight: 700,
-              color: "rgba(201,168,117,0.6)",
-              letterSpacing: "2.5px",
+              fontWeight: 500,
+              color: "rgba(201,168,117,0.65)",
+              letterSpacing: "2px",
               marginBottom: 4,
               textTransform: "uppercase",
             }}
           >
             WEEK {currentWeekOrder || "—"} OF {totalWeeks || "—"}
+            {isDeloadWeek ? " · DELOAD" : ""}
           </div>
           <div
             style={{
               fontFamily: "'DM Serif Display', serif",
-              fontSize: 17,
+              fontSize: 19,
               color: "#fff",
               letterSpacing: "-0.3px",
+              marginTop: 4,
             }}
           >
             {currentPhaseName || "Current Block"}
@@ -67,20 +82,78 @@ export function PhaseHeaderStrip({
             <>
               <div
                 style={{
-                  fontSize: 10,
+                  fontSize: 9,
                   color: "rgba(255,255,255,0.4)",
                   letterSpacing: "1.5px",
+                  fontWeight: 500,
                   marginBottom: 2,
                   textTransform: "uppercase",
                 }}
               >
                 RACE IN
               </div>
-              <div style={{ fontSize: 16, color: "#C9A875", fontWeight: 600 }}>
-                {daysToRace} days
+              <div style={{ fontSize: 14, color: "#C9A875", fontWeight: 500, marginTop: 3 }}>{daysToRace}d</div>
+              <div style={{ fontSize: 10, color: "rgba(255,255,255,0.4)", marginTop: 1 }}>
+                {formatRaceDate(raceDate)}
               </div>
             </>
           ) : null}
+        </div>
+      </div>
+
+      <div
+        style={{
+          marginTop: 14,
+          paddingTop: 12,
+          borderTop: "0.5px solid rgba(201,168,117,0.15)",
+        }}
+      >
+        <div
+          style={{
+            display: "flex",
+            justifyContent: "space-between",
+            alignItems: "baseline",
+            marginBottom: 6,
+          }}
+        >
+          <span
+            style={{
+              fontSize: 9,
+              color: "rgba(255,255,255,0.4)",
+              letterSpacing: "1.5px",
+              fontWeight: 500,
+              textTransform: "uppercase",
+            }}
+          >
+            PHASE PROGRESS
+          </span>
+          <span
+            style={{
+              fontSize: 11,
+              color: "rgba(255,255,255,0.7)",
+              fontWeight: 500,
+              fontVariantNumeric: "tabular-nums",
+            }}
+          >
+            Wk {currentWeekInPhase} of {phaseTotalWeeks} · {phaseStatusLabel}
+          </span>
+        </div>
+        <div
+          style={{
+            height: 4,
+            background: "rgba(255,255,255,0.06)",
+            borderRadius: 3,
+            overflow: "hidden",
+          }}
+        >
+          <div
+            style={{
+              height: "100%",
+              width: `${Math.max(0, Math.min(100, Number(phaseProgressPercent) || 0))}%`,
+              background: phaseGradient,
+              borderRadius: 3,
+            }}
+          />
         </div>
       </div>
       <div style={{ marginTop: 8, fontSize: 11, color: "rgba(255,255,255,0.35)" }}>

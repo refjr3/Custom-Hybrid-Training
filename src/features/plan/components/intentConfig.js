@@ -64,6 +64,40 @@ export const SESSION_INTENTS = {
   },
 };
 
+export const PHASE_GRADIENTS = {
+  base: "linear-gradient(90deg, rgba(201,168,117,0.6) 0%, #C9A875 100%)",
+  accumulation: "linear-gradient(90deg, #C9A875 0%, #E8A855 100%)",
+  intensification: "linear-gradient(90deg, #E8A855 0%, #FF8A6C 100%)",
+  peak: "linear-gradient(90deg, #FF8A6C 0%, #FFC857 100%)",
+  sharpen: "linear-gradient(90deg, #FFC857 0%, #C9A875 100%)",
+  taper: "linear-gradient(90deg, #C9A875 0%, rgba(201,168,117,0.5) 100%)",
+};
+
+export function inferPhaseKey(phaseName) {
+  const lower = String(phaseName || "").toLowerCase();
+  if (!lower) return "base";
+  if (lower.includes("accum")) return "accumulation";
+  if (lower.includes("intens")) return "intensification";
+  if (lower.includes("peak")) return "peak";
+  if (lower.includes("sharp")) return "sharpen";
+  if (lower.includes("taper")) return "taper";
+  if (lower.includes("base")) return "base";
+  return "base";
+}
+
+export function getPhaseGradient(phaseName) {
+  return PHASE_GRADIENTS[inferPhaseKey(phaseName)] || PHASE_GRADIENTS.base;
+}
+
+export function getPhaseStatusLabel(currentWeekInPhase, phaseTotalWeeks) {
+  if (!phaseTotalWeeks || phaseTotalWeeks <= 1) return "Single week";
+  if (currentWeekInPhase >= phaseTotalWeeks) return "Final week";
+  if (currentWeekInPhase === 1) return "Opening week";
+  if (currentWeekInPhase === Math.ceil(phaseTotalWeeks / 2)) return "Halfway";
+  const weeksLeft = Math.max(phaseTotalWeeks - currentWeekInPhase, 0);
+  return `${weeksLeft} wk left`;
+}
+
 export function getSessionIntent(sessionType, sessionName) {
   if (sessionType && SESSION_INTENTS[sessionType]) return SESSION_INTENTS[sessionType];
   const lower = String(sessionName || "").toLowerCase();
