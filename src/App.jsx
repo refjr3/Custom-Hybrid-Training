@@ -3832,6 +3832,7 @@ export default function App() {
     return getTypeLabel(d?.am || d?.am_session || d?.pm || d?.pm_session) || "REST";
   };
 
+  const week = planBlocks?.[0]?.weeks?.[0] || null;
   const weeklyAiAdjustments = (week?.days || [])
     .filter((d) => d?.ai_modified === true)
     .map((d) => ({
