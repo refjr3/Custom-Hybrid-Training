@@ -1,9 +1,15 @@
 import { useEffect, useMemo, useState } from "react";
 import { PhaseHeaderStrip } from "./components/PhaseHeaderStrip.jsx";
 import { WeekGrid } from "./components/WeekGrid.jsx";
-import SessionDetail from "./SessionDetail.jsx";
 import PlanBlockTimeline from "./PlanBlockTimeline.jsx";
-import { getPhaseGradient, getPhaseStatusLabel } from "./components/intentConfig.js";
+import { getPhaseGradient } from "./components/intentConfig.js";
+import { SessionHeroCard } from "./components/SessionHeroCard.jsx";
+import {
+  extractDayNumber,
+  getCurrentWeek,
+  getDayIndex,
+  parseWeekDates,
+} from "./lib/weekDateUtils.js";
 
 function parseWeekOrder(week, fallbackOrder) {
   const label = String(week?.label || "");
@@ -12,24 +18,6 @@ function parseWeekOrder(week, fallbackOrder) {
   const fromField = Number(week?.week_order);
   if (Number.isFinite(fromField) && fromField > 0) return fromField;
   return fallbackOrder;
-}
-
-function parseDateLabelToIso(label, yearHint = new Date().getFullYear()) {
-  if (!label) return null;
-  const parsed = new Date(`${String(label).trim()} ${yearHint}`);
-  if (Number.isNaN(parsed.getTime())) return null;
-  return parsed.toISOString().slice(0, 10);
-}
-
-function parseWeekRange(week) {
-  const raw = String(week?.dates || "");
-  if (!raw.includes("-")) return { startIso: null, endIso: null };
-  const [left, right] = raw.split("-").map((part) => part.trim());
-  const year = new Date().getFullYear();
-  return {
-    startIso: parseDateLabelToIso(left, year),
-    endIso: parseDateLabelToIso(right, year),
-  };
 }
 
 function normalizePhaseKey(value) {
@@ -42,13 +30,12 @@ function normalizePhaseKey(value) {
 
 function normalizeDays(week) {
   const days = Array.isArray(week?.days) ? week.days : [];
-  const range = parseWeekRange(week);
-  const start = range.startIso ? new Date(`${range.startIso}T12:00:00`) : null;
+  const range = parseWeekDates(week?.dates, new Date().getFullYear());
+  const start = range?.start ? new Date(range.start) : null;
   return days.map((day, idx) => {
     const dateLabel = String(day?.date_label || day?.date || "").trim();
-    const labelIso = parseDateLabelToIso(dateLabel);
-    let iso = labelIso;
-    if (!iso && start) {
+    let iso = null;
+    if (start) {
       const d = new Date(start);
       d.setDate(start.getDate() + idx);
       iso = d.toISOString().slice(0, 10);
@@ -61,7 +48,11 @@ function normalizeDays(week) {
       pm_session: day?.pm_session ?? day?.pm ?? null,
       am_completed_at: day?.am_completed_at || null,
       pm_completed_at: day?.pm_completed_at || null,
+      am_session_blocks: Array.isArray(day?.am_session_blocks) ? day.am_session_blocks : [],
       _iso: iso,
+      _dayIndex: idx,
+      _dateNum: extractDayNumber(dateLabel),
+      _dateObj: iso ? new Date(`${iso}T12:00:00`) : null,
     };
   });
 }
@@ -80,6 +71,7 @@ export default function PlanWeekView({
   const [currentWeekIdx, setCurrentWeekIdx] = useState(0);
   const [selectedDayIndex, setSelectedDayIndex] = useState(null);
   const [showBlockTimeline, setShowBlockTimeline] = useState(false);
+  const [feedbackTargetDayId, setFeedbackTargetDayId] = useState(null);
 
   const activeVariant = useMemo(
     () => (planVariants || []).find((v) => v.id === activeVariantId) || null,
@@ -109,8 +101,8 @@ export default function PlanWeekView({
       setSelectedDayIndex(null);
       return;
     }
-    const todayIso = new Date().toISOString().slice(0, 10);
-    const nextIdx = allWeeks.findIndex((week) => normalizeDays(week).some((d) => d._iso === todayIso));
+    const current = getCurrentWeek(allWeeks, new Date());
+    const nextIdx = allWeeks.findIndex((w) => w.id === current?.week?.id);
     setCurrentWeekIdx(nextIdx >= 0 ? nextIdx : 0);
     setSelectedDayIndex(null);
   }, [allWeeks]);
@@ -118,8 +110,14 @@ export default function PlanWeekView({
   const totalWeeks = allWeeks.length;
   const currentWeek = allWeeks[currentWeekIdx] || null;
   const days = useMemo(() => normalizeDays(currentWeek), [currentWeek]);
-  const todayIso = new Date().toISOString().slice(0, 10);
-  const todayIndex = useMemo(() => days.findIndex((day) => day?._iso === todayIso), [days, todayIso]);
+  const todayDate = useMemo(() => new Date(), [currentWeekIdx, allWeeks.length]);
+  const todayIso = todayDate.toISOString().slice(0, 10);
+  const todayInfo = useMemo(() => getCurrentWeek(allWeeks, todayDate), [allWeeks, todayDate]);
+  const isCurrentWeek = currentWeek?.id && todayInfo?.week?.id === currentWeek.id;
+  const todayIndex = useMemo(
+    () => (isCurrentWeek ? Math.max(0, Math.min(6, getDayIndex(todayDate))) : -1),
+    [isCurrentWeek, todayDate],
+  );
   const selectedDay =
     selectedDayIndex != null && selectedDayIndex >= 0 && selectedDayIndex < days.length
       ? days[selectedDayIndex]
@@ -135,10 +133,10 @@ export default function PlanWeekView({
       return;
     }
     setSelectedDayIndex(0);
-  }, [days, todayIndex, currentWeekIdx]);
+  }, [days, todayIndex, currentWeekIdx, isCurrentWeek]);
   const currentWeekOrder = currentWeek?._weekOrder || currentWeekIdx + 1;
+  const phases = Array.isArray(activeVariant?.phases) ? activeVariant.phases : [];
   const phaseCtx = useMemo(() => {
-    const phases = Array.isArray(activeVariant?.phases) ? activeVariant.phases : [];
     const currentName = String(currentWeek?._blockLabel || currentWeek?.phase || "").trim();
     const normalizedCurrent = normalizePhaseKey(currentName);
     let match =
@@ -166,7 +164,49 @@ export default function PlanWeekView({
       phaseStatusLabel: getPhaseStatusLabel(inPhase, total),
       phaseGradient: getPhaseGradient(match?.name || currentName),
     };
-  }, [activeVariant?.phases, currentWeek?._blockLabel, currentWeek?.phase, currentWeek?.subtitle, currentWeekOrder]);
+  }, [phases, currentWeek?._blockLabel, currentWeek?.phase, currentWeek?.subtitle, currentWeekOrder]);
+
+  const isOnTodayInThisWeek = isCurrentWeek && selectedDayIndex === todayIndex;
+
+  async function handleSaveEdit(editedBlocks) {
+    if (!selectedDay?.id || !user?.id) return;
+    const { error } = await supabase
+      .from("training_days")
+      .update({
+        am_session_blocks: editedBlocks,
+        is_user_modified: true,
+      })
+      .eq("id", selectedDay.id);
+    if (error) {
+      console.error("[PlanWeekView] save edit:", error.message);
+      return;
+    }
+    const nextDays = days.map((d, i) =>
+      i === selectedDayIndex
+        ? { ...d, am_session_blocks: editedBlocks, is_user_modified: true }
+        : d,
+    );
+    const nextWeeks = allWeeks.map((w) =>
+      w.id === currentWeek?.id ? { ...w, days: nextDays } : w,
+    );
+    const idx = nextWeeks.findIndex((w) => w.id === currentWeek?.id);
+    if (idx >= 0) {
+      const updated = nextWeeks[idx];
+      setSelectedDayIndex((prev) => (prev == null ? 0 : prev));
+      // force rerender through week index update no-op + stable data path
+      setCurrentWeekIdx(idx);
+      nextWeeks[idx] = updated;
+    }
+  }
+
+  function jumpToToday() {
+    if (!todayInfo?.week) return;
+    const idx = allWeeks.findIndex((w) => w.id === todayInfo.week.id);
+    if (idx >= 0) {
+      setCurrentWeekIdx(idx);
+      setSelectedDayIndex(todayInfo.todayDayIndex ?? getDayIndex(new Date()));
+    }
+  }
 
   if (planLoading) {
     return (
@@ -273,6 +313,30 @@ export default function PlanWeekView({
         onTapBlockView={() => setShowBlockTimeline(true)}
       />
 
+      {!isOnTodayInThisWeek ? (
+        <button
+          type="button"
+          onClick={jumpToToday}
+          style={{
+            width: "100%",
+            marginBottom: 12,
+            padding: "10px 14px",
+            borderRadius: 999,
+            border: "1px dashed rgba(201,168,117,0.45)",
+            background: "rgba(201,168,117,0.06)",
+            color: "#C9A875",
+            fontSize: 11,
+            fontWeight: 600,
+            letterSpacing: "1.8px",
+            textTransform: "uppercase",
+            cursor: "pointer",
+            fontFamily: "'DM Sans', sans-serif",
+          }}
+        >
+          ⊙ Jump to today
+        </button>
+      ) : null}
+
       <div
         style={{
           display: "flex",
@@ -321,11 +385,13 @@ export default function PlanWeekView({
       />
 
       {selectedDay ? (
-        <SessionDetail
+        <SessionHeroCard
           day={selectedDay}
-          onClose={() => setSelectedDayIndex(null)}
-          supabase={supabase}
-          user={user}
+          isToday={selectedDayIndex === todayIndex}
+          onMarkComplete={() => {
+            setFeedbackTargetDayId(selectedDay.id);
+          }}
+          onSaveEdit={handleSaveEdit}
         />
       ) : null}
 
@@ -336,10 +402,20 @@ export default function PlanWeekView({
           onClose={() => setShowBlockTimeline(false)}
           onSelectWeek={(weekOrder) => {
             const idx = allWeeks.findIndex((w) => Number(w._weekOrder) === Number(weekOrder));
-            if (idx >= 0) setCurrentWeekIdx(idx);
+            if (idx >= 0) {
+              setCurrentWeekIdx(idx);
+              const nextDays = normalizeDays(allWeeks[idx]);
+              const nextToday = getCurrentWeek([allWeeks[idx]], todayDate);
+              if (nextToday?.week?.id === allWeeks[idx].id) setSelectedDayIndex(getDayIndex(todayDate));
+              else setSelectedDayIndex(nextDays.length ? 0 : null);
+            }
             setShowBlockTimeline(false);
           }}
         />
+      ) : null}
+
+      {feedbackTargetDayId ? (
+        <div style={{ display: "none" }} data-feedback-target-day-id={feedbackTargetDayId} />
       ) : null}
     </div>
   );
