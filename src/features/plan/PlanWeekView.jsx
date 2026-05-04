@@ -2,7 +2,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { PhaseHeaderStrip } from "./components/PhaseHeaderStrip.jsx";
 import { WeekGrid } from "./components/WeekGrid.jsx";
 import PlanBlockTimeline from "./PlanBlockTimeline.jsx";
-import { getPhaseGradient, getPhaseStatusLabel } from "./components/intentConfig.js";
+import { getPhaseGradient, getPhaseStatusLabel, getSessionIntent } from "./components/intentConfig.js";
 import { SessionHeroCard } from "./components/SessionHeroCard.jsx";
 import { SessionFeedbackSheet } from "./components/SessionFeedbackSheet.jsx";
 import {
@@ -25,6 +25,24 @@ function mapRpeBucketForDb(key) {
   if (!key) return null;
   const map = { easy: "easy", moderate: "solid", hard: "hard", max: "brutal" };
   return map[key] || key;
+}
+
+function extractWeekTypeFromNotes(days) {
+  for (const d of days || []) {
+    const text = String(d?.note ?? d?.note2a ?? "");
+    const m = text.match(/WEEK\s*TYPE\s*:\s*([A-Za-z]+)/i);
+    if (m) return m[1].toUpperCase();
+  }
+  return "STANDARD";
+}
+
+function structureIntentBucket(day) {
+  const slot = day?.am_session || day?.am;
+  if (!slot || String(slot).toUpperCase().includes("REST")) return null;
+  const intent = getSessionIntent(day?.am_session_type, day?.am_session);
+  if (intent.label === "Strength") return "strength";
+  if (intent.label === "Recovery") return "recovery";
+  return "conditioning";
 }
 
 function normalizeDays(week) {
@@ -155,6 +173,51 @@ export default function PlanWeekView({
       phaseGradient: getPhaseGradient(progress.phase?.name || currentName),
     };
   }, [allWeeks, currentWeek?._blockLabel, currentWeek?.phase, currentWeek?.subtitle, currentWeekOrder]);
+
+  const weeklyStructure = useMemo(() => {
+    const days = daysState;
+    const weekType = extractWeekTypeFromNotes(days);
+    let plannedSessions = 0;
+    let completedCount = 0;
+    let nStrength = 0;
+    let nConditioning = 0;
+    let nRecovery = 0;
+    for (const d of days) {
+      const slot = d?.am_session || d?.am;
+      if (slot && !String(slot).toUpperCase().includes("REST")) {
+        plannedSessions += 1;
+        const b = structureIntentBucket(d);
+        if (b === "strength") nStrength += 1;
+        else if (b === "conditioning") nConditioning += 1;
+        else if (b === "recovery") nRecovery += 1;
+      }
+      if (d?.am_completed_at) completedCount += 1;
+    }
+    const sessionBreakdown = [
+      nStrength ? `${nStrength} strength` : null,
+      nConditioning ? `${nConditioning} conditioning` : null,
+      nRecovery ? `${nRecovery} recovery` : null,
+    ]
+      .filter(Boolean)
+      .join(" · ");
+    const pct = plannedSessions ? (completedCount / plannedSessions) * 100 : 0;
+    const complianceColor =
+      pct >= 80 ? "rgba(120,200,180,0.95)" : pct >= 50 ? "#C9A875" : "rgba(255,255,255,0.35)";
+    const weekTypeColor =
+      weekType === "BRICK"
+        ? "#FF8A6C"
+        : weekType === "DELOAD"
+          ? "rgba(255,255,255,0.45)"
+          : "rgba(201,168,117,0.85)";
+    return {
+      weekType,
+      weekTypeColor,
+      plannedSessions,
+      completedCount,
+      sessionBreakdown: sessionBreakdown || "—",
+      complianceColor,
+    };
+  }, [daysState]);
 
   const isOnTodayInThisWeek = isCurrentWeek && selectedDayIndex === todayIndex;
 
@@ -378,6 +441,95 @@ export default function PlanWeekView({
         >
           Next →
         </button>
+      </div>
+
+      <div
+        style={{
+          background: "rgba(255,255,255,0.025)",
+          border: "0.5px solid rgba(255,255,255,0.06)",
+          borderRadius: 14,
+          padding: "14px 16px",
+          marginBottom: 14,
+        }}
+      >
+        <div
+          style={{
+            display: "flex",
+            justifyContent: "space-between",
+            alignItems: "center",
+            marginBottom: 10,
+          }}
+        >
+          <span
+            style={{
+              fontSize: 9,
+              fontWeight: 500,
+              color: "rgba(255,255,255,0.5)",
+              letterSpacing: "1.5px",
+            }}
+          >
+            THIS WEEK
+          </span>
+          <span
+            style={{
+              fontSize: 9,
+              fontWeight: 500,
+              color: weeklyStructure.weekTypeColor,
+              letterSpacing: "1.5px",
+            }}
+          >
+            {weeklyStructure.weekType}
+          </span>
+        </div>
+
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline" }}>
+          <div>
+            <div
+              style={{
+                fontSize: 18,
+                fontFamily: "'DM Serif Display', serif",
+                color: "#fff",
+                letterSpacing: "-0.3px",
+              }}
+            >
+              {weeklyStructure.plannedSessions} sessions planned
+            </div>
+            <div style={{ fontSize: 11, color: "rgba(255,255,255,0.5)", marginTop: 3 }}>
+              {weeklyStructure.sessionBreakdown}
+            </div>
+          </div>
+          <div style={{ textAlign: "right" }}>
+            <div style={{ fontSize: 9, color: "rgba(255,255,255,0.4)", letterSpacing: "1.5px" }}>COMPLIANCE</div>
+            <div
+              style={{
+                fontSize: 22,
+                color: weeklyStructure.complianceColor,
+                fontWeight: 500,
+                fontVariantNumeric: "tabular-nums",
+              }}
+            >
+              {weeklyStructure.completedCount}/{weeklyStructure.plannedSessions}
+            </div>
+          </div>
+        </div>
+
+        <div
+          style={{
+            height: 3,
+            background: "rgba(255,255,255,0.06)",
+            borderRadius: 2,
+            marginTop: 10,
+            overflow: "hidden",
+          }}
+        >
+          <div
+            style={{
+              height: "100%",
+              width: `${weeklyStructure.plannedSessions ? (weeklyStructure.completedCount / weeklyStructure.plannedSessions) * 100 : 0}%`,
+              background: weeklyStructure.complianceColor,
+            }}
+          />
+        </div>
       </div>
 
       <WeekGrid
