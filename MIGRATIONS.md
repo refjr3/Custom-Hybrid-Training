@@ -2,7 +2,7 @@
 
 ## Fresh Supabase provisioning
 
-Run the SQL files in **`migrations/`** in **lexicographic filename order** (000, 001, 002, …). That order matches numeric sequence: **`000_bootstrap.sql` first**, then `001` … through `035`.
+Run the SQL files in **`migrations/`** in **lexicographic filename order** (000, 001, 002, …). That order matches numeric sequence: **`000_bootstrap.sql` first**, then `001` … through `037`.
 
 **000** creates `training_blocks`, `training_weeks`, `training_days`, `garmin_activities`, and `ai_messages` with RLS enabled and **service_role–only** policies so the schema exists before **001** attaches permissive policies and **003** installs user-scoped policies.
 
@@ -59,6 +59,7 @@ Previously, multiple files shared the same numeric prefix (`005`, `006`, `009`, 
 | 33 | `033_zone_preferences.sql` | `selected_zone` + `zone_targets` jsonb on `user_profiles` (Phase 9 zone volume picker). |
 | 34 | `034_plan_intake.sql` | `plan_generation_requests` + `schedule_flexibility` on `user_profiles` (Phase 10a intake). |
 | 35 | `035_plan_generation_metadata.sql` | AI plan metadata on `plan_variants` (`generation_reasoning`, `weekly_pattern`, `current_week`, `generation_model`) + `error` / `stage` on `plan_generation_requests` (Phase 10b). |
+| 37 | `037_session_feedback.sql` | Creates `session_feedback` (RPE/notes/pain + completion metadata) and adds `am_completed_at` / `pm_completed_at` on `training_days` (Phase 11.1). |
 
 ## Optional scripts (`supabase/`)
 
