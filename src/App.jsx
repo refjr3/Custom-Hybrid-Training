@@ -485,6 +485,25 @@ function derivePerfPlanHeader(planBlocks) {
   };
 }
 
+function extractWeekTypeFromNotes(days) {
+  if (!Array.isArray(days)) return "STANDARD";
+  const re = /WEEK\s*TYPE:\s*(BRICK|STANDARD|DELOAD)/i;
+  for (const d of days) {
+    const text = String(d?.note ?? d?.note2a ?? "");
+    const m = text.match(re);
+    if (m) return m[1].toUpperCase();
+  }
+  return "STANDARD";
+}
+
+function bucketSessionIntentForStructure(sessionName) {
+  const s = String(sessionName || "").toLowerCase();
+  if (!s || s.includes("rest")) return null;
+  if (s.includes("strength") || s.includes("upper") || s.includes("lift") || s.includes("lower")) return "strength";
+  if (s.includes("mobility") || s.includes("recover") || (s.includes("easy") && s.includes("walk"))) return "recovery";
+  return "conditioning";
+}
+
 function complianceInsightFallback(percent) {
   if (percent == null || Number.isNaN(percent)) return "Add a plan and log activities to see compliance.";
   if (percent === 100) return "Perfect so far. Stay the course.";
@@ -5408,6 +5427,87 @@ export default function App() {
             })}
           </div>
 
+          {(() => {
+            const dlist = week?.days || [];
+            const weekType = extractWeekTypeFromNotes(dlist);
+            const weekTypeColor =
+              weekType === "BRICK" ? "#C9A875" : weekType === "DELOAD" ? "rgba(255,255,255,0.38)" : "rgba(255,255,255,0.55)";
+            let plannedSessions = 0;
+            let completedCount = 0;
+            let nStrength = 0;
+            let nConditioning = 0;
+            let nRecovery = 0;
+            for (const d of dlist) {
+              const am = d.am || d.am_session;
+              if (!am || !String(am).trim() || String(am).toUpperCase().includes("REST")) continue;
+              plannedSessions += 1;
+              if (d.am_completed_at) completedCount += 1;
+              const nm = getSessionNameForDay(d, "am");
+              const b = bucketSessionIntentForStructure(nm);
+              if (b === "strength") nStrength += 1;
+              else if (b === "recovery") nRecovery += 1;
+              else nConditioning += 1;
+            }
+            const parts = [];
+            if (nStrength) parts.push(`${nStrength} strength`);
+            if (nConditioning) parts.push(`${nConditioning} conditioning`);
+            if (nRecovery) parts.push(`${nRecovery} recovery`);
+            const sessionBreakdown = parts.length ? parts.join(" · ") : "—";
+            const compliancePct = plannedSessions > 0 ? (completedCount / plannedSessions) * 100 : 0;
+            const complianceColor =
+              compliancePct >= 80 ? C.green : compliancePct >= 50 ? "#C9A875" : "rgba(255,255,255,0.35)";
+            const barW = plannedSessions > 0 ? (completedCount / plannedSessions) * 100 : 0;
+            return (
+              <div
+                style={{
+                  background: "rgba(255,255,255,0.025)",
+                  border: "0.5px solid rgba(255,255,255,0.06)",
+                  borderRadius: 14,
+                  padding: "14px 16px",
+                  marginBottom: 14,
+                  marginTop: 4,
+                }}
+              >
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 10 }}>
+                  <span style={{ fontSize: 9, fontWeight: 500, color: "rgba(255,255,255,0.5)", letterSpacing: "1.5px" }}>
+                    THIS WEEK
+                  </span>
+                  <span style={{ fontSize: 9, fontWeight: 500, color: weekTypeColor, letterSpacing: "1.5px" }}>{weekType}</span>
+                </div>
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline" }}>
+                  <div>
+                    <div style={{ fontSize: 18, fontFamily: "'DM Serif Display', serif", color: "#fff", letterSpacing: "-0.3px" }}>
+                      {plannedSessions} sessions planned
+                    </div>
+                    <div style={{ fontSize: 11, color: "rgba(255,255,255,0.5)", marginTop: 3 }}>{sessionBreakdown}</div>
+                  </div>
+                  <div style={{ textAlign: "right" }}>
+                    <div style={{ fontSize: 9, color: "rgba(255,255,255,0.4)", letterSpacing: "1.5px" }}>COMPLIANCE</div>
+                    <div
+                      style={{
+                        fontSize: 22,
+                        color: complianceColor,
+                        fontWeight: 500,
+                        fontVariantNumeric: "tabular-nums",
+                      }}
+                    >
+                      {completedCount}/{plannedSessions}
+                    </div>
+                  </div>
+                </div>
+                <div style={{ height: 3, background: "rgba(255,255,255,0.06)", borderRadius: 2, marginTop: 10, overflow: "hidden" }}>
+                  <div
+                    style={{
+                      height: "100%",
+                      width: `${barW}%`,
+                      background: complianceColor,
+                    }}
+                  />
+                </div>
+              </div>
+            );
+          })()}
+
           <div style={{ marginTop: 10, display: "flex", justifyContent: "flex-end" }}>
             <button
               type="button"
@@ -5615,113 +5715,6 @@ export default function App() {
               </div>
             )}
           </div>
-
-          {(() => {
-            const planComplianceYear = parseInt(String((getLocalToday() || getDeviceLocalTodayYmd() || "").slice(0, 4)), 10) || 2026;
-            const complianceTodayIso = getLocalToday() || getDeviceLocalTodayYmd();
-            const currentWeekDaysCompliance = (week?.days || []).map((d) => {
-              const iso = weekDayLabelToIso(d?.date || d?.date_label, planComplianceYear);
-              return { ...d, _iso: iso, dayAbbr: String(d.day || "—").slice(0, 3) };
-            });
-            let plannedSessions = 0;
-            let completedSessions = 0;
-            const completedIsoList = [];
-            for (const d of currentWeekDaysCompliance) {
-              if (!d._iso || !dayIsPlannedTraining(d)) continue;
-              plannedSessions += 1;
-              if (dayHasCompletionSignal(d._iso, d, garminActivities, unifiedMetrics)) {
-                completedSessions += 1;
-                completedIsoList.push(d._iso);
-              }
-            }
-            const compliancePctPlan = plannedSessions > 0 ? Math.round((completedSessions / plannedSessions) * 100) : 0;
-            const glowTR = { position: "absolute", top: -20, right: -20, width: 120, height: 120, background: "radial-gradient(circle,rgba(210,190,155,0.1) 0%,transparent 70%)", pointerEvents: "none" };
-            return (
-              <div style={{ ...glassCard, marginTop: 16, borderRadius: 16 }}>
-                <div style={specularTop()} />
-                <div style={glowTR} />
-                <div style={{ padding: "18px 20px", position: "relative", zIndex: 1 }}>
-                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 14 }}>
-                    <div style={{ ...lbl, marginBottom: 0 }}>This Week</div>
-                    <div style={{ fontFamily: "'DM Serif Display',serif", fontSize: 24, color: "#C9A875", letterSpacing: "-1px", lineHeight: 1 }}>
-                      {compliancePctPlan}
-                      <span style={{ fontSize: 12, fontFamily: "'DM Sans',sans-serif", color: "rgba(201,168,117,0.6)" }}>%</span>
-                    </div>
-                  </div>
-                  <div style={{ display: "grid", gridTemplateColumns: "repeat(7,1fr)", gap: 6 }}>
-                    {currentWeekDaysCompliance.map((day, i) => {
-                      if (!day._iso) {
-                        return (
-                          <div key={i} style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 4 }}>
-                            <div style={{
-                              width: "100%",
-                              aspectRatio: "1",
-                              borderRadius: 10,
-                              background: "rgba(255,255,255,0.03)",
-                              border: "1px solid rgba(255,255,255,0.06)",
-                              display: "flex",
-                              alignItems: "center",
-                              justifyContent: "center",
-                              fontSize: 14,
-                            }}
-                            />
-                            <div style={{ fontSize: 8, fontWeight: 600, color: "rgba(255,255,255,0.15)", letterSpacing: "1px", textTransform: "uppercase" }}>{day.dayAbbr}</div>
-                          </div>
-                        );
-                      }
-                      const isPast = day._iso < complianceTodayIso;
-                      const isToday = day._iso === complianceTodayIso;
-                      const isPlanned = dayIsPlannedTraining(day);
-                      const isComplete = isPlanned && completedIsoList.includes(day._iso);
-                      const isMissed = isPlanned && isPast && !isComplete;
-                      return (
-                        <div key={i} style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 4 }}>
-                          <div style={{
-                            width: "100%",
-                            aspectRatio: "1",
-                            borderRadius: 10,
-                            background: isComplete ? "rgba(201,168,117,0.12)"
-                              : isMissed ? "rgba(255,59,48,0.08)"
-                                : isToday ? "rgba(255,255,255,0.06)"
-                                  : "rgba(255,255,255,0.03)",
-                            border: isComplete ? "1px solid rgba(201,168,117,0.35)"
-                              : isMissed ? "1px solid rgba(255,59,48,0.25)"
-                                : isToday ? "1px solid rgba(255,255,255,0.15)"
-                                  : "1px solid rgba(255,255,255,0.06)",
-                            display: "flex",
-                            alignItems: "center",
-                            justifyContent: "center",
-                            fontSize: 14,
-                          }}
-                          >
-                            {isComplete ? (
-                              <span style={{ color: "#C9A875", fontWeight: 600, fontSize: 13 }}>✓</span>
-                            ) : isMissed ? (
-                              <span style={{ color: "rgba(255,59,48,0.7)", fontSize: 12 }}>✕</span>
-                            ) : isToday ? (
-                              <span style={{ width: 6, height: 6, borderRadius: "50%", background: "rgba(255,255,255,0.4)", display: "inline-block" }} />
-                            ) : null}
-                          </div>
-                          <div style={{
-                            fontSize: 8,
-                            fontWeight: 600,
-                            color: isComplete ? "rgba(201,168,117,0.7)"
-                              : isMissed ? "rgba(255,59,48,0.5)"
-                                : isToday ? "rgba(255,255,255,0.5)"
-                                  : "rgba(255,255,255,0.15)",
-                            letterSpacing: "1px",
-                            textTransform: "uppercase",
-                          }}
-                          >{day.dayAbbr}
-                          </div>
-                        </div>
-                      );
-                    })}
-                  </div>
-                </div>
-              </div>
-            );
-          })()}
 
           <div style={{ marginTop:16 }}>
             <div style={{ fontFamily:C.fm, fontSize:10, color:C.cyan, letterSpacing:3, textTransform:"uppercase", marginBottom:8 }}>Weekly Structure</div>
