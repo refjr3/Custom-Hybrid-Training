@@ -2,7 +2,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { PhaseHeaderStrip } from "./components/PhaseHeaderStrip.jsx";
 import { WeekGrid } from "./components/WeekGrid.jsx";
 import PlanBlockTimeline from "./PlanBlockTimeline.jsx";
-import { getPhaseGradient, getPhaseStatusLabel, getSessionIntent } from "./components/intentConfig.js";
+import { getPhaseGradient, getSessionIntent } from "./components/intentConfig.js";
 import { SessionHeroCard } from "./components/SessionHeroCard.jsx";
 import { SessionFeedbackSheet } from "./components/SessionFeedbackSheet.jsx";
 import {
@@ -73,6 +73,10 @@ function normalizeDays(week) {
   });
 }
 
+function inferWeekId(week) {
+  return week?.week_id || week?.id || null;
+}
+
 export default function PlanWeekView({
   user,
   supabase,
@@ -117,7 +121,7 @@ export default function PlanWeekView({
       return;
     }
     const current = getCurrentWeek(allWeeks, new Date());
-    const nextIdx = allWeeks.findIndex((w) => w.id === current?.week?.id);
+    const nextIdx = allWeeks.findIndex((w) => String(w.id) === String(current?.week?.id));
     setCurrentWeekIdx(nextIdx >= 0 ? nextIdx : 0);
     setSelectedDayIndex(null);
   }, [allWeeks]);
@@ -126,7 +130,6 @@ export default function PlanWeekView({
   const currentWeek = allWeeks[currentWeekIdx] || null;
   const normalizedDays = useMemo(() => normalizeDays(currentWeek), [currentWeek]);
   const todayDate = useMemo(() => new Date(), [currentWeekIdx, allWeeks.length]);
-  const todayIso = todayDate.toISOString().slice(0, 10);
   const todayInfo = useMemo(() => getCurrentWeek(allWeeks, todayDate), [allWeeks, todayDate]);
   const isCurrentWeek = currentWeek?.id && todayInfo?.week?.id === currentWeek.id;
   const todayIndex = useMemo(
@@ -156,7 +159,7 @@ export default function PlanWeekView({
   const currentWeekOrder = currentWeek?._weekOrder || currentWeekIdx + 1;
   const phaseCtx = useMemo(() => {
     const base = computePhaseProgress(allWeeks, currentWeekOrder);
-    const currentName = String(currentWeek?.phase || currentWeek?._blockLabel || base?.phaseName || base?.phase?.name || "").trim();
+    const currentName = String(currentWeek?.phase || currentWeek?._blockLabel || base?.phaseName || "").trim();
     const progress = base || {
       phase: { name: currentName || "Base" },
       phaseTotalWeeks: 1,
@@ -170,7 +173,7 @@ export default function PlanWeekView({
       phaseTotalWeeks: progress.phaseTotalWeeks,
       phaseProgressPercent: progress.phaseProgressPercent,
       phaseStatusLabel: progress.phaseStatusLabel || getPhaseStatusLabel(progress.currentWeekInPhase, progress.phaseTotalWeeks),
-      phaseGradient: getPhaseGradient(progress.phase?.name || currentName),
+      phaseGradient: getPhaseGradient(progress.phaseName || currentName),
     };
   }, [allWeeks, currentWeek?._blockLabel, currentWeek?.phase, currentWeek?.subtitle, currentWeekOrder]);
 
@@ -220,6 +223,26 @@ export default function PlanWeekView({
   }, [daysState]);
 
   const isOnTodayInThisWeek = isCurrentWeek && selectedDayIndex === todayIndex;
+
+  async function loadWeekDays(targetWeek = currentWeek) {
+    const weekId = inferWeekId(targetWeek);
+    if (!supabase || !user?.id || !weekId) return;
+    const { data, error } = await supabase
+      .from("training_days")
+      .select("*")
+      .eq("user_id", user.id)
+      .eq("week_id", weekId)
+      .order("day_name", { ascending: true });
+    if (error) {
+      console.error("[PlanWeekView] loadWeekDays:", error.message);
+      return;
+    }
+    if (Array.isArray(data) && data.length) {
+      const nextDays = normalizeDays({ ...targetWeek, days: data });
+      setDaysState(nextDays);
+      if (selectedDayIndex == null) setSelectedDayIndex(nextDays.length ? 0 : null);
+    }
+  }
 
   async function handleSaveEdit(editedBlocks) {
     if (!selectedDay?.id || !user?.id) return;
@@ -607,11 +630,9 @@ export default function PlanWeekView({
             else dayQ = dayQ.is("variant_id", null);
             const { error: e2 } = await dayQ;
             if (e2) throw e2;
-            setDaysState((prev) =>
-              prev.map((d) => (d.id === feedbackDay.id ? { ...d, am_completed_at: completedAt } : d)),
-            );
             setFeedbackOpen(false);
             setFeedbackDay(null);
+            await loadWeekDays(currentWeek);
             await onPlanRefetch?.();
           }}
         />

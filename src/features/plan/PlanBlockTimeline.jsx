@@ -27,7 +27,6 @@ function flattenWeeks(blocks) {
 export default function PlanBlockTimeline({
   blocks,
   currentWeekOrder,
-  currentWeekId,
   onClose,
   onSelectWeek,
 }) {
@@ -99,15 +98,12 @@ export default function PlanBlockTimeline({
 
         <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
           {weeks.map((week) => {
-            const active =
-              currentWeekId && week.id
-                ? String(week.id) === String(currentWeekId)
-                : Number(week.weekOrder) === Number(currentWeekOrder);
+            const active = Number(week.weekOrder) === Number(currentWeekOrder);
             return (
               <button
                 key={week.id}
                 type="button"
-                onClick={() => onSelectWeek?.(week.id, week.weekOrder)}
+                onClick={() => onSelectWeek?.(week.weekOrder)}
                 style={{
                   width: "100%",
                   textAlign: "left",
