@@ -13,12 +13,57 @@ import {
 } from "./lib/weekDateUtils.js";
 
 function parseWeekOrder(week, fallbackOrder) {
+  const fromField = Number(week?.week_order);
+  if (Number.isFinite(fromField) && fromField > 0) return fromField;
   const label = String(week?.label || "");
   const fromLabel = Number(label.match(/\d+/)?.[0]);
   if (Number.isFinite(fromLabel) && fromLabel > 0) return fromLabel;
-  const fromField = Number(week?.week_order);
-  if (Number.isFinite(fromField) && fromField > 0) return fromField;
   return fallbackOrder;
+}
+
+function getWeekOrderValue(week, fallback = Number.MAX_SAFE_INTEGER) {
+  const ord = Number(week?.week_order ?? week?._weekOrder);
+  return Number.isFinite(ord) && ord > 0 ? ord : fallback;
+}
+
+function parseRaceDateValue(value) {
+  if (!value) return null;
+  if (value instanceof Date) {
+    if (Number.isNaN(value.getTime())) return null;
+    return new Date(value.getFullYear(), value.getMonth(), value.getDate(), 12, 0, 0, 0);
+  }
+  const text = String(value).trim();
+  if (!text) return null;
+  const hasDateOnly = /^\d{4}-\d{2}-\d{2}$/.test(text);
+  const parsed = new Date(hasDateOnly ? `${text}T12:00:00` : text);
+  if (Number.isNaN(parsed.getTime())) return null;
+  return new Date(parsed.getFullYear(), parsed.getMonth(), parsed.getDate(), 12, 0, 0, 0);
+}
+
+function getVariantRaceDate(weeks, activeVariant) {
+  const fromVariant = [
+    activeVariant?.target_race_date,
+    activeVariant?.race_date,
+    activeVariant?.event_date,
+  ]
+    .map(parseRaceDateValue)
+    .find(Boolean);
+  if (fromVariant) return fromVariant;
+
+  const nowYear = new Date().getFullYear();
+  const weekRows = Array.isArray(weeks) ? [...weeks] : [];
+  weekRows.sort((a, b) => getWeekOrderValue(a) - getWeekOrderValue(b));
+  for (const week of weekRows) {
+    const weekRange = parseWeekDates(week?.dates, nowYear);
+    const yearHint = weekRange?.start?.getFullYear() || nowYear;
+    for (const day of week?.days || []) {
+      if (!day?.isRaceDay) continue;
+      const dateLabel = String(day?.date_label || day?.date || "").trim();
+      const candidate = parseRaceDateValue(`${dateLabel} ${yearHint}`);
+      if (candidate) return candidate;
+    }
+  }
+  return null;
 }
 
 function mapRpeBucketForDb(key) {
@@ -119,6 +164,15 @@ export default function PlanWeekView({
     rows.sort((a, b) => Number(a._weekOrder || 999) - Number(b._weekOrder || 999));
     return rows;
   }, [planBlocks]);
+  const sortedWeeksForNav = useMemo(() => {
+    const next = [...allWeeks];
+    next.sort((a, b) => {
+      const diff = getWeekOrderValue(a) - getWeekOrderValue(b);
+      if (diff !== 0) return diff;
+      return String(a?.id || "").localeCompare(String(b?.id || ""));
+    });
+    return next;
+  }, [allWeeks]);
 
   useEffect(() => {
     if (!allWeeks.length) {
@@ -134,6 +188,10 @@ export default function PlanWeekView({
 
   const totalWeeks = allWeeks.length;
   const currentWeek = allWeeks[currentWeekIdx] || null;
+  const activeVariant = useMemo(
+    () => (planVariants || []).find((v) => String(v?.id) === String(activeVariantId)) || null,
+    [planVariants, activeVariantId],
+  );
   const normalizedDays = useMemo(() => normalizeDays(currentWeek), [currentWeek]);
   const todayDate = useMemo(() => new Date(), [currentWeekIdx, allWeeks.length]);
   const todayInfo = useMemo(() => getCurrentWeek(allWeeks, todayDate), [allWeeks, todayDate]);
@@ -162,9 +220,23 @@ export default function PlanWeekView({
     }
     setSelectedDayIndex(0);
   }, [daysState, todayIndex, currentWeekIdx, isCurrentWeek]);
-  const currentWeekOrder = currentWeek?._weekOrder || currentWeekIdx + 1;
+  const currentWeekOrder = useMemo(() => {
+    const ord = Number(currentWeek?.week_order ?? currentWeek?._weekOrder);
+    return Number.isFinite(ord) && ord > 0 ? ord : null;
+  }, [currentWeek?.week_order, currentWeek?._weekOrder]);
+  const raceDate = useMemo(() => {
+    if (profile?.target_race_date) return parseRaceDateValue(profile.target_race_date);
+    return getVariantRaceDate(allWeeks, activeVariant);
+  }, [profile?.target_race_date, allWeeks, activeVariant]);
+  const daysToRace = useMemo(() => {
+    if (!raceDate) return null;
+    return Math.max(0, Math.round((raceDate.getTime() - Date.now()) / (1000 * 60 * 60 * 24)));
+  }, [raceDate]);
+  const raceName = String(
+    profile?.target_race_name || activeVariant?.target_race_name || activeVariant?.race_name || "",
+  ).trim();
   const phaseCtx = useMemo(() => {
-    const base = computePhaseProgress(allWeeks, currentWeekOrder);
+    const base = computePhaseProgress(allWeeks, currentWeek?.week_order ?? currentWeekOrder);
     const currentName = String(currentWeek?.phase || currentWeek?._blockLabel || base?.phaseName || "").trim();
     const progress = base || {
       phase: { name: currentName || "Base" },
@@ -181,7 +253,11 @@ export default function PlanWeekView({
       phaseStatusLabel: progress.phaseStatusLabel || getPhaseStatusLabel(progress.currentWeekInPhase, progress.phaseTotalWeeks),
       phaseGradient: getPhaseGradient(progress.phaseName || currentName),
     };
-  }, [allWeeks, currentWeek?._blockLabel, currentWeek?.phase, currentWeek?.subtitle, currentWeekOrder]);
+  }, [allWeeks, currentWeek?._blockLabel, currentWeek?.phase, currentWeek?.subtitle, currentWeek?.week_order, currentWeekOrder]);
+  const sortedWeekCursor = useMemo(
+    () => sortedWeeksForNav.findIndex((w) => String(w?.id) === String(currentWeek?.id)),
+    [sortedWeeksForNav, currentWeek?.id],
+  );
 
   const weeklyStructure = useMemo(() => {
     const days = daysState;
@@ -227,6 +303,34 @@ export default function PlanWeekView({
   }, [daysState, currentWeek?.subtitle]);
 
   const isOnTodayInThisWeek = isCurrentWeek && selectedDayIndex === todayIndex;
+
+  function setDisplayedWeek(weekRef) {
+    const idxById = allWeeks.findIndex((w) => String(w?.id) === String(weekRef));
+    const idxByOrder =
+      idxById >= 0
+        ? idxById
+        : allWeeks.findIndex((w) => getWeekOrderValue(w, -1) === Number(weekRef));
+    if (idxByOrder < 0) return;
+    const targetWeek = allWeeks[idxByOrder];
+    const nextDays = normalizeDays(targetWeek);
+    const nextToday = getCurrentWeek([targetWeek], new Date());
+    setCurrentWeekIdx(idxByOrder);
+    setDaysState(nextDays);
+    if (nextToday?.week?.id === targetWeek?.id) setSelectedDayIndex(getDayIndex(new Date()));
+    else setSelectedDayIndex(nextDays.length ? 0 : null);
+  }
+
+  const handlePrev = () => {
+    if (!currentWeek) return;
+    const idx = sortedWeeksForNav.findIndex((w) => String(w?.id) === String(currentWeek?.id));
+    if (idx > 0) setDisplayedWeek(sortedWeeksForNav[idx - 1]?.id);
+  };
+
+  const handleNext = () => {
+    if (!currentWeek) return;
+    const idx = sortedWeeksForNav.findIndex((w) => String(w?.id) === String(currentWeek?.id));
+    if (idx >= 0 && idx < sortedWeeksForNav.length - 1) setDisplayedWeek(sortedWeeksForNav[idx + 1]?.id);
+  };
 
   async function loadWeekDays(targetWeek = currentWeek) {
     const weekId = inferWeekId(targetWeek);
@@ -396,7 +500,9 @@ export default function PlanWeekView({
         currentPhaseName={String(currentWeek?.phase || currentWeek?._blockLabel || "Training").trim()}
         currentWeekOrder={currentWeekOrder}
         totalWeeks={totalWeeks}
-        raceDate={profile?.target_race_date}
+        raceDate={raceDate}
+        raceName={raceName || null}
+        daysToRace={daysToRace}
         isDeloadWeek={phaseCtx.isDeloadWeek}
         currentWeekInPhase={phaseCtx.currentWeekInPhase}
         phaseTotalWeeks={phaseCtx.phaseTotalWeeks}
@@ -441,9 +547,9 @@ export default function PlanWeekView({
       >
         <button
           type="button"
-          onClick={() => setCurrentWeekIdx((i) => Math.max(0, i - 1))}
-          disabled={currentWeekIdx === 0}
-          style={navBtn(currentWeekIdx === 0)}
+          onClick={handlePrev}
+          disabled={sortedWeekCursor <= 0}
+          style={navBtn(sortedWeekCursor <= 0)}
         >
           ← Prev
         </button>
@@ -462,9 +568,9 @@ export default function PlanWeekView({
         </div>
         <button
           type="button"
-          onClick={() => setCurrentWeekIdx((i) => Math.min(allWeeks.length - 1, i + 1))}
-          disabled={currentWeekIdx >= allWeeks.length - 1}
-          style={navBtn(currentWeekIdx >= allWeeks.length - 1)}
+          onClick={handleNext}
+          disabled={sortedWeekCursor < 0 || sortedWeekCursor >= sortedWeeksForNav.length - 1}
+          style={navBtn(sortedWeekCursor < 0 || sortedWeekCursor >= sortedWeeksForNav.length - 1)}
         >
           Next →
         </button>
@@ -591,15 +697,7 @@ export default function PlanWeekView({
           currentWeekId={currentWeek?.id}
           onClose={() => setShowBlockTimeline(false)}
           onSelectWeek={(weekId) => {
-            const idx = allWeeks.findIndex((w) => String(w.id) === String(weekId));
-            if (idx >= 0) {
-              setCurrentWeekIdx(idx);
-              const nextDays = normalizeDays(allWeeks[idx]);
-              setDaysState(nextDays);
-              const nextToday = getCurrentWeek([allWeeks[idx]], todayDate);
-              if (nextToday?.week?.id === allWeeks[idx].id) setSelectedDayIndex(getDayIndex(todayDate));
-              else setSelectedDayIndex(nextDays.length ? 0 : null);
-            }
+            setDisplayedWeek(weekId);
             setShowBlockTimeline(false);
           }}
         />
