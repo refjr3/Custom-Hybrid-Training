@@ -360,31 +360,34 @@ export default function PlanWeekView({
   }
 
   const handlePrev = () => {
-    const prevWeek = getAdjacentWeekByOrder(
-      sortedWeeksForNav,
-      currentWeek?.week_order ?? currentWeek?._weekOrder,
-      -1,
+    const sortedWeeks = [...sortedWeeksForNav].sort(
+      (a, b) => getWeekOrderValue(a) - getWeekOrderValue(b),
     );
-    if (prevWeek) setDisplayedWeek(prevWeek.id);
+    const currentOrder = currentWeek?.week_order ?? currentWeek?._weekOrder ?? null;
+    console.log("[handlePrev] currentWeek.week_order =", currentOrder);
+    console.log(
+      "[handlePrev] sortedWeeks order =",
+      sortedWeeks.map((w) => getWeekOrderValue(w, null)),
+    );
+    const prev = getAdjacentWeekByOrder(sortedWeeks, currentOrder, -1);
+    console.log("[handlePrev] prev.week_order =", prev?.week_order ?? prev?._weekOrder ?? null);
+    if (prev) setSelectedWeekId(prev.id);
   };
 
   const handleNext = () => {
     const sortedWeeks = [...sortedWeeksForNav].sort(
       (a, b) => getWeekOrderValue(a) - getWeekOrderValue(b),
     );
+    const currentOrder = currentWeek?.week_order ?? currentWeek?._weekOrder ?? null;
     console.log(
       "[handleNext] currentWeek.week_order =",
-      currentWeek?.week_order ?? currentWeek?._weekOrder ?? null,
+      currentOrder,
     );
     console.log(
       "[handleNext] sortedWeeks order =",
       sortedWeeks.map((w) => getWeekOrderValue(w, null)),
     );
-    const next = getAdjacentWeekByOrder(
-      sortedWeeks,
-      currentWeek?.week_order ?? currentWeek?._weekOrder,
-      +1,
-    );
+    const next = getAdjacentWeekByOrder(sortedWeeks, currentOrder, +1);
     console.log(
       "[handleNext] next.week_order =",
       next?.week_order ?? next?._weekOrder ?? null,
