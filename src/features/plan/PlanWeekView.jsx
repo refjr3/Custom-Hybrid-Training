@@ -5,6 +5,7 @@ import PlanBlockTimeline from "./PlanBlockTimeline.jsx";
 import { getPhaseGradient, getPhaseStatusLabel, getSessionIntent } from "./components/intentConfig.js";
 import { SessionHeroCard } from "./components/SessionHeroCard.jsx";
 import { SessionFeedbackSheet } from "./components/SessionFeedbackSheet.jsx";
+import { WeeklyStructureSnapshot } from "./components/WeeklyStructureSnapshot.jsx";
 import {
   computePhaseProgress,
   getCurrentWeek,
@@ -94,6 +95,12 @@ function getWeekTypeColor(weekType) {
   if (weekType === "BRICK") return "#FF8A6C";
   if (weekType === "DELOAD") return "rgba(255,255,255,0.45)";
   return "rgba(201,168,117,0.85)";
+}
+
+function toMonSunOrder(dayName) {
+  const key = String(dayName || "").trim().toUpperCase().slice(0, 3);
+  const map = { MON: 0, TUE: 1, WED: 2, THU: 3, FRI: 4, SAT: 5, SUN: 6 };
+  return map[key] ?? 99;
 }
 
 function normalizeDays(week) {
@@ -793,6 +800,16 @@ export default function PlanWeekView({
           onSaveNote={handleSaveNote}
         />
       ) : null}
+
+      <WeeklyStructureSnapshot
+        days={daysState}
+        todayDayIndex={isCurrentWeek ? todayIndex : null}
+        weekLabel={currentWeek?.label || `Week ${currentWeekOrder || "—"}`}
+        weekDates={currentWeek?.dates || ""}
+        weekType={weeklyStructure.weekType}
+        getSessionIntent={getSessionIntent}
+        dayOrderResolver={toMonSunOrder}
+      />
 
       {showBlockTimeline ? (
         <PlanBlockTimeline
