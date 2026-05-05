@@ -9,8 +9,10 @@ import {
   computePhaseProgress,
   getCurrentWeek,
   getDayIndex,
+  getVariantRaceDate,
   parseWeekDates,
 } from "./lib/weekDateUtils.js";
+import { formatEasternYmdFromDate } from "../../../lib/getLocalToday.js";
 
 function parseWeekOrder(week, fallbackOrder) {
   const label = String(week?.label || "");
@@ -163,9 +165,24 @@ export default function PlanWeekView({
     setSelectedDayIndex(0);
   }, [daysState, todayIndex, currentWeekIdx, isCurrentWeek]);
   const currentWeekOrder = currentWeek?._weekOrder || currentWeekIdx + 1;
+
+  const variantRaceEnd = useMemo(() => getVariantRaceDate(allWeeks), [allWeeks]);
+  const variantRaceDateIso = useMemo(
+    () => (variantRaceEnd ? formatEasternYmdFromDate(variantRaceEnd) : null),
+    [variantRaceEnd],
+  );
+  const variantDaysToRace = useMemo(() => {
+    if (!variantRaceEnd) return null;
+    const now = new Date();
+    const nowMidday = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 12, 0, 0, 0);
+    const raceMidday = new Date(variantRaceEnd);
+    raceMidday.setHours(12, 0, 0, 0);
+    return Math.max(0, Math.round((raceMidday.getTime() - nowMidday.getTime()) / (1000 * 60 * 60 * 24)));
+  }, [variantRaceEnd]);
+
   const phaseCtx = useMemo(() => {
-    const base = computePhaseProgress(allWeeks, currentWeekOrder);
-    const currentName = String(currentWeek?.phase || currentWeek?._blockLabel || base?.phaseName || "").trim();
+    const base = currentWeek ? computePhaseProgress(allWeeks, currentWeek) : null;
+    const currentName = String(currentWeek?.phase || currentWeek?._blockLabel || base?.phaseName || base?.phase?.name || "").trim();
     const progress = base || {
       phase: { name: currentName || "Base" },
       phaseTotalWeeks: 1,
@@ -179,9 +196,9 @@ export default function PlanWeekView({
       phaseTotalWeeks: progress.phaseTotalWeeks,
       phaseProgressPercent: progress.phaseProgressPercent,
       phaseStatusLabel: progress.phaseStatusLabel || getPhaseStatusLabel(progress.currentWeekInPhase, progress.phaseTotalWeeks),
-      phaseGradient: getPhaseGradient(progress.phaseName || currentName),
+      phaseGradient: getPhaseGradient(base?.phaseName || progress.phase?.name || currentName),
     };
-  }, [allWeeks, currentWeek?._blockLabel, currentWeek?.phase, currentWeek?.subtitle, currentWeekOrder]);
+  }, [allWeeks, currentWeek, currentWeek?._blockLabel, currentWeek?.phase, currentWeek?.subtitle]);
 
   const weeklyStructure = useMemo(() => {
     const days = daysState;
@@ -396,7 +413,8 @@ export default function PlanWeekView({
         currentPhaseName={String(currentWeek?.phase || currentWeek?._blockLabel || "Training").trim()}
         currentWeekOrder={currentWeekOrder}
         totalWeeks={totalWeeks}
-        raceDate={profile?.target_race_date}
+        raceDate={variantRaceDateIso}
+        daysToRace={variantDaysToRace}
         isDeloadWeek={phaseCtx.isDeloadWeek}
         currentWeekInPhase={phaseCtx.currentWeekInPhase}
         phaseTotalWeeks={phaseCtx.phaseTotalWeeks}

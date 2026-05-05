@@ -10,6 +10,7 @@ export function PhaseHeaderStrip({
   currentWeekOrder,
   totalWeeks,
   raceDate,
+  daysToRace: daysToRaceOverride,
   onTapBlockView,
   isDeloadWeek = false,
   currentWeekInPhase = 1,
@@ -29,10 +30,11 @@ export function PhaseHeaderStrip({
     0,
   );
   const raceMidday = raceDate ? new Date(`${String(raceDate).slice(0, 10)}T12:00:00`) : null;
-  const daysToRace =
+  const daysToRaceFromDate =
     raceMidday && !Number.isNaN(raceMidday.getTime())
       ? Math.max(0, Math.round((raceMidday.getTime() - nowMidday.getTime()) / (1000 * 60 * 60 * 24)))
       : null;
+  const daysToRace = daysToRaceOverride != null ? daysToRaceOverride : daysToRaceFromDate;
 
   return (
     <button

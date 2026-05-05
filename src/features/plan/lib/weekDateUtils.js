@@ -97,24 +97,41 @@ function weekOrderNum(w) {
 /**
  * Phase progress from `training_weeks.phase` on loaded week rows
  * (not plan variant `phases` jsonb — often empty in production).
+ *
+ * @param {object[]} weeks — flattened variant weeks (same order as PlanWeekView `allWeeks`)
+ * @param {object} displayedWeek — the week row the user is viewing (e.g. `allWeeks[currentWeekIdx]`)
  */
-export function computePhaseProgress(weeks, currentWeekOrder) {
-  if (!weeks || currentWeekOrder == null || Number.isNaN(Number(currentWeekOrder))) return null;
+export function computePhaseProgress(weeks, displayedWeek) {
+  if (!Array.isArray(weeks) || !displayedWeek || !displayedWeek.phase) return null;
 
-  const curOrd = Number(currentWeekOrder);
-  const currentWeek = weeks.find((w) => weekOrderNum(w) === curOrd) || weeks.find((w) => Number(w.week_order) === curOrd);
-  if (!currentWeek?.phase) return null;
-
-  const phaseName = currentWeek.phase;
+  const phaseName = displayedWeek.phase;
   const weeksInPhase = weeks
     .filter((w) => w.phase === phaseName)
-    .sort((a, b) => (weekOrderNum(a) ?? 0) - (weekOrderNum(b) ?? 0));
+    .sort((a, b) => (weekOrderNum(a) ?? 9999) - (weekOrderNum(b) ?? 9999));
 
   if (weeksInPhase.length === 0) return null;
 
-  const phaseStart = weekOrderNum(weeksInPhase[0]) ?? curOrd;
+  let idx = -1;
+  if (displayedWeek.id != null) {
+    idx = weeksInPhase.findIndex((w) => String(w.id) === String(displayedWeek.id));
+  }
+  if (idx < 0) {
+    const o = weekOrderNum(displayedWeek);
+    const wo = Number(displayedWeek.week_order);
+    const target = Number.isFinite(o) ? o : Number.isFinite(wo) ? wo : null;
+    if (target != null) {
+      idx = weeksInPhase.findIndex(
+        (w) => weekOrderNum(w) === target || Number(w.week_order) === target,
+      );
+    }
+  }
+  if (idx < 0) {
+    idx = weeksInPhase.indexOf(displayedWeek);
+  }
+  if (idx < 0) return null;
+
+  const currentWeekInPhase = idx + 1;
   const phaseTotalWeeks = weeksInPhase.length;
-  const currentWeekInPhase = curOrd - phaseStart + 1;
   const phaseProgressPercent = (currentWeekInPhase / phaseTotalWeeks) * 100;
 
   let phaseStatusLabel = `Wk ${currentWeekInPhase} of ${phaseTotalWeeks}`;
@@ -128,6 +145,20 @@ export function computePhaseProgress(weeks, currentWeekOrder) {
     phaseProgressPercent,
     phaseStatusLabel,
   };
+}
+
+/** End of race week (or last week) as the plan's effective race date. */
+export function getVariantRaceDate(weeks) {
+  if (!weeks || weeks.length === 0) return null;
+  const raceWeek =
+    weeks.find((w) => w.phase && /race\s*week/i.test(String(w.phase))) || weeks[weeks.length - 1];
+
+  if (!raceWeek?.dates) return null;
+
+  const range = parseWeekDates(raceWeek.dates, new Date().getFullYear());
+  if (!range) return null;
+
+  return range.end;
 }
 
 /** Calendar-current week in loaded blocks (fallback first week). */

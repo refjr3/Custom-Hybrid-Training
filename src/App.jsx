@@ -21,7 +21,6 @@ import { DailyCallCard } from "./features/today/DailyCallCard.jsx";
 import { InfoPop } from "./components/InfoPop.jsx";
 import { metricExplainers } from "./features/explainers/metrics.js";
 import { parseExerciseLine, normalizeWorkoutBlocks } from "./features/plan/lib/normalizeWorkoutBlocks.js";
-import { computePhaseProgress, getCalendarCurrentWeekFromPlan } from "./features/plan/lib/weekDateUtils.js";
 import { PhaseHeaderStrip } from "./features/plan/components/PhaseHeaderStrip.jsx";
 import { SessionHeroCard } from "./features/plan/components/SessionHeroCard.jsx";
 
