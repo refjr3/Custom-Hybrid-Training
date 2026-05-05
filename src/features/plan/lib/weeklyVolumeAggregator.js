@@ -146,6 +146,13 @@ export async function fetchWeeklyVolume(supabase, userId, activityType, metric, 
   const { weeks, bucketMap } = buildWeekTimeline(weeksBack);
   const rangeStart = isoDate(weeks[0]?.weekStart || new Date());
   const rangeStartTs = `${rangeStart}T00:00:00.000Z`;
+  console.log("[fetchWeeklyVolume] inputs:", {
+    userId,
+    activityType,
+    metric,
+    rangeStart,
+    rangeStartTs,
+  });
 
   const { data: stampedRows, error: stampedError } = await supabase
     .from("garmin_activities")
@@ -165,7 +172,7 @@ export async function fetchWeeklyVolume(supabase, userId, activityType, metric, 
     .limit(1500);
 
   if (stampedError || dateOnlyError) {
-    console.error("[fetchWeeklyVolume] error:", stampedError || dateOnlyError);
+    console.error("[fetchWeeklyVolume] query error:", stampedError || dateOnlyError);
     return weeks.map((week) => ({
       weekStart: week.weekStart,
       isCurrent: week.isCurrent,
@@ -177,16 +184,49 @@ export async function fetchWeeklyVolume(supabase, userId, activityType, metric, 
   }
 
   const allRows = [...(stampedRows || []), ...(dateOnlyRows || [])];
-  const validActivities = allRows.filter((a) => Number(a?.duration_seconds || 0) > 0);
-  const filtered = dedupeActivities(validActivities).filter((row) => matchesCategory(row.activity_type, activityType));
-  applyRowsToBuckets(bucketMap, filtered);
+  console.log("[fetchWeeklyVolume] raw rows fetched:", {
+    stamped: stampedRows?.length || 0,
+    dateOnly: dateOnlyRows?.length || 0,
+    total: allRows.length,
+  });
+  console.log("[fetchWeeklyVolume] sample row:", allRows[0] || null);
+  console.log(
+    "[fetchWeeklyVolume] activity_type distribution:",
+    allRows.reduce((acc, row) => {
+      const key = row?.activity_type || "__null__";
+      acc[key] = (acc[key] || 0) + 1;
+      return acc;
+    }, {})
+  );
 
-  if (activityType === "workout" && filtered.length === 0) {
+  const validActivities = allRows.filter((a) => Number(a?.duration_seconds || 0) > 0);
+  console.log("[fetchWeeklyVolume] after zero-duration filter:", validActivities.length);
+
+  const matchedActivities = validActivities.filter((row) => matchesCategory(row.activity_type, activityType));
+  console.log(`[fetchWeeklyVolume] after category match (${activityType}):`, matchedActivities.length);
+
+  const dedupedActivities = dedupeActivities(matchedActivities);
+  console.log("[fetchWeeklyVolume] after dedupe:", dedupedActivities.length);
+
+  applyRowsToBuckets(bucketMap, dedupedActivities);
+  const weekBuckets = weeks
+    .filter((w) => !w.isFuture)
+    .map((w) => ({
+      weekStart: isoDate(w.weekStart),
+      timeSeconds: Number(w.timeSeconds || 0),
+      distanceMeters: Number(w.distanceMeters || 0),
+      isCurrent: Boolean(w.isCurrent),
+    }));
+  console.log("[fetchWeeklyVolume] week buckets:", weekBuckets);
+
+  if (activityType === "workout" && dedupedActivities.length === 0) {
     const { data: fallbackRows, error: fallbackError } = await supabase
       .from("unified_metrics")
       .select("date, total_activity_min")
       .eq("user_id", userId)
       .gte("date", rangeStart);
+
+    console.log("[fetchWeeklyVolume] fallback unified_metrics rows:", fallbackRows?.length || 0);
 
     if (!fallbackError) {
       for (const row of fallbackRows || []) {
@@ -196,6 +236,16 @@ export async function fetchWeeklyVolume(supabase, userId, activityType, metric, 
         if (!bucket) continue;
         bucket.timeSeconds += Number(row.total_activity_min || 0) * 60;
       }
+      const fallbackBuckets = weeks
+        .filter((w) => !w.isFuture)
+        .map((w) => ({
+          weekStart: isoDate(w.weekStart),
+          timeSeconds: Number(w.timeSeconds || 0),
+          isCurrent: Boolean(w.isCurrent),
+        }));
+      console.log("[fetchWeeklyVolume] week buckets after fallback:", fallbackBuckets);
+    } else {
+      console.error("[fetchWeeklyVolume] fallback query error:", fallbackError);
     }
   }
 
