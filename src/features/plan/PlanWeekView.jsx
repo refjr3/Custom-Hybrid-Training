@@ -6,6 +6,7 @@ import { getPhaseGradient, getPhaseStatusLabel, getSessionIntent } from "./compo
 import { SessionHeroCard } from "./components/SessionHeroCard.jsx";
 import { SessionFeedbackSheet } from "./components/SessionFeedbackSheet.jsx";
 import { WeeklyStructureSnapshot } from "./components/WeeklyStructureSnapshot.jsx";
+import WeeklyVolumeChart from "./components/WeeklyVolumeChart.jsx";
 import {
   computePhaseProgress,
   getCurrentWeek,
@@ -809,6 +810,15 @@ export default function PlanWeekView({
         weekType={weeklyStructure.weekType}
         getSessionIntent={getSessionIntent}
         dayOrderResolver={toMonSunOrder}
+      />
+
+      <WeeklyVolumeChart
+        user={user}
+        supabase={supabase}
+        weeks={allWeeks}
+        currentWeek={currentWeek}
+        days={daysState}
+        profile={profile}
       />
 
       {showBlockTimeline ? (
