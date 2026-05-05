@@ -27,10 +27,12 @@ function flattenWeeks(blocks) {
 export default function PlanBlockTimeline({
   blocks,
   currentWeekOrder,
+  currentWeekPhase,
   onClose,
   onSelectWeek,
 }) {
   const weeks = flattenWeeks(blocks);
+  const currentPhaseKey = String(currentWeekPhase || "").trim().toUpperCase();
   return createPortal(
     <>
       <button
@@ -99,6 +101,8 @@ export default function PlanBlockTimeline({
         <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
           {weeks.map((week) => {
             const active = Number(week.weekOrder) === Number(currentWeekOrder);
+            const inCurrentPhase =
+              currentPhaseKey && String(week.phase || "").trim().toUpperCase() === currentPhaseKey;
             return (
               <button
                 key={week.id}
@@ -131,7 +135,7 @@ export default function PlanBlockTimeline({
                 <div
                   style={{
                     fontSize: 13,
-                    color: "rgba(255,255,255,0.88)",
+                    color: inCurrentPhase ? "#C9A875" : "rgba(255,255,255,0.88)",
                     marginBottom: 2,
                     fontWeight: 500,
                   }}

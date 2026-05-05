@@ -11,6 +11,7 @@ import {
   getDayIndex,
   parseWeekDates,
 } from "./lib/weekDateUtils.js";
+import { buildWeekOrderMap, getAdjacentWeekByOrder, getWeekOrderValue } from "./lib/planWeekNavigation.js";
 
 function parseWeekOrder(week, fallbackOrder) {
   const fromField = Number(week?.week_order);
@@ -21,9 +22,8 @@ function parseWeekOrder(week, fallbackOrder) {
   return fallbackOrder;
 }
 
-function getWeekOrderValue(week, fallback = Number.MAX_SAFE_INTEGER) {
-  const ord = Number(week?.week_order ?? week?._weekOrder);
-  return Number.isFinite(ord) && ord > 0 ? ord : fallback;
+function findWeekIndexById(weeks, weekId) {
+  return weeks.findIndex((w) => String(w?.id) === String(weekId));
 }
 
 function parseRaceDateValue(value) {
@@ -140,7 +140,7 @@ export default function PlanWeekView({
   onSwitchVariant,
   onPlanRefetch,
 }) {
-  const [currentWeekIdx, setCurrentWeekIdx] = useState(0);
+  const [selectedWeekId, setSelectedWeekId] = useState(null);
   const [selectedDayIndex, setSelectedDayIndex] = useState(null);
   const [showBlockTimeline, setShowBlockTimeline] = useState(false);
   const [feedbackOpen, setFeedbackOpen] = useState(false);
@@ -173,20 +173,42 @@ export default function PlanWeekView({
     });
     return next;
   }, [allWeeks]);
+  const weekByOrder = useMemo(() => buildWeekOrderMap(sortedWeeksForNav), [sortedWeeksForNav]);
+
+  useEffect(() => {
+    if (!import.meta.env.DEV) return;
+    console.log("[PlanWeekView] weeks loaded", {
+      count: sortedWeeksForNav.length,
+      orders: sortedWeeksForNav.map((w) => getWeekOrderValue(w, null)),
+      weekIds: sortedWeeksForNav.map((w) => w.id),
+    });
+  }, [sortedWeeksForNav]);
 
   useEffect(() => {
     if (!allWeeks.length) {
-      setCurrentWeekIdx(0);
+      setSelectedWeekId(null);
       setSelectedDayIndex(null);
       return;
     }
+    if (selectedWeekId && allWeeks.some((w) => String(w.id) === String(selectedWeekId))) return;
     const current = getCurrentWeek(allWeeks, new Date());
-    const nextIdx = allWeeks.findIndex((w) => String(w.id) === String(current?.week?.id));
-    setCurrentWeekIdx(nextIdx >= 0 ? nextIdx : 0);
+    setSelectedWeekId(current?.week?.id || allWeeks[0]?.id || null);
     setSelectedDayIndex(null);
-  }, [allWeeks]);
+  }, [allWeeks, selectedWeekId]);
+
+  useEffect(() => {
+    if (!import.meta.env.DEV || !selectedWeekId) return;
+    const ord = getWeekOrderValue(allWeeks[findWeekIndexById(allWeeks, selectedWeekId)], null);
+    console.log("[PlanWeekView] selected week_order", { selectedWeekId, weekOrder: ord });
+  }, [allWeeks, selectedWeekId]);
 
   const totalWeeks = allWeeks.length;
+  const currentWeekIdx = useMemo(() => {
+    if (!allWeeks.length) return -1;
+    if (!selectedWeekId) return 0;
+    const idx = allWeeks.findIndex((w) => String(w.id) === String(selectedWeekId));
+    return idx >= 0 ? idx : 0;
+  }, [allWeeks, selectedWeekId]);
   const currentWeek = allWeeks[currentWeekIdx] || null;
   const activeVariant = useMemo(
     () => (planVariants || []).find((v) => String(v?.id) === String(activeVariantId)) || null,
@@ -254,10 +276,23 @@ export default function PlanWeekView({
       phaseGradient: getPhaseGradient(progress.phaseName || currentName),
     };
   }, [allWeeks, currentWeek?._blockLabel, currentWeek?.phase, currentWeek?.subtitle, currentWeek?.week_order, currentWeekOrder]);
-  const sortedWeekCursor = useMemo(
-    () => sortedWeeksForNav.findIndex((w) => String(w?.id) === String(currentWeek?.id)),
-    [sortedWeeksForNav, currentWeek?.id],
-  );
+  const hasPrevWeek = useMemo(() => {
+    if (currentWeekOrder == null) return false;
+    return weekByOrder.has(Number(currentWeekOrder) - 1);
+  }, [currentWeekOrder, weekByOrder]);
+  const hasNextWeek = useMemo(() => {
+    if (currentWeekOrder == null) return false;
+    return weekByOrder.has(Number(currentWeekOrder) + 1);
+  }, [currentWeekOrder, weekByOrder]);
+
+  useEffect(() => {
+    if (!import.meta.env.DEV || !currentWeek) return;
+    console.log("[PlanWeekView] selected week_order", {
+      weekOrder: currentWeekOrder,
+      weekId: currentWeek.id,
+      phase: currentWeek.phase || currentWeek._blockLabel,
+    });
+  }, [currentWeek, currentWeekOrder]);
 
   const weeklyStructure = useMemo(() => {
     const days = daysState;
@@ -305,31 +340,33 @@ export default function PlanWeekView({
   const isOnTodayInThisWeek = isCurrentWeek && selectedDayIndex === todayIndex;
 
   function setDisplayedWeek(weekRef) {
-    const idxById = allWeeks.findIndex((w) => String(w?.id) === String(weekRef));
-    const idxByOrder =
-      idxById >= 0
-        ? idxById
-        : allWeeks.findIndex((w) => getWeekOrderValue(w, -1) === Number(weekRef));
-    if (idxByOrder < 0) return;
-    const targetWeek = allWeeks[idxByOrder];
+    const targetWeek =
+      allWeeks.find((w) => String(w?.id) === String(weekRef)) ||
+      weekByOrder.get(Number(weekRef)) ||
+      null;
+    if (!targetWeek) return;
     const nextDays = normalizeDays(targetWeek);
     const nextToday = getCurrentWeek([targetWeek], new Date());
-    setCurrentWeekIdx(idxByOrder);
+    setSelectedWeekId(targetWeek.id);
     setDaysState(nextDays);
     if (nextToday?.week?.id === targetWeek?.id) setSelectedDayIndex(getDayIndex(new Date()));
     else setSelectedDayIndex(nextDays.length ? 0 : null);
+    if (import.meta.env.DEV) {
+      console.log("[PlanWeekView] navigate", {
+        selectedWeekId: targetWeek.id,
+        weekOrder: getWeekOrderValue(targetWeek, null),
+      });
+    }
   }
 
   const handlePrev = () => {
-    if (!currentWeek) return;
-    const idx = sortedWeeksForNav.findIndex((w) => String(w?.id) === String(currentWeek?.id));
-    if (idx > 0) setDisplayedWeek(sortedWeeksForNav[idx - 1]?.id);
+    const prevWeek = getAdjacentWeekByOrder(sortedWeeksForNav, currentWeekOrder, -1);
+    if (prevWeek) setDisplayedWeek(prevWeek.id);
   };
 
   const handleNext = () => {
-    if (!currentWeek) return;
-    const idx = sortedWeeksForNav.findIndex((w) => String(w?.id) === String(currentWeek?.id));
-    if (idx >= 0 && idx < sortedWeeksForNav.length - 1) setDisplayedWeek(sortedWeeksForNav[idx + 1]?.id);
+    const nextWeek = getAdjacentWeekByOrder(sortedWeeksForNav, currentWeekOrder, 1);
+    if (nextWeek) setDisplayedWeek(nextWeek.id);
   };
 
   async function loadWeekDays(targetWeek = currentWeek) {
@@ -398,9 +435,9 @@ export default function PlanWeekView({
 
   function jumpToToday() {
     if (!todayInfo?.week) return;
-    const idx = allWeeks.findIndex((w) => w.id === todayInfo.week.id);
-    if (idx >= 0) {
-      setCurrentWeekIdx(idx);
+    const target = allWeeks.find((w) => String(w.id) === String(todayInfo.week.id));
+    if (target) {
+      setSelectedWeekId(target.id);
       setSelectedDayIndex(todayInfo.todayDayIndex ?? getDayIndex(new Date()));
     }
   }
@@ -548,8 +585,8 @@ export default function PlanWeekView({
         <button
           type="button"
           onClick={handlePrev}
-          disabled={sortedWeekCursor <= 0}
-          style={navBtn(sortedWeekCursor <= 0)}
+          disabled={!hasPrevWeek}
+          style={navBtn(!hasPrevWeek)}
         >
           ← Prev
         </button>
@@ -569,8 +606,8 @@ export default function PlanWeekView({
         <button
           type="button"
           onClick={handleNext}
-          disabled={sortedWeekCursor < 0 || sortedWeekCursor >= sortedWeeksForNav.length - 1}
-          style={navBtn(sortedWeekCursor < 0 || sortedWeekCursor >= sortedWeeksForNav.length - 1)}
+          disabled={!hasNextWeek}
+          style={navBtn(!hasNextWeek)}
         >
           Next →
         </button>
@@ -694,6 +731,7 @@ export default function PlanWeekView({
         <PlanBlockTimeline
           blocks={planBlocks}
           currentWeekOrder={currentWeekOrder}
+          currentWeekPhase={currentWeek?.phase || currentWeek?._blockLabel || ""}
           currentWeekId={currentWeek?.id}
           onClose={() => setShowBlockTimeline(false)}
           onSelectWeek={(weekId) => {
