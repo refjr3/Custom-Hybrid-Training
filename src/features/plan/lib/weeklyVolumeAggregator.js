@@ -13,7 +13,35 @@ const SOURCE_PRIORITY = {
   intervals: 1,
 };
 
-const CARDIO_BUCKETS = new Set(["cardio", "running", "swimming", "biking", "walking", "hiking"]);
+const ACTIVITY_TYPE_MAP = {
+  workout: null,
+  cardio: [
+    "cardio",
+    "mixedcardio",
+    "mixed_cardio",
+    "rowing",
+    "indoorrowing",
+    "indoor_rowing",
+    "elliptical",
+    "stairstepper",
+    "stair_stepper",
+  ],
+  hiit: ["hiit", "crossfit", "cross_fit"],
+  running: ["run", "virtualrun", "trailrun", "trail_run", "treadmillrun"],
+  swimming: ["swim", "lapswimming", "openwaterswimming", "swimming"],
+  biking: ["ride", "virtualride", "ebikeride", "cycling", "gravelride", "mountainbike", "mountainbiking"],
+  walking: ["walk", "walking"],
+  hiking: ["hike", "hiking"],
+  strength: [
+    "weighttraining",
+    "weight_training",
+    "strengthtraining",
+    "strength_training",
+    "workout",
+    "crosstraining",
+    "cross_training",
+  ],
+};
 
 function isoDate(value) {
   return new Date(value).toISOString().slice(0, 10);
@@ -25,51 +53,24 @@ function normalizeType(type) {
     .replace(/[\s_-]+/g, "");
 }
 
+function normalizeCategoryToken(type) {
+  return String(type || "")
+    .toLowerCase()
+    .replace(/[\s_-]+/g, "");
+}
+
 function sourceRank(source) {
   const key = String(source || "").toLowerCase();
   return SOURCE_PRIORITY[key] || 0;
 }
 
-function activityBucket(activityType) {
-  const t = normalizeType(activityType);
-  if (!t) return "workout";
-  if (t.includes("hike")) return "hiking";
-  if (t.includes("walk")) return "walking";
-  if (t.includes("swim")) return "swimming";
-  if (
-    t.includes("ride")
-    || t.includes("bike")
-    || t.includes("cycling")
-    || t.includes("ebike")
-  ) {
-    return "biking";
-  }
-  if (t.includes("run") || t.includes("jog") || t.includes("treadmill")) return "running";
-  if (
-    t.includes("strength")
-    || t.includes("weighttraining")
-    || t.includes("crosstraining")
-    || t.includes("gym")
-  ) {
-    return "strength";
-  }
-  if (
-    t.includes("hiit")
-    || t.includes("interval")
-    || t.includes("crossfit")
-    || t.includes("circuit")
-  ) {
-    return "hiit";
-  }
-  if (t.includes("cardio") || t.includes("elliptical") || t.includes("row")) return "cardio";
-  return "workout";
-}
-
-function matchesActivityType(activityType, rowType) {
-  if (activityType === "workout") return true;
-  const bucket = activityBucket(rowType);
-  if (activityType === "cardio") return CARDIO_BUCKETS.has(bucket);
-  return bucket === activityType;
+function matchesCategory(activityType, category) {
+  if (!activityType) return false;
+  const normalized = normalizeCategoryToken(activityType);
+  if (!normalized) return false;
+  if (category === "workout") return true;
+  const allowedTypes = ACTIVITY_TYPE_MAP[category] || [];
+  return allowedTypes.some((t) => normalizeCategoryToken(t) === normalized);
 }
 
 function buildWeekTimeline(weeksBack) {
@@ -176,7 +177,8 @@ export async function fetchWeeklyVolume(supabase, userId, activityType, metric, 
   }
 
   const allRows = [...(stampedRows || []), ...(dateOnlyRows || [])];
-  const filtered = dedupeActivities(allRows).filter((row) => matchesActivityType(activityType, row.activity_type));
+  const validActivities = allRows.filter((a) => Number(a?.duration_seconds || 0) > 0);
+  const filtered = dedupeActivities(validActivities).filter((row) => matchesCategory(row.activity_type, activityType));
   applyRowsToBuckets(bucketMap, filtered);
 
   if (activityType === "workout" && filtered.length === 0) {
