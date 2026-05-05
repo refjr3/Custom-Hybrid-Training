@@ -92,7 +92,14 @@ function ExerciseEditor({ exercise, onChange }) {
   );
 }
 
-export function SessionHeroCard({ day, isToday, onMarkComplete, onSaveEdit, onSaveNote }) {
+export function SessionHeroCard({
+  day,
+  isToday,
+  onMarkComplete,
+  onSaveEdit,
+  onSaveNote,
+  onResetComplete,
+}) {
   const [editMode, setEditMode] = useState(false);
   const [editedBlocks, setEditedBlocks] = useState([]);
   const [editedNote, setEditedNote] = useState("");
@@ -375,8 +382,35 @@ export function SessionHeroCard({ day, isToday, onMarkComplete, onSaveEdit, onSa
           ✓ Mark complete
         </button>
       ) : isCompleted ? (
-        <div style={{ marginTop: 14, textAlign: "center", fontSize: 11, color: "rgba(120,200,180,0.7)" }}>
-          ✓ Completed
+        <div
+          style={{
+            marginTop: 14,
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            gap: 8,
+          }}
+        >
+          <div style={{ fontSize: 11, color: "rgba(120,200,180,0.7)" }}>
+            ✓ Completed
+          </div>
+          <button
+            type="button"
+            onClick={onResetComplete}
+            style={{
+              border: "0.5px solid rgba(255,255,255,0.2)",
+              background: "rgba(255,255,255,0.04)",
+              color: "rgba(255,255,255,0.72)",
+              borderRadius: 8,
+              padding: "2px 7px",
+              fontSize: 10,
+              letterSpacing: "0.2px",
+              cursor: "pointer",
+              fontFamily: "'DM Sans', sans-serif",
+            }}
+          >
+            ↺ Reset
+          </button>
         </div>
       ) : null}
     </div>

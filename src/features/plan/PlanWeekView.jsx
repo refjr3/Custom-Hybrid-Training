@@ -258,7 +258,11 @@ export default function PlanWeekView({
     profile?.target_race_name || activeVariant?.target_race_name || activeVariant?.race_name || "",
   ).trim();
   const phaseCtx = useMemo(() => {
-    const base = computePhaseProgress(allWeeks, currentWeek);
+    const base = computePhaseProgress(
+      allWeeks,
+      Number(todayInfo?.week?.week_order ?? todayInfo?.week?._weekOrder ?? null),
+      Number(todayInfo?.todayDayIndex ?? 0),
+    );
     const currentName = String(currentWeek?.phase || currentWeek?._blockLabel || base?.phaseName || "").trim();
     const progress = base || {
       phase: { name: currentName || "Base" },
@@ -275,7 +279,7 @@ export default function PlanWeekView({
       phaseStatusLabel: progress.phaseStatusLabel || getPhaseStatusLabel(progress.currentWeekInPhase, progress.phaseTotalWeeks),
       phaseGradient: getPhaseGradient(progress.phaseName || currentName),
     };
-  }, [allWeeks, currentWeek, currentWeek?._blockLabel, currentWeek?.phase, currentWeek?.subtitle]);
+  }, [allWeeks, currentWeek, currentWeek?._blockLabel, currentWeek?.phase, currentWeek?.subtitle, todayInfo?.todayDayIndex, todayInfo?.week?._weekOrder, todayInfo?.week?.week_order]);
   const hasPrevWeek = useMemo(() => {
     if (currentWeekOrder == null) return false;
     return weekByOrder.has(Number(currentWeekOrder) - 1);
@@ -457,6 +461,42 @@ export default function PlanWeekView({
     );
     setDaysState(nextDays);
     setSelectedDayIndex((prev) => (prev == null ? 0 : prev));
+  }
+
+  async function handleResetCompletion(dayToReset) {
+    if (!supabase || !user?.id || !dayToReset?.id) return;
+    const shouldReset = typeof window !== "undefined"
+      ? window.confirm("Reset this completion and remove submitted feedback?")
+      : true;
+    if (!shouldReset) return;
+
+    const userId = user.id;
+    const { error: feedbackErr } = await supabase
+      .from("session_feedback")
+      .delete()
+      .eq("user_id", userId)
+      .eq("training_day_id", dayToReset.id)
+      .eq("session_slot", "am");
+    if (feedbackErr) {
+      console.error("[PlanWeekView] reset feedback:", feedbackErr.message);
+      return;
+    }
+
+    let resetQ = supabase
+      .from("training_days")
+      .update({ am_completed_at: null })
+      .eq("id", dayToReset.id)
+      .eq("user_id", userId);
+    if (activeVariantId) resetQ = resetQ.or(`variant_id.eq.${activeVariantId},variant_id.is.null`);
+    else resetQ = resetQ.is("variant_id", null);
+    const { error: dayErr } = await resetQ;
+    if (dayErr) {
+      console.error("[PlanWeekView] reset completion:", dayErr.message);
+      return;
+    }
+
+    await loadWeekDays(currentWeek);
+    await onPlanRefetch?.();
   }
 
   function jumpToToday() {
@@ -748,6 +788,7 @@ export default function PlanWeekView({
             setFeedbackDay(selectedDay);
             setFeedbackOpen(true);
           }}
+          onResetComplete={() => handleResetCompletion(selectedDay)}
           onSaveEdit={handleSaveEdit}
           onSaveNote={handleSaveNote}
         />

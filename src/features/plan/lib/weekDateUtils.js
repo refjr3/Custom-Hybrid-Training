@@ -95,53 +95,47 @@ function weekOrderNum(w) {
 }
 
 /**
- * Phase progress from `training_weeks.phase` on loaded week rows
- * (not plan variant `phases` jsonb — often empty in production).
+ * Daily phase progress from `training_weeks.phase`.
  *
- * @param {object[]} weeks — flattened variant weeks (same order as PlanWeekView `allWeeks`)
- * @param {object} displayedWeek — the week row the user is viewing (e.g. `allWeeks[currentWeekIdx]`)
+ * @param {object[]} weeks flattened variant weeks
+ * @param {number} todayWeekOrder absolute week_order for today within plan
+ * @param {number} todayDayIndex Mon=0 ... Sun=6
  */
-export function computePhaseProgress(weeks, displayedWeek) {
-  if (!Array.isArray(weeks) || !displayedWeek || !displayedWeek.phase) return null;
+export function computePhaseProgress(weeks, todayWeekOrder, todayDayIndex = 0) {
+  if (!Array.isArray(weeks) || weeks.length === 0) return null;
+  if (!Number.isFinite(Number(todayWeekOrder))) return null;
 
-  const phaseName = displayedWeek.phase;
+  const todayOrder = Number(todayWeekOrder);
+  const currentWeek =
+    weeks.find((w) => weekOrderNum(w) === todayOrder || Number(w?.week_order) === todayOrder) || null;
+  if (!currentWeek?.phase) return null;
+
+  const phaseName = String(currentWeek.phase).trim();
   const weeksInPhase = weeks
-    .filter((w) => w.phase === phaseName)
+    .filter((w) => String(w?.phase || "").trim() === phaseName)
     .sort((a, b) => (weekOrderNum(a) ?? 9999) - (weekOrderNum(b) ?? 9999));
-
   if (weeksInPhase.length === 0) return null;
 
-  let idx = -1;
-  if (displayedWeek.id != null) {
-    idx = weeksInPhase.findIndex((w) => String(w.id) === String(displayedWeek.id));
-  }
-  if (idx < 0) {
-    const o = weekOrderNum(displayedWeek);
-    const wo = Number(displayedWeek.week_order);
-    const target = Number.isFinite(o) ? o : Number.isFinite(wo) ? wo : null;
-    if (target != null) {
-      idx = weeksInPhase.findIndex(
-        (w) => weekOrderNum(w) === target || Number(w.week_order) === target,
-      );
-    }
-  }
-  if (idx < 0) {
-    idx = weeksInPhase.indexOf(displayedWeek);
-  }
-  if (idx < 0) return null;
+  const weekIdx = weeksInPhase.findIndex(
+    (w) => weekOrderNum(w) === todayOrder || Number(w?.week_order) === todayOrder,
+  );
+  if (weekIdx < 0) return null;
 
-  const currentWeekInPhase = idx + 1;
+  const currentWeekInPhase = weekIdx + 1;
   const phaseTotalWeeks = weeksInPhase.length;
-  const phaseProgressPercent = (currentWeekInPhase / phaseTotalWeeks) * 100;
-
-  let phaseStatusLabel = `Wk ${currentWeekInPhase} of ${phaseTotalWeeks}`;
-  if (currentWeekInPhase === phaseTotalWeeks) phaseStatusLabel += " · Final week";
+  const safeDayIndex = Math.max(0, Math.min(6, Number(todayDayIndex) || 0));
+  const daysIntoPhase = ((currentWeekInPhase - 1) * 7) + safeDayIndex + 1;
+  const totalDaysInPhase = phaseTotalWeeks * 7;
+  const phaseProgressPercent = totalDaysInPhase > 0 ? (daysIntoPhase / totalDaysInPhase) * 100 : 0;
+  const phaseStatusLabel = `Day ${daysIntoPhase} of ${totalDaysInPhase} · Wk ${currentWeekInPhase} of ${phaseTotalWeeks}`;
 
   return {
     phaseName,
     phase: { name: phaseName },
     currentWeekInPhase,
     phaseTotalWeeks,
+    daysIntoPhase,
+    totalDaysInPhase,
     phaseProgressPercent,
     phaseStatusLabel,
   };
