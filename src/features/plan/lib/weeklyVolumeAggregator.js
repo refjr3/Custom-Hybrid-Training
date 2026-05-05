@@ -7,63 +7,89 @@ function startOfIsoWeek(date) {
   return d;
 }
 
-const TYPE_FILTERS = {
-  workout: null,
-  cardio: ["Run", "Ride", "VirtualRide", "Swim", "Walk", "Hike"],
-  running: ["Run", "TrailRun", "VirtualRun"],
-  swimming: ["Swim"],
-  biking: ["Ride", "VirtualRide", "EBikeRide"],
-  strength: ["WeightTraining", "Workout", "CrossTraining"],
+const SOURCE_PRIORITY = {
+  strava: 3,
+  garmin: 2,
+  intervals: 1,
 };
 
-export async function fetchWeeklyVolume(supabase, userId, activityType, metric, weeksBack = 8) {
-  if (!supabase || !userId) return [];
+const CARDIO_BUCKETS = new Set(["cardio", "running", "swimming", "biking", "walking", "hiking"]);
 
-  const today = new Date();
-  const startDate = new Date(today);
-  startDate.setDate(startDate.getDate() - weeksBack * 7);
+function isoDate(value) {
+  return new Date(value).toISOString().slice(0, 10);
+}
 
-  let query = supabase
-    .from("unified_metrics")
-    .select("date, duration_seconds, distance_meters, source_activity_type")
-    .eq("user_id", userId)
-    .gte("date", startDate.toISOString().slice(0, 10));
+function normalizeType(type) {
+  return String(type || "")
+    .toLowerCase()
+    .replace(/[\s_-]+/g, "");
+}
 
-  const filter = TYPE_FILTERS[activityType] ?? TYPE_FILTERS.workout;
-  if (Array.isArray(filter) && filter.length > 0) {
-    query = query.in("source_activity_type", filter);
+function sourceRank(source) {
+  const key = String(source || "").toLowerCase();
+  return SOURCE_PRIORITY[key] || 0;
+}
+
+function activityBucket(activityType) {
+  const t = normalizeType(activityType);
+  if (!t) return "workout";
+  if (t.includes("hike")) return "hiking";
+  if (t.includes("walk")) return "walking";
+  if (t.includes("swim")) return "swimming";
+  if (
+    t.includes("ride")
+    || t.includes("bike")
+    || t.includes("cycling")
+    || t.includes("ebike")
+  ) {
+    return "biking";
   }
-
-  const { data, error } = await query;
-  if (error) {
-    console.error("[fetchWeeklyVolume] error:", error);
-    return [];
+  if (t.includes("run") || t.includes("jog") || t.includes("treadmill")) return "running";
+  if (
+    t.includes("strength")
+    || t.includes("weighttraining")
+    || t.includes("crosstraining")
+    || t.includes("gym")
+  ) {
+    return "strength";
   }
-
-  const buckets = new Map();
-  for (const row of data || []) {
-    const weekStart = startOfIsoWeek(new Date(row.date)).toISOString().slice(0, 10);
-    if (!buckets.has(weekStart)) buckets.set(weekStart, { time: 0, distance: 0 });
-    const bucket = buckets.get(weekStart);
-    bucket.time += Number(row.duration_seconds || 0);
-    bucket.distance += Number(row.distance_meters || 0);
+  if (
+    t.includes("hiit")
+    || t.includes("interval")
+    || t.includes("crossfit")
+    || t.includes("circuit")
+  ) {
+    return "hiit";
   }
+  if (t.includes("cardio") || t.includes("elliptical") || t.includes("row")) return "cardio";
+  return "workout";
+}
 
+function matchesActivityType(activityType, rowType) {
+  if (activityType === "workout") return true;
+  const bucket = activityBucket(rowType);
+  if (activityType === "cardio") return CARDIO_BUCKETS.has(bucket);
+  return bucket === activityType;
+}
+
+function buildWeekTimeline(weeksBack) {
+  const currentWeekStart = startOfIsoWeek(new Date());
   const weeks = [];
-  const currentWeekStart = startOfIsoWeek(today);
+  const bucketMap = new Map();
+
   for (let i = -weeksBack; i <= 0; i += 1) {
     const weekStart = new Date(currentWeekStart);
     weekStart.setDate(weekStart.getDate() + i * 7);
-    const key = weekStart.toISOString().slice(0, 10);
-    const bucket = buckets.get(key) || { time: 0, distance: 0 };
-    weeks.push({
+    const key = isoDate(weekStart);
+    const row = {
       weekStart,
       isCurrent: i === 0,
       isFuture: false,
-      timeHours: bucket.time / 3600,
-      distanceKm: bucket.distance / 1000,
-      value: metric === "distance" ? bucket.distance / 1000 : bucket.time / 3600,
-    });
+      timeSeconds: 0,
+      distanceMeters: 0,
+    };
+    weeks.push(row);
+    bucketMap.set(key, row);
   }
 
   const nextWeekStart = new Date(currentWeekStart);
@@ -72,11 +98,115 @@ export async function fetchWeeklyVolume(supabase, userId, activityType, metric, 
     weekStart: nextWeekStart,
     isCurrent: false,
     isFuture: true,
-    timeHours: 0,
-    distanceKm: 0,
-    value: 0,
+    timeSeconds: 0,
+    distanceMeters: 0,
   });
 
-  return weeks;
+  return { weeks, bucketMap };
 }
 
+function dedupeActivities(rows) {
+  const bySession = new Map();
+
+  for (const row of rows || []) {
+    const stamp = row.start_time || row.date;
+    if (!stamp) continue;
+
+    const dayKey = String(stamp).slice(0, 10);
+    const typeKey = normalizeType(row.activity_type);
+    const duration = Math.round(Number(row.duration_seconds || 0));
+    const distance = Math.round(Number(row.distance_meters || 0));
+    const key = [dayKey, typeKey, duration, distance].join("|");
+
+    const existing = bySession.get(key);
+    if (!existing || sourceRank(row.source) > sourceRank(existing.source)) {
+      bySession.set(key, row);
+    }
+  }
+
+  return Array.from(bySession.values());
+}
+
+function applyRowsToBuckets(bucketMap, rows) {
+  for (const row of rows || []) {
+    const stamp = row.start_time || row.date;
+    if (!stamp) continue;
+    const key = isoDate(startOfIsoWeek(new Date(stamp)));
+    const bucket = bucketMap.get(key);
+    if (!bucket) continue;
+    bucket.timeSeconds += Number(row.duration_seconds || 0);
+    bucket.distanceMeters += Number(row.distance_meters || 0);
+  }
+}
+
+export async function fetchWeeklyVolume(supabase, userId, activityType, metric, weeksBack = 8) {
+  if (!supabase || !userId) return [];
+
+  const { weeks, bucketMap } = buildWeekTimeline(weeksBack);
+  const rangeStart = isoDate(weeks[0]?.weekStart || new Date());
+  const rangeStartTs = `${rangeStart}T00:00:00.000Z`;
+
+  const { data: stampedRows, error: stampedError } = await supabase
+    .from("garmin_activities")
+    .select("activity_id, activity_type, start_time, date, duration_seconds, distance_meters, source")
+    .eq("user_id", userId)
+    .gte("start_time", rangeStartTs)
+    .order("start_time", { ascending: true })
+    .limit(3000);
+
+  const { data: dateOnlyRows, error: dateOnlyError } = await supabase
+    .from("garmin_activities")
+    .select("activity_id, activity_type, start_time, date, duration_seconds, distance_meters, source")
+    .eq("user_id", userId)
+    .is("start_time", null)
+    .gte("date", rangeStart)
+    .order("date", { ascending: true })
+    .limit(1500);
+
+  if (stampedError || dateOnlyError) {
+    console.error("[fetchWeeklyVolume] error:", stampedError || dateOnlyError);
+    return weeks.map((week) => ({
+      weekStart: week.weekStart,
+      isCurrent: week.isCurrent,
+      isFuture: week.isFuture,
+      timeHours: 0,
+      distanceKm: 0,
+      value: 0,
+    }));
+  }
+
+  const allRows = [...(stampedRows || []), ...(dateOnlyRows || [])];
+  const filtered = dedupeActivities(allRows).filter((row) => matchesActivityType(activityType, row.activity_type));
+  applyRowsToBuckets(bucketMap, filtered);
+
+  if (activityType === "workout" && filtered.length === 0) {
+    const { data: fallbackRows, error: fallbackError } = await supabase
+      .from("unified_metrics")
+      .select("date, total_activity_min")
+      .eq("user_id", userId)
+      .gte("date", rangeStart);
+
+    if (!fallbackError) {
+      for (const row of fallbackRows || []) {
+        if (!row?.date) continue;
+        const key = isoDate(startOfIsoWeek(new Date(row.date)));
+        const bucket = bucketMap.get(key);
+        if (!bucket) continue;
+        bucket.timeSeconds += Number(row.total_activity_min || 0) * 60;
+      }
+    }
+  }
+
+  return weeks.map((week) => {
+    const timeHours = Number(week.timeSeconds || 0) / 3600;
+    const distanceKm = Number(week.distanceMeters || 0) / 1000;
+    return {
+      weekStart: week.weekStart,
+      isCurrent: week.isCurrent,
+      isFuture: week.isFuture,
+      timeHours,
+      distanceKm,
+      value: metric === "distance" ? distanceKm : timeHours,
+    };
+  });
+}

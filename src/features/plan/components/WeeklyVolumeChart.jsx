@@ -4,11 +4,16 @@ import { fetchWeeklyVolume } from "../lib/weeklyVolumeAggregator.js";
 const ACTIVITY_OPTIONS = [
   { value: "workout", label: "Workout" },
   { value: "cardio", label: "Cardio" },
+  { value: "hiit", label: "HIIT" },
   { value: "running", label: "Running" },
   { value: "swimming", label: "Swimming" },
   { value: "biking", label: "Biking" },
+  { value: "walking", label: "Walking" },
+  { value: "hiking", label: "Hiking" },
   { value: "strength", label: "Strength" },
 ];
+
+const DISTANCE_ELIGIBLE = ["running", "swimming", "biking", "walking", "hiking"];
 
 const DOT_BASE = "rgba(255,255,255,0.5)";
 const CORAL = "#FF8A6C";
@@ -94,8 +99,14 @@ export default function WeeklyVolumeChart({ user, supabase }) {
   const [weeks, setWeeks] = useState([]);
   const [loading, setLoading] = useState(false);
 
-  const showToggle = activityType !== "strength";
+  const showToggle = DISTANCE_ELIGIBLE.includes(activityType);
   const effectiveMetric = showToggle ? metric : "time";
+
+  useEffect(() => {
+    if (!showToggle && metric !== "time") {
+      setMetric("time");
+    }
+  }, [showToggle, metric]);
 
   useEffect(() => {
     let ignore = false;
@@ -132,6 +143,7 @@ export default function WeeklyVolumeChart({ user, supabase }) {
   const avg = nonFuture.length ? nonFuture.reduce((s, p) => s + p.value, 0) / nonFuture.length : 0;
   const max = nonFuture.length ? Math.max(...nonFuture.map((p) => p.value)) : 0;
   const total = nonFuture.reduce((s, p) => s + p.value, 0);
+  const hasData = nonFuture.some((p) => Number(p.value || 0) > 0);
 
   const linePts = points.filter((p) => !p.isFuture);
   const line = smoothPath(linePts);
@@ -256,72 +268,94 @@ export default function WeeklyVolumeChart({ user, supabase }) {
 
       <div style={{ display: "flex", alignItems: "flex-end", gap: 8, marginBottom: 8 }}>
         <div style={{ fontFamily: "'DM Serif Display', serif", fontSize: 31, color: "#fff", letterSpacing: "-0.6px" }}>
-          {formatNumber(currentValue)}
+          {hasData ? formatNumber(currentValue) : "—"}
         </div>
         <div style={{ fontSize: 11, color: "rgba(255,255,255,0.6)", marginBottom: 5, letterSpacing: "1px" }}>
           {metricLabel(effectiveMetric, activityType)}
         </div>
-        <div
-          style={{
-            marginBottom: 6,
-            marginLeft: 4,
-            padding: "2px 8px",
-            borderRadius: 999,
-            background: "rgba(255,138,108,0.16)",
-            border: "0.5px solid rgba(255,138,108,0.38)",
-            fontSize: 10,
-            color: CORAL,
-            fontWeight: 600,
-          }}
-        >
-          {deltaText}
-        </div>
+        {hasData && prevValue > 0 ? (
+          <div
+            style={{
+              marginBottom: 6,
+              marginLeft: 4,
+              padding: "2px 8px",
+              borderRadius: 999,
+              background: "rgba(255,138,108,0.16)",
+              border: "0.5px solid rgba(255,138,108,0.38)",
+              fontSize: 10,
+              color: CORAL,
+              fontWeight: 600,
+            }}
+          >
+            {deltaText}
+          </div>
+        ) : null}
       </div>
 
-      <div style={{ position: "relative", marginBottom: 6 }}>
-        <svg viewBox="0 0 350 90" width="100%" height="110" preserveAspectRatio="none">
-          <defs>
-            <linearGradient id="volumeFill" x1="0" y1="0" x2="0" y2="1">
-              <stop offset="0%" stopColor={CORAL} stopOpacity="0.38" />
-              <stop offset="100%" stopColor={CORAL} stopOpacity="0" />
-            </linearGradient>
-          </defs>
-          {fill ? <path d={fill} fill="url(#volumeFill)" /> : null}
-          {line ? <path d={line} fill="none" stroke={CORAL} strokeWidth="2.2" /> : null}
-          {futureFrom && futureTo ? (
-            <line
-              x1={futureFrom.x}
-              y1={futureFrom.y}
-              x2={futureTo.x}
-              y2={futureTo.y}
-              stroke={CORAL}
-              strokeWidth="1.6"
-              strokeDasharray="4 4"
-              opacity="0.7"
-            />
-          ) : null}
-          {points.map((p, idx) => {
-            if (p.isFuture) {
-              return (
-                <circle
-                  key={`dot_${idx}`}
-                  cx={p.x}
-                  cy={p.y}
-                  r="4.5"
-                  fill="rgba(255,138,108,0.12)"
-                  stroke={CORAL}
-                  strokeWidth="1.2"
-                />
-              );
-            }
-            if (p.isCurrent) {
-              return <circle key={`dot_${idx}`} cx={p.x} cy={p.y} r="5" fill={GOLD} />;
-            }
-            const alpha = 0.35 + (Math.min(1, p.value / Math.max(0.0001, max)) * 0.35);
-            return <circle key={`dot_${idx}`} cx={p.x} cy={p.y} r="3.2" fill={DOT_BASE} opacity={alpha} />;
-          })}
-        </svg>
-      </div>
+      {hasData ? (
+        <div style={{ position: "relative", marginBottom: 6 }}>
+          <svg viewBox="0 0 350 90" width="100%" height="110" preserveAspectRatio="none">
+            <defs>
+              <linearGradient id="volumeFill" x1="0" y1="0" x2="0" y2="1">
+                <stop offset="0%" stopColor={CORAL} stopOpacity="0.38" />
+                <stop offset="100%" stopColor={CORAL} stopOpacity="0" />
+              </linearGradient>
+            </defs>
+            {fill ? <path d={fill} fill="url(#volumeFill)" /> : null}
+            {line ? <path d={line} fill="none" stroke={CORAL} strokeWidth="2.2" /> : null}
+            {futureFrom && futureTo ? (
+              <line
+                x1={futureFrom.x}
+                y1={futureFrom.y}
+                x2={futureTo.x}
+                y2={futureTo.y}
+                stroke={CORAL}
+                strokeWidth="1.6"
+                strokeDasharray="4 4"
+                opacity="0.7"
+              />
+            ) : null}
+            {points.map((p, idx) => {
+              if (p.isFuture) {
+                return (
+                  <circle
+                    key={`dot_${idx}`}
+                    cx={p.x}
+                    cy={p.y}
+                    r="4.5"
+                    fill="rgba(255,138,108,0.12)"
+                    stroke={CORAL}
+                    strokeWidth="1.2"
+                  />
+                );
+              }
+              if (p.isCurrent) {
+                return <circle key={`dot_${idx}`} cx={p.x} cy={p.y} r="5" fill={GOLD} />;
+              }
+              const alpha = 0.35 + (Math.min(1, p.value / Math.max(0.0001, max)) * 0.35);
+              return <circle key={`dot_${idx}`} cx={p.x} cy={p.y} r="3.2" fill={DOT_BASE} opacity={alpha} />;
+            })}
+          </svg>
+        </div>
+      ) : (
+        <div
+          style={{
+            marginBottom: 8,
+            marginTop: 6,
+            minHeight: 92,
+            borderRadius: 12,
+            border: "0.5px dashed rgba(255,255,255,0.2)",
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            color: "rgba(255,255,255,0.55)",
+            fontSize: 11,
+            letterSpacing: "0.5px",
+          }}
+        >
+          No {activeLabel.toLowerCase()} volume data in the last 9 weeks.
+        </div>
+      )}
 
       <div style={{ display: "flex", justifyContent: "space-between", marginTop: -4, marginBottom: 10 }}>
         {points.map((p, idx) => (
