@@ -1,6 +1,9 @@
 function formatRaceDate(date) {
   if (!date) return "";
-  const parsed = new Date(`${String(date).slice(0, 10)}T12:00:00`);
+  const parsed =
+    date instanceof Date
+      ? new Date(date.getFullYear(), date.getMonth(), date.getDate(), 12, 0, 0, 0)
+      : new Date(`${String(date).slice(0, 10)}T12:00:00`);
   if (Number.isNaN(parsed.getTime())) return "";
   return parsed.toLocaleDateString("en-US", { month: "short", day: "numeric" });
 }
@@ -10,7 +13,8 @@ export function PhaseHeaderStrip({
   currentWeekOrder,
   totalWeeks,
   raceDate,
-  daysToRace: daysToRaceOverride,
+  raceName,
+  daysToRace = null,
   onTapBlockView,
   isDeloadWeek = false,
   currentWeekInPhase = 1,
@@ -19,22 +23,8 @@ export function PhaseHeaderStrip({
   phaseStatusLabel = "",
   phaseGradient = "linear-gradient(90deg, rgba(201,168,117,0.6) 0%, #C9A875 100%)",
 }) {
-  const now = new Date();
-  const nowMidday = new Date(
-    now.getFullYear(),
-    now.getMonth(),
-    now.getDate(),
-    12,
-    0,
-    0,
-    0,
-  );
-  const raceMidday = raceDate ? new Date(`${String(raceDate).slice(0, 10)}T12:00:00`) : null;
-  const daysToRaceFromDate =
-    raceMidday && !Number.isNaN(raceMidday.getTime())
-      ? Math.max(0, Math.round((raceMidday.getTime() - nowMidday.getTime()) / (1000 * 60 * 60 * 24)))
-      : null;
-  const daysToRace = daysToRaceOverride != null ? daysToRaceOverride : daysToRaceFromDate;
+  const raceDateLabel = formatRaceDate(raceDate);
+  const raceNameLabel = String(raceName || "").trim();
 
   return (
     <button
@@ -94,10 +84,15 @@ export function PhaseHeaderStrip({
               >
                 RACE IN
               </div>
-              <div style={{ fontSize: 14, color: "#C9A875", fontWeight: 500, marginTop: 3 }}>{daysToRace}d</div>
-              <div style={{ fontSize: 10, color: "rgba(255,255,255,0.4)", marginTop: 1 }}>
-                {formatRaceDate(raceDate)}
+              <div style={{ fontSize: 14, color: "#C9A875", fontWeight: 500, marginTop: 3 }}>
+                {daysToRace} days
               </div>
+              {raceDateLabel ? (
+                <div style={{ fontSize: 10, color: "rgba(255,255,255,0.4)", marginTop: 1 }}>{raceDateLabel}</div>
+              ) : null}
+              {raceNameLabel ? (
+                <div style={{ fontSize: 10, color: "rgba(255,255,255,0.45)", marginTop: 1 }}>{raceNameLabel}</div>
+              ) : null}
             </>
           ) : null}
         </div>
