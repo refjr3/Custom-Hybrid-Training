@@ -17,13 +17,10 @@ import { ZoneVolumeDeepDive } from "./features/today/ZoneVolumeDeepDive.jsx";
 import { ZonePicker } from "./features/today/ZonePicker.jsx";
 import { getZoneConfig, normalizeZoneKey, ZONES } from "./features/today/zoneConfig.js";
 import { SleepDeepDive } from "./features/today/SleepDeepDive.jsx";
-import { DailyCallCard } from "./features/today/DailyCallCard.jsx";
 import { InfoPop } from "./components/InfoPop.jsx";
 import { metricExplainers } from "./features/explainers/metrics.js";
 import { parseExerciseLine, normalizeWorkoutBlocks } from "./features/plan/lib/normalizeWorkoutBlocks.js";
-import { PhaseHeaderStrip } from "./features/plan/components/PhaseHeaderStrip.jsx";
-import { SessionHeroCard } from "./features/plan/components/SessionHeroCard.jsx";
-import WeeklyVolumeChart from "./features/plan/components/WeeklyVolumeChart.jsx";
+import PerformanceView from "./features/performance/PerformanceView.jsx";
 
 const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
 const supabaseKey = import.meta.env.VITE_SUPABASE_ANON_KEY;
@@ -5089,218 +5086,12 @@ export default function App() {
         </div>
       )}
 
-      {nav === "perf" && (() => {
-        const summary = perfTrends?.summary;
-        const atl = summary?.atl != null && Number.isFinite(Number(summary.atl)) ? String(summary.atl) : null;
-        const ctl = summary?.ctl != null && Number.isFinite(Number(summary.ctl)) ? String(summary.ctl) : null;
-        const tsbRaw = summary?.tsb;
-        const tsb = tsbRaw != null && Number.isFinite(Number(tsbRaw)) ? Number(tsbRaw) : null;
-
-        const hrv30Arr = Array.isArray(perfTrends?.hrv30) ? perfTrends.hrv30 : [];
-        const validH = hrv30Arr.filter(
-          (d) => d?.date && d.date <= (getLocalToday() || "") && d?.hrv != null && Number.isFinite(Number(d.hrv))
-        );
-        const whoopHrvPerfRaw = whoopData?.recovery?.hrv_rmssd_milli ?? whoopData?.recovery?.hrv;
-        const whoopHrvPerf =
-          whoopHrvPerfRaw != null && Number.isFinite(Number(whoopHrvPerfRaw)) ? Math.round(Number(whoopHrvPerfRaw)) : null;
-        const currentHrv = perfTrends?.current?.hrv != null && Number.isFinite(Number(perfTrends.current.hrv))
-          ? Math.round(Number(perfTrends.current.hrv))
-          : (validH.length ? Math.round(Number(validH[validH.length - 1].hrv)) : whoopHrvPerf);
-        const last7h = validH.slice(-7).map((d) => Number(d.hrv));
-        const prev7h = validH.slice(-14, -7).map((d) => Number(d.hrv));
-        const hrvTrend = meanFinite(last7h) != null && meanFinite(prev7h) != null
-          ? Math.round(meanFinite(last7h) - meanFinite(prev7h))
-          : 0;
-        const hrvStartLabel = validH.length
-          ? new Date(`${validH[0].date}T12:00:00`).toLocaleDateString("en-US", { month: "short", day: "numeric" })
-          : "";
-        const hrvEndLabel = validH.length
-          ? new Date(`${validH[validH.length - 1].date}T12:00:00`).toLocaleDateString("en-US", { month: "short", day: "numeric" })
-          : "";
-
-        return (
-          <div style={{ padding: "20px" }}>
-            <DailyCallCard supabase={supabase} cornerLabel="Training State" />
-            {perfTrendsLoading && (
-              <div style={{ fontFamily: C.fm, fontSize: 10, color: C.muted, letterSpacing: 2, marginBottom: 12 }}>LOADING METRICS…</div>
-            )}
-            <WeeklyVolumeChart user={session?.user || null} supabase={supabase} />
-
-            <div style={glassCard}>
-              <div style={specularTop()} />
-              <div style={{ position: "absolute", top: -20, right: -20, width: 120, height: 120, background: "radial-gradient(circle,rgba(210,190,155,0.1) 0%,transparent 70%)", pointerEvents: "none" }} />
-              <div style={{ padding: "20px 22px", position: "relative", zIndex: 1 }}>
-                <div style={lbl}>Station Bests</div>
-                {HYROX_BESTS.map((s, i) => {
-                  const barColor = s.pct >= 90 ? "#C9A875" : s.pct >= 75 ? "rgba(201,168,117,0.7)" : "rgba(201,168,117,0.45)";
-                  return (
-                    <div
-                      key={s.name}
-                      style={{
-                        display: "flex",
-                        alignItems: "center",
-                        gap: 12,
-                        padding: "9px 0",
-                        borderBottom: i < HYROX_BESTS.length - 1 ? "1px solid rgba(255,255,255,0.06)" : "none",
-                      }}
-                    >
-                      <div style={{ width: 28, height: 28, borderRadius: 8, background: "rgba(255,255,255,0.05)", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 12, color: barColor, flexShrink: 0 }}>{s.icon}</div>
-                      <div style={{ flex: 1, minWidth: 0 }}>
-                        <div style={{ fontSize: 12, fontWeight: 500, color: "rgba(255,255,255,0.7)", letterSpacing: "-0.2px", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{s.name}</div>
-                        <div style={{ fontSize: 9, color: "rgba(255,255,255,0.2)", marginTop: 1 }}>{s.race}</div>
-                      </div>
-                      <div style={{ width: 56, height: 3, background: "rgba(255,255,255,0.07)", borderRadius: 2, overflow: "hidden", flexShrink: 0 }}>
-                        <div style={{ height: "100%", width: `${s.pct}%`, background: barColor, borderRadius: 2 }} />
-                      </div>
-                      <div style={{ fontFamily: "'DM Serif Display',serif", fontSize: 16, color: "rgba(255,255,255,0.65)", width: 38, textAlign: "right", flexShrink: 0, letterSpacing: "-0.5px" }}>{s.time}</div>
-                    </div>
-                  );
-                })}
-              </div>
-            </div>
-            <div style={{ fontSize: 10, color: "rgba(255,255,255,0.2)", lineHeight: 1.5, marginTop: 10, marginBottom: 4 }}>
-              Bar length shows relative strength across stations. Longer = stronger relative to your overall race time.
-            </div>
-
-            <div style={glassCard}>
-              <div style={specularTop()} />
-              <div style={{ position: "absolute", top: -20, right: -20, width: 120, height: 120, background: "radial-gradient(circle,rgba(210,190,155,0.1) 0%,transparent 70%)", pointerEvents: "none" }} />
-              <div style={{ padding: "20px 22px", position: "relative", zIndex: 1 }}>
-                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 14 }}>
-                  <div style={{ ...lbl, marginBottom: 0 }}>Personal Records</div>
-                  {!stravaConnected && (
-                    <a
-                      href={session?.user?.id ? `/api/strava/login?uid=${encodeURIComponent(session.user.id)}` : "/api/strava/login"}
-                      style={{ fontSize: 9, color: "#C9A875", fontWeight: 600, letterSpacing: "1px", textDecoration: "none", fontFamily: C.fs }}
-                    >
-                      Connect Strava →
-                    </a>
-                  )}
-                </div>
-                {[
-                  { label: "400m", key: "400m" },
-                  { label: "1 Mile", key: "1 mile" },
-                  { label: "2 Mile", key: "2 mile" },
-                  { label: "5K", key: "5k" },
-                  { label: "10K", key: "10k" },
-                  { label: "10 Mile", key: "10 mile" },
-                ].map((pr, i, arr) => {
-                  const best = stravaBestEfforts?.[pr.key];
-                  return (
-                    <div
-                      key={pr.key}
-                      style={{
-                        display: "flex",
-                        alignItems: "center",
-                        justifyContent: "space-between",
-                        padding: "11px 0",
-                        borderBottom: i < arr.length - 1 ? "1px solid rgba(255,255,255,0.06)" : "none",
-                      }}
-                    >
-                      <div>
-                        <div style={{ fontSize: 13, fontWeight: 500, color: "rgba(255,255,255,0.65)", fontFamily: C.fs }}>{pr.label}</div>
-                        {best?.date ? (
-                          <div style={{ fontSize: 9, color: "rgba(255,255,255,0.2)", marginTop: 1, fontFamily: C.fs }}>
-                            {new Date(best.date).toLocaleDateString("en-US", { month: "short", year: "2-digit" })}
-                          </div>
-                        ) : null}
-                      </div>
-                      <div style={{
-                        fontFamily: "'DM Serif Display',serif",
-                        fontSize: 22,
-                        color: best?.formatted ? "#fff" : "rgba(255,255,255,0.15)",
-                        letterSpacing: "-0.5px",
-                      }}
-                      >
-                        {best?.formatted ?? "—"}
-                      </div>
-                    </div>
-                  );
-                })}
-              </div>
-            </div>
-
-            <div style={glassCard}>
-              <div style={specularTop()} />
-              <div style={{ position: "absolute", top: -20, right: -20, width: 120, height: 120, background: "radial-gradient(circle,rgba(210,190,155,0.1) 0%,transparent 70%)", pointerEvents: "none" }} />
-              <div style={{ padding: "20px 22px 14px", position: "relative", zIndex: 1 }}>
-                <div style={lbl}>Fitness vs Fatigue · 8 Weeks</div>
-                <div style={{ display: "flex", gap: 20, marginBottom: 16 }}>
-                  <div>
-                    <div style={{ fontFamily: "'DM Serif Display',serif", fontSize: 36, color: "#fff", letterSpacing: "-1.5px", lineHeight: 1 }}>{atl || "—"}</div>
-                    <div style={{ fontSize: 9, color: "rgba(255,255,255,0.3)", letterSpacing: "1.5px", textTransform: "uppercase", marginTop: 2 }}>ATL · Fatigue</div>
-                  </div>
-                  <div>
-                    <div style={{ fontFamily: "'DM Serif Display',serif", fontSize: 36, color: "rgba(255,255,255,0.45)", letterSpacing: "-1.5px", lineHeight: 1 }}>{ctl || "—"}</div>
-                    <div style={{ fontSize: 9, color: "rgba(255,255,255,0.2)", letterSpacing: "1.5px", textTransform: "uppercase", marginTop: 2 }}>CTL · Fitness</div>
-                  </div>
-                  {tsb !== null && (
-                    <div style={{ marginLeft: "auto", display: "flex", alignItems: "center" }}>
-                      <div style={{ background: `rgba(${tsb >= 0 ? "93,255,160" : "255,59,48"},0.1)`, border: `1px solid rgba(${tsb >= 0 ? "93,255,160" : "255,59,48"},0.2)`, borderRadius: 20, padding: "4px 12px", fontSize: 10, fontWeight: 600, color: tsb >= 0 ? "#5dffa0" : "#ff6b6b" }}>{tsb >= 0 ? "+" : ""}{tsb} TSB</div>
-                    </div>
-                  )}
-                </div>
-                <svg width="100%" height="80" viewBox="0 0 320 80" preserveAspectRatio="none">
-                  <defs>
-                    <linearGradient id="ctlGPerf" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stopColor="rgba(201,168,117,0.3)" /><stop offset="100%" stopColor="rgba(201,168,117,0)" /></linearGradient>
-                    <linearGradient id="atlGPerf" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stopColor="rgba(255,255,255,0.1)" /><stop offset="100%" stopColor="rgba(255,255,255,0)" /></linearGradient>
-                  </defs>
-                  <path d="M0 70 C40 65 80 58 120 52 S200 44 240 40 S290 38 320 36 L320 80 L0 80 Z" fill="url(#ctlGPerf)" />
-                  <path d="M0 70 C40 65 80 58 120 52 S200 44 240 40 S290 38 320 36" fill="none" stroke="#C9A875" strokeWidth="1.5" strokeLinecap="round" />
-                  <path d="M0 74 C40 67 80 54 120 48 S190 34 230 30 S290 27 320 24 L320 80 L0 80 Z" fill="url(#atlGPerf)" />
-                  <path d="M0 74 C40 67 80 54 120 48 S190 34 230 30 S290 27 320 24" fill="none" stroke="rgba(255,255,255,0.3)" strokeWidth="1.5" strokeLinecap="round" />
-                </svg>
-                <div style={{ display: "flex", gap: 16, marginTop: 10 }}>
-                  <div style={{ display: "flex", alignItems: "center", gap: 5 }}><span style={{ width: 16, height: 1.5, background: "#C9A875", display: "inline-block" }} /><span style={{ fontSize: 9, color: "rgba(255,255,255,0.3)" }}>CTL Fitness</span></div>
-                  <div style={{ display: "flex", alignItems: "center", gap: 5 }}><span style={{ width: 16, height: 1.5, background: "rgba(255,255,255,0.3)", display: "inline-block" }} /><span style={{ fontSize: 9, color: "rgba(255,255,255,0.3)" }}>ATL Fatigue</span></div>
-                </div>
-              </div>
-            </div>
-            <div style={{ fontSize: 10, color: "rgba(255,255,255,0.2)", lineHeight: 1.5, marginTop: 10, marginBottom: 4 }}>
-              TSB (Training Stress Balance) = Fitness − Fatigue. Positive = fresh and ready to perform. Negative = accumulated fatigue.
-            </div>
-
-            <div style={glassCard}>
-              <div style={specularTop()} />
-              <div style={{ position: "absolute", top: -20, right: -20, width: 120, height: 120, background: "radial-gradient(circle,rgba(210,190,155,0.1) 0%,transparent 70%)", pointerEvents: "none" }} />
-              <div style={{ padding: "20px 22px 14px", position: "relative", zIndex: 1 }}>
-                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 16 }}>
-                  <div>
-                    <div style={lbl}>HRV · 30 Days</div>
-                    <div style={{ fontFamily: "'DM Serif Display',serif", fontSize: 48, color: "#fff", letterSpacing: "-2px", lineHeight: 1 }}>
-                      {currentHrv != null ? currentHrv : "—"}
-                      <span style={{ fontSize: 18, color: "rgba(255,255,255,0.3)", fontFamily: "'DM Sans',sans-serif", marginLeft: 2 }}>ms</span>
-                    </div>
-                  </div>
-                  <div style={{ textAlign: "right", paddingTop: 20 }}>
-                    <div style={{ fontSize: 11, fontWeight: 600, color: hrvTrend >= 0 ? "#5dffa0" : "#ff6b6b" }}>{hrvTrend >= 0 ? "↑" : "↓"} {Math.abs(hrvTrend)}ms</div>
-                    <div style={{ fontSize: 9, color: "rgba(255,255,255,0.25)", marginTop: 2 }}>vs last week</div>
-                  </div>
-                </div>
-                <svg width="100%" height="60" viewBox="0 0 320 60" preserveAspectRatio="none">
-                  <defs>
-                    <linearGradient id="hrvGPerf" x1="0" y1="0" x2="0" y2="1">
-                      <stop offset="0%" stopColor="rgba(201,168,117,0.25)" />
-                      <stop offset="100%" stopColor="rgba(201,168,117,0)" />
-                    </linearGradient>
-                  </defs>
-                  <path d="M0 40 C20 38 35 35 50 32 S75 28 90 30 S110 36 130 34 S155 25 175 22 S200 20 220 18 S250 15 270 17 S295 20 320 18 L320 60 L0 60 Z" fill="url(#hrvGPerf)" />
-                  <path d="M0 40 C20 38 35 35 50 32 S75 28 90 30 S110 36 130 34 S155 25 175 22 S200 20 220 18 S250 15 270 17 S295 20 320 18" fill="none" stroke="#C9A875" strokeWidth="1.5" strokeLinecap="round" />
-                  <circle cx="320" cy="18" r="3" fill="#C9A875" />
-                  <circle cx="320" cy="18" r="6" fill="rgba(201,168,117,0.2)" />
-                </svg>
-                <div style={{ display: "flex", justifyContent: "space-between", marginTop: 6 }}>
-                  <span style={{ fontSize: 8, color: "rgba(255,255,255,0.18)" }}>{hrvStartLabel || "—"}</span>
-                  <span style={{ fontSize: 8, color: "rgba(255,255,255,0.18)" }}>{hrvEndLabel || "—"}</span>
-                </div>
-              </div>
-            </div>
-            <div style={{ fontSize: 10, color: "rgba(255,255,255,0.2)", lineHeight: 1.5, marginTop: 10, marginBottom: 4 }}>
-              Rising HRV = absorbing training. Falling HRV = accumulated stress. Use this to confirm your WHOOP gate decisions.
-            </div>
-          </div>
-        );
-      })()}
+      {nav === "perf" && (
+        <PerformanceView
+          user={session?.user || null}
+          supabase={supabase}
+        />
+      )}
 
       {nav === "stats" && (() => {
         const sleepH = Number(whoopData?.sleep?.hours || 0);
