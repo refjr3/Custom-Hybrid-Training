@@ -2,11 +2,9 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { PhaseHeaderStrip } from "./components/PhaseHeaderStrip.jsx";
 import { WeekGrid } from "./components/WeekGrid.jsx";
 import PlanBlockTimeline from "./PlanBlockTimeline.jsx";
-import { getPhaseGradient, getPhaseStatusLabel, getSessionIntent } from "./components/intentConfig.js";
 import { SessionHeroCard } from "./components/SessionHeroCard.jsx";
 import { SessionFeedbackSheet } from "./components/SessionFeedbackSheet.jsx";
 import { WeeklyStructureSnapshot } from "./components/WeeklyStructureSnapshot.jsx";
-import WeeklyVolumeChart from "./components/WeeklyVolumeChart.jsx";
 import {
   computePhaseProgress,
   getCurrentWeek,
@@ -81,27 +79,6 @@ function extractWeekTypeFromNotes(days) {
     if (m) return String(m[1] || "").trim().toUpperCase();
   }
   return "STANDARD";
-}
-
-function structureIntentBucket(day) {
-  const slot = day?.am_session || day?.am;
-  if (!slot || String(slot).toUpperCase().includes("REST")) return null;
-  const intent = getSessionIntent(day?.am_session_type, day?.am_session);
-  if (intent.label === "Strength") return "strength";
-  if (intent.label === "Recovery") return "recovery";
-  return "conditioning";
-}
-
-function getWeekTypeColor(weekType) {
-  if (weekType === "BRICK") return "#FF8A6C";
-  if (weekType === "DELOAD") return "rgba(255,255,255,0.45)";
-  return "rgba(201,168,117,0.85)";
-}
-
-function toMonSunOrder(dayName) {
-  const key = String(dayName || "").trim().toUpperCase().slice(0, 3);
-  const map = { MON: 0, TUE: 1, WED: 2, THU: 3, FRI: 4, SAT: 5, SUN: 6 };
-  return map[key] ?? 99;
 }
 
 function normalizeDays(week) {
@@ -283,9 +260,6 @@ export default function PlanWeekView({
       isDeloadWeek: /deload/i.test(String(currentWeek?.subtitle || "")),
       currentWeekInPhase: progress.currentWeekInPhase,
       phaseTotalWeeks: progress.phaseTotalWeeks,
-      phaseProgressPercent: progress.phaseProgressPercent,
-      phaseStatusLabel: progress.phaseStatusLabel || getPhaseStatusLabel(progress.currentWeekInPhase, progress.phaseTotalWeeks),
-      phaseGradient: getPhaseGradient(progress.phaseName || currentName),
     };
   }, [allWeeks, currentWeek, currentWeek?._blockLabel, currentWeek?.phase, currentWeek?.subtitle, todayInfo?.todayDayIndex, todayInfo?.week?._weekOrder, todayInfo?.week?.week_order]);
   const hasPrevWeek = useMemo(() => {
@@ -314,37 +288,18 @@ export default function PlanWeekView({
     }
     let plannedSessions = 0;
     let completedCount = 0;
-    let nStrength = 0;
-    let nConditioning = 0;
-    let nRecovery = 0;
     for (const d of days) {
       const slot = d?.am_session || d?.am;
       if (slot && !String(slot).toUpperCase().includes("REST")) {
         plannedSessions += 1;
-        const b = structureIntentBucket(d);
-        if (b === "strength") nStrength += 1;
-        else if (b === "conditioning") nConditioning += 1;
-        else if (b === "recovery") nRecovery += 1;
       }
       if (d?.am_completed_at) completedCount += 1;
     }
-    const sessionBreakdown = [
-      nStrength ? `${nStrength} strength` : null,
-      nConditioning ? `${nConditioning} conditioning` : null,
-      nRecovery ? `${nRecovery} recovery` : null,
-    ]
-      .filter(Boolean)
-      .join(" · ");
     const pct = plannedSessions ? (completedCount / plannedSessions) * 100 : 0;
-    const complianceColor =
-      pct >= 80 ? "rgba(120,200,180,0.95)" : pct >= 50 ? "#C9A875" : "rgba(255,255,255,0.35)";
     return {
       weekType,
-      weekTypeColor: getWeekTypeColor(weekType),
       plannedSessions,
       completedCount,
-      sessionBreakdown: sessionBreakdown || "—",
-      complianceColor,
       compliancePercent: pct,
     };
   }, [daysState, currentWeek?.subtitle]);
@@ -617,42 +572,15 @@ export default function PlanWeekView({
         isDeloadWeek={phaseCtx.isDeloadWeek}
         currentWeekInPhase={phaseCtx.currentWeekInPhase}
         phaseTotalWeeks={phaseCtx.phaseTotalWeeks}
-        phaseProgressPercent={phaseCtx.phaseProgressPercent}
-        phaseStatusLabel={phaseCtx.phaseStatusLabel}
-        phaseGradient={phaseCtx.phaseGradient}
         onTapBlockView={() => setShowBlockTimeline(true)}
       />
-
-      {!isOnTodayInThisWeek ? (
-        <button
-          type="button"
-          onClick={jumpToToday}
-          style={{
-            width: "100%",
-            marginBottom: 12,
-            padding: "10px 14px",
-            borderRadius: 999,
-            border: "1px dashed rgba(201,168,117,0.45)",
-            background: "rgba(201,168,117,0.06)",
-            color: "#C9A875",
-            fontSize: 11,
-            fontWeight: 600,
-            letterSpacing: "1.8px",
-            textTransform: "uppercase",
-            cursor: "pointer",
-            fontFamily: "'DM Sans', sans-serif",
-          }}
-        >
-          ⊙ Jump to today
-        </button>
-      ) : null}
 
       <div
         style={{
           display: "flex",
           alignItems: "center",
           justifyContent: "space-between",
-          marginBottom: 16,
+          padding: "14px 0 10px",
           gap: 8,
         }}
       >
@@ -662,20 +590,21 @@ export default function PlanWeekView({
           disabled={!hasPrevWeek}
           style={navBtn(!hasPrevWeek)}
         >
-          ← Prev
+          ←
         </button>
         <div
           style={{
             fontSize: 11,
-            fontWeight: 600,
+            fontWeight: 500,
             color: "rgba(255,255,255,0.6)",
-            letterSpacing: "1.5px",
+            letterSpacing: "1.3px",
             textAlign: "center",
             lineHeight: 1.4,
+            fontVariantNumeric: "tabular-nums",
             fontFamily: "'DM Sans', sans-serif",
           }}
         >
-          {currentWeek?.label || `Week ${currentWeekIdx + 1}`} · {currentWeek?.dates || ""}
+          {currentWeek?.dates || ""}
         </div>
         <button
           type="button"
@@ -683,98 +612,32 @@ export default function PlanWeekView({
           disabled={!hasNextWeek}
           style={navBtn(!hasNextWeek)}
         >
-          Next →
+          →
         </button>
       </div>
 
-      <div
-        style={{
-          background: "rgba(255,255,255,0.025)",
-          border: "0.5px solid rgba(255,255,255,0.06)",
-          borderRadius: 14,
-          padding: "14px 16px",
-          marginBottom: 14,
-        }}
-      >
-        <div
+      {!isOnTodayInThisWeek ? (
+        <button
+          type="button"
+          onClick={jumpToToday}
           style={{
-            display: "flex",
-            justifyContent: "space-between",
-            alignItems: "center",
+            width: "100%",
+            padding: 6,
+            background: "transparent",
+            border: "0.5px dashed rgba(201,168,117,0.25)",
+            borderRadius: 8,
+            fontSize: 9,
+            fontWeight: 500,
+            color: "rgba(201,168,117,0.6)",
+            letterSpacing: "1.4px",
             marginBottom: 10,
+            cursor: "pointer",
+            fontFamily: "'DM Sans', sans-serif",
           }}
         >
-          <span
-            style={{
-              fontSize: 9,
-              fontWeight: 500,
-              color: "rgba(255,255,255,0.5)",
-              letterSpacing: "1.5px",
-            }}
-          >
-            THIS WEEK
-          </span>
-          <span
-            style={{
-              fontSize: 9,
-              fontWeight: 500,
-              color: weeklyStructure.weekTypeColor,
-              letterSpacing: "1.5px",
-            }}
-          >
-            {weeklyStructure.weekType}
-          </span>
-        </div>
-
-        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline" }}>
-          <div>
-            <div
-              style={{
-                fontSize: 18,
-                fontFamily: "'DM Serif Display', serif",
-                color: "#fff",
-                letterSpacing: "-0.3px",
-              }}
-            >
-              {weeklyStructure.plannedSessions} sessions planned
-            </div>
-            <div style={{ fontSize: 11, color: "rgba(255,255,255,0.5)", marginTop: 3 }}>
-              {weeklyStructure.sessionBreakdown}
-            </div>
-          </div>
-          <div style={{ textAlign: "right" }}>
-            <div style={{ fontSize: 9, color: "rgba(255,255,255,0.4)", letterSpacing: "1.5px" }}>COMPLIANCE</div>
-            <div
-              style={{
-                fontSize: 22,
-                color: weeklyStructure.complianceColor,
-                fontWeight: 500,
-                fontVariantNumeric: "tabular-nums",
-              }}
-            >
-              {weeklyStructure.completedCount}/{weeklyStructure.plannedSessions}
-            </div>
-          </div>
-        </div>
-
-        <div
-          style={{
-            height: 3,
-            background: "rgba(255,255,255,0.06)",
-            borderRadius: 2,
-            marginTop: 10,
-            overflow: "hidden",
-          }}
-        >
-          <div
-            style={{
-              height: "100%",
-              width: `${weeklyStructure.compliancePercent}%`,
-              background: weeklyStructure.complianceColor,
-            }}
-          />
-        </div>
-      </div>
+          ⊙ JUMP TO TODAY
+        </button>
+      ) : null}
 
       <WeekGrid
         days={daysState}
@@ -787,6 +650,46 @@ export default function PlanWeekView({
           setSelectedDayIndex(idx);
         }}
       />
+
+      <div
+        style={{
+          marginTop: 8,
+          marginBottom: 26,
+          display: "flex",
+          alignItems: "center",
+          gap: 8,
+        }}
+      >
+        <div
+          style={{
+            flex: 1,
+            height: 3,
+            background: "rgba(255,255,255,0.05)",
+            borderRadius: 2,
+            overflow: "hidden",
+          }}
+        >
+          <div
+            style={{
+              height: "100%",
+              width: `${weeklyStructure.compliancePercent}%`,
+              background: "rgba(120,200,180,0.7)",
+              borderRadius: 2,
+            }}
+          />
+        </div>
+        <span
+          style={{
+            fontSize: 9,
+            color: "rgba(255,255,255,0.45)",
+            letterSpacing: "1.2px",
+            fontWeight: 500,
+            fontVariantNumeric: "tabular-nums",
+          }}
+        >
+          {weeklyStructure.completedCount}/{weeklyStructure.plannedSessions}
+        </span>
+      </div>
 
       {selectedDay ? (
         <SessionHeroCard
@@ -805,20 +708,7 @@ export default function PlanWeekView({
       <WeeklyStructureSnapshot
         days={daysState}
         todayDayIndex={isCurrentWeek ? todayIndex : null}
-        weekLabel={currentWeek?.label || `Week ${currentWeekOrder || "—"}`}
-        weekDates={currentWeek?.dates || ""}
         weekType={weeklyStructure.weekType}
-        getSessionIntent={getSessionIntent}
-        dayOrderResolver={toMonSunOrder}
-      />
-
-      <WeeklyVolumeChart
-        user={user}
-        supabase={supabase}
-        weeks={allWeeks}
-        currentWeek={currentWeek}
-        days={daysState}
-        profile={profile}
       />
 
       {showBlockTimeline ? (
@@ -877,14 +767,16 @@ export default function PlanWeekView({
 
 function navBtn(disabled) {
   return {
-    background: "rgba(255,255,255,0.04)",
-    border: "1px solid rgba(255,255,255,0.08)",
-    color: disabled ? "rgba(255,255,255,0.2)" : "rgba(255,255,255,0.75)",
-    borderRadius: 12,
-    padding: "10px 12px",
-    fontSize: 12,
+    width: 32,
+    height: 28,
+    background: "transparent",
+    border: "0.5px solid rgba(255,255,255,0.12)",
+    color: disabled ? "rgba(255,255,255,0.2)" : "rgba(255,255,255,0.72)",
+    borderRadius: 8,
+    padding: 0,
+    fontSize: 13,
+    lineHeight: 1,
     cursor: disabled ? "not-allowed" : "pointer",
-    minWidth: 74,
     fontFamily: "'DM Sans', sans-serif",
   };
 }

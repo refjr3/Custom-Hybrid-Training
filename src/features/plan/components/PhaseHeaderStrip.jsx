@@ -16,15 +16,16 @@ export function PhaseHeaderStrip({
   raceName,
   daysToRace = null,
   onTapBlockView,
-  isDeloadWeek = false,
   currentWeekInPhase = 1,
   phaseTotalWeeks = 1,
-  phaseProgressPercent = 0,
-  phaseStatusLabel = "",
-  phaseGradient = "linear-gradient(90deg, rgba(201,168,117,0.6) 0%, #C9A875 100%)",
+  isDeloadWeek = false,
 }) {
   const raceDateLabel = formatRaceDate(raceDate);
-  const raceNameLabel = String(raceName || "").trim();
+  const raceNameLabel = String(raceName || "").trim().toUpperCase();
+  const weekInPhase = Number(currentWeekInPhase) || Number(currentWeekOrder) || 1;
+  const weekCount = Number(phaseTotalWeeks) || Number(totalWeeks) || 1;
+  const raceCountdownLabel =
+    daysToRace != null ? `${daysToRace}d to race` : raceDateLabel ? `${raceDateLabel} race` : "Race TBD";
 
   return (
     <button
@@ -32,130 +33,83 @@ export function PhaseHeaderStrip({
       onClick={onTapBlockView}
       style={{
         width: "100%",
-        background: "linear-gradient(180deg, rgba(255,255,255,0.04) 0%, rgba(255,255,255,0.02) 100%)",
-        border: "1px solid rgba(201,168,117,0.2)",
-        borderRadius: 16,
-        padding: "14px 18px",
+        background: "transparent",
+        border: "none",
+        borderBottom: "0.5px solid rgba(255,255,255,0.06)",
+        padding: "14px 4px 12px",
+        marginBottom: 2,
         cursor: "pointer",
         textAlign: "left",
-        marginBottom: 16,
+        display: "flex",
+        justifyContent: "space-between",
+        alignItems: "center",
+        gap: 12,
         fontFamily: "'DM Sans', sans-serif",
       }}
     >
-      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 12 }}>
-        <div>
-          <div
-            style={{
-              fontSize: 9,
-              fontWeight: 500,
-              color: "rgba(201,168,117,0.65)",
-              letterSpacing: "2px",
-              marginBottom: 4,
-              textTransform: "uppercase",
-            }}
-          >
-            WEEK {currentWeekOrder || "—"} OF {totalWeeks || "—"}
-            {isDeloadWeek ? " · DELOAD" : ""}
-          </div>
-          <div
-            style={{
-              fontFamily: "'DM Serif Display', serif",
-              fontSize: 19,
-              color: "#fff",
-              letterSpacing: "-0.3px",
-              marginTop: 4,
-            }}
-          >
-            {currentPhaseName || "Current Block"}
-          </div>
-        </div>
-        <div style={{ textAlign: "right" }}>
-          {daysToRace !== null ? (
-            <>
-              <div
-                style={{
-                  fontSize: 9,
-                  color: "rgba(255,255,255,0.4)",
-                  letterSpacing: "1.5px",
-                  fontWeight: 500,
-                  marginBottom: 2,
-                  textTransform: "uppercase",
-                }}
-              >
-                RACE IN
-              </div>
-              <div style={{ fontSize: 14, color: "#C9A875", fontWeight: 500, marginTop: 3 }}>
-                {daysToRace} days
-              </div>
-              {raceDateLabel ? (
-                <div style={{ fontSize: 10, color: "rgba(255,255,255,0.4)", marginTop: 1 }}>{raceDateLabel}</div>
-              ) : null}
-              {raceNameLabel ? (
-                <div style={{ fontSize: 10, color: "rgba(255,255,255,0.45)", marginTop: 1 }}>{raceNameLabel}</div>
-              ) : null}
-            </>
-          ) : null}
-        </div>
-      </div>
-
       <div
         style={{
-          marginTop: 14,
-          paddingTop: 12,
-          borderTop: "0.5px solid rgba(201,168,117,0.15)",
+          display: "flex",
+          alignItems: "baseline",
+          gap: 8,
+          flex: 1,
+          minWidth: 0,
         }}
       >
-        <div
+        <span
           style={{
-            display: "flex",
-            justifyContent: "space-between",
-            alignItems: "baseline",
-            marginBottom: 6,
-          }}
-        >
-          <span
-            style={{
-              fontSize: 9,
-              color: "rgba(255,255,255,0.4)",
-              letterSpacing: "1.5px",
-              fontWeight: 500,
-              textTransform: "uppercase",
-            }}
-          >
-            PHASE PROGRESS
-          </span>
-          <span
-            style={{
-              fontSize: 11,
-              color: "rgba(255,255,255,0.7)",
-              fontWeight: 500,
-              fontVariantNumeric: "tabular-nums",
-            }}
-          >
-            {phaseStatusLabel}
-          </span>
-        </div>
-        <div
-          style={{
-            height: 4,
-            background: "rgba(255,255,255,0.06)",
-            borderRadius: 3,
+            fontSize: 13,
+            color: "rgba(255,255,255,0.85)",
+            fontWeight: 500,
+            letterSpacing: "-0.1px",
+            whiteSpace: "nowrap",
             overflow: "hidden",
+            textOverflow: "ellipsis",
           }}
         >
-          <div
-            style={{
-              height: "100%",
-              width: `${Math.max(0, Math.min(100, Number(phaseProgressPercent) || 0))}%`,
-              background: phaseGradient,
-              borderRadius: 3,
-            }}
-          />
-        </div>
+          {currentPhaseName || "Current Block"}
+          {isDeloadWeek ? " · Deload" : ""}
+        </span>
+        <span style={{ fontSize: 10, color: "rgba(255,255,255,0.35)" }}>·</span>
+        <span
+          style={{
+            fontSize: 11,
+            color: "rgba(255,255,255,0.55)",
+            fontWeight: 500,
+            whiteSpace: "nowrap",
+          }}
+        >
+          Wk {weekInPhase} of {weekCount}
+        </span>
+        <span style={{ fontSize: 10, color: "rgba(255,255,255,0.35)" }}>·</span>
+        <span
+          style={{
+            fontSize: 11,
+            color: "#C9A875",
+            fontWeight: 500,
+            fontVariantNumeric: "tabular-nums",
+            whiteSpace: "nowrap",
+          }}
+        >
+          {raceCountdownLabel}
+        </span>
+        {raceNameLabel ? (
+          <>
+            <span style={{ fontSize: 10, color: "rgba(255,255,255,0.35)" }}>·</span>
+            <span
+              style={{
+                fontSize: 10,
+                color: "rgba(255,255,255,0.5)",
+                letterSpacing: "0.6px",
+                whiteSpace: "nowrap",
+              }}
+            >
+              {raceNameLabel}
+            </span>
+          </>
+        ) : null}
       </div>
-      <div style={{ marginTop: 8, fontSize: 11, color: "rgba(255,255,255,0.35)" }}>
-        Tap for full block →
-      </div>
+      <span style={{ fontSize: 12, color: "rgba(255,255,255,0.4)", flexShrink: 0 }}>→</span>
     </button>
   );
 }

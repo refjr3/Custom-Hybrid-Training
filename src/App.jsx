@@ -23,6 +23,7 @@ import { metricExplainers } from "./features/explainers/metrics.js";
 import { parseExerciseLine, normalizeWorkoutBlocks } from "./features/plan/lib/normalizeWorkoutBlocks.js";
 import { PhaseHeaderStrip } from "./features/plan/components/PhaseHeaderStrip.jsx";
 import { SessionHeroCard } from "./features/plan/components/SessionHeroCard.jsx";
+import WeeklyVolumeChart from "./features/plan/components/WeeklyVolumeChart.jsx";
 
 const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
 const supabaseKey = import.meta.env.VITE_SUPABASE_ANON_KEY;
@@ -5123,6 +5124,7 @@ export default function App() {
             {perfTrendsLoading && (
               <div style={{ fontFamily: C.fm, fontSize: 10, color: C.muted, letterSpacing: 2, marginBottom: 12 }}>LOADING METRICS…</div>
             )}
+            <WeeklyVolumeChart user={session?.user || null} supabase={supabase} />
 
             <div style={glassCard}>
               <div style={specularTop()} />

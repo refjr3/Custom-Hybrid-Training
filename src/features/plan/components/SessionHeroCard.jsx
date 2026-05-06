@@ -142,10 +142,13 @@ export function SessionHeroCard({
   return (
     <div
       style={{
-        background: "rgba(201,168,117,0.06)",
-        border: "1px solid rgba(201,168,117,0.32)",
-        borderRadius: 16,
-        padding: "18px 18px 16px",
+        background: "rgba(201,168,117,0.07)",
+        border: "1px solid rgba(201,168,117,0.35)",
+        borderRadius: 18,
+        padding: "22px 22px 20px",
+        marginTop: 18,
+        marginBottom: 28,
+        boxShadow: "0 8px 32px rgba(0,0,0,0.25)",
       }}
     >
       <div style={{ display: "flex", gap: 8, alignItems: "center", marginBottom: 6, flexWrap: "wrap" }}>
@@ -213,11 +216,11 @@ export function SessionHeroCard({
       <div
         style={{
           fontFamily: "'DM Serif Display', serif",
-          fontSize: 21,
+          fontSize: 26,
           color: "#fff",
-          letterSpacing: "-0.4px",
+          letterSpacing: "-0.5px",
           lineHeight: 1.15,
-          marginTop: 4,
+          marginTop: 6,
         }}
       >
         {day?.am_session || "Session"}

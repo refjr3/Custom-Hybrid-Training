@@ -62,58 +62,32 @@ function weekTypeFromNotes(days, fallbackType) {
 export function WeeklyStructureSnapshot({
   days,
   todayDayIndex = null,
-  weekLabel,
-  weekDates,
   weekType,
 }) {
   const orderedDays = orderDays(days);
   const resolvedWeekType = weekTypeFromNotes(orderedDays, weekType);
+  const weekTypeTone = weekTypeStyles(resolvedWeekType);
 
   return (
-    <div
-      style={{
-        background: "#0D0E10",
-        borderRadius: 22,
-        padding: "20px 18px 22px",
-        border: "0.5px solid rgba(255,255,255,0.08)",
-        marginBottom: 14,
-      }}
-    >
-      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 14 }}>
-        <div>
-          <div
-            style={{
-              fontSize: 9,
-              color: "rgba(201,168,117,0.65)",
-              letterSpacing: "2px",
-              fontWeight: 500,
-            }}
-          >
-            WEEKLY STRUCTURE
-          </div>
-          <div
-            style={{
-              fontFamily: "'DM Serif Display', serif",
-              fontSize: 19,
-              color: "#fff",
-              letterSpacing: "-0.3px",
-              marginTop: 4,
-              marginBottom: 2,
-              lineHeight: 1.15,
-            }}
-          >
-            {weekLabel || "Current Week"}
-          </div>
-          <div style={{ fontSize: 11, color: "rgba(255,255,255,0.5)" }}>{weekDates || "—"}</div>
-        </div>
+    <div style={{ marginTop: 24, marginBottom: 16 }}>
+      <div
+        style={{
+          fontSize: 9,
+          color: "rgba(255,255,255,0.45)",
+          letterSpacing: "2px",
+          fontWeight: 500,
+          marginBottom: 12,
+          display: "flex",
+          justifyContent: "space-between",
+          alignItems: "baseline",
+        }}
+      >
+        <span>THIS WEEK</span>
         <span
           style={{
             fontSize: 8,
-            padding: "3px 9px",
-            borderRadius: 10,
+            color: weekTypeTone.color,
             letterSpacing: "1.6px",
-            fontWeight: 500,
-            ...weekTypeStyles(resolvedWeekType),
           }}
         >
           {resolvedWeekType}
@@ -140,13 +114,13 @@ export function WeeklyStructureSnapshot({
               style={{
                 display: "flex",
                 alignItems: "center",
-                padding: "11px 0",
-                gap: 12,
+                padding: "8px 0",
+                gap: 10,
                 borderBottom: i < 6 ? "0.5px solid rgba(255,255,255,0.05)" : "none",
                 ...(isToday && {
-                  paddingLeft: 6,
-                  paddingRight: 6,
-                  margin: "0 -6px",
+                  paddingLeft: 5,
+                  paddingRight: 5,
+                  margin: "0 -5px",
                   background: "rgba(201,168,117,0.05)",
                   borderRadius: 8,
                   borderBottom: "transparent",
@@ -155,9 +129,9 @@ export function WeeklyStructureSnapshot({
             >
               <span
                 style={{
-                  width: 38,
+                  width: 30,
                   flexShrink: 0,
-                  fontSize: 10,
+                  fontSize: 9,
                   fontWeight: isToday ? 600 : 500,
                   color: isToday ? "#C9A875" : "rgba(255,255,255,0.45)",
                   letterSpacing: "1.4px",
@@ -167,8 +141,8 @@ export function WeeklyStructureSnapshot({
               </span>
               <span
                 style={{
-                  width: 8,
-                  height: 8,
+                  width: 7,
+                  height: 7,
                   borderRadius: "50%",
                   background: dotColor,
                   flexShrink: 0,
@@ -178,7 +152,7 @@ export function WeeklyStructureSnapshot({
                 style={{
                   flex: 1,
                   minWidth: 0,
-                  fontSize: 13,
+                  fontSize: 12,
                   color: isRest ? "rgba(255,255,255,0.35)" : isToday ? "#fff" : "rgba(255,255,255,0.85)",
                   fontStyle: isRest ? "italic" : "normal",
                   fontWeight: 500,
@@ -191,11 +165,11 @@ export function WeeklyStructureSnapshot({
                 {isRest ? "Rest" : day?.am_session}
               </span>
               {isDone ? (
-                <span style={{ fontSize: 11, color: "rgba(120,200,180,0.7)", flexShrink: 0 }}>✓</span>
+                <span style={{ fontSize: 10, color: "rgba(120,200,180,0.7)", flexShrink: 0 }}>✓</span>
               ) : (
                 <span
                   style={{
-                    fontSize: 11,
+                    fontSize: 10,
                     color: "rgba(255,255,255,0.4)",
                     flexShrink: 0,
                     fontVariantNumeric: "tabular-nums",
