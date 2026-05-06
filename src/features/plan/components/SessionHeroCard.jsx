@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { getSessionIntent } from "./intentConfig.js";
+import { parseWorkoutNote } from "../lib/workoutNoteParser.js";
 
 function formatExerciseMeta(exercise) {
   const parts = [];
@@ -28,6 +29,28 @@ function inferEditableFields(exercise) {
   if (exercise?.rest != null) fields.push({ key: "rest", label: "REST" });
   if (fields.length === 0) fields.push({ key: "details", label: "DETAILS" });
   return fields;
+}
+
+function formatShortDate(value, fallbackLabel = "") {
+  let parsed = null;
+  if (value) {
+    const raw = String(value).trim();
+    if (/^\d{4}-\d{2}-\d{2}$/.test(raw)) {
+      parsed = new Date(`${raw}T12:00:00`);
+    } else {
+      const fromDate = new Date(raw);
+      if (!Number.isNaN(fromDate.getTime())) parsed = fromDate;
+    }
+  }
+  if ((!parsed || Number.isNaN(parsed.getTime())) && fallbackLabel) {
+    const tryYear = new Date().getFullYear();
+    const fromLabel = new Date(`${String(fallbackLabel).trim()} ${tryYear}`);
+    if (!Number.isNaN(fromLabel.getTime())) parsed = fromLabel;
+  }
+  if (!parsed || Number.isNaN(parsed.getTime())) return "";
+  return parsed
+    .toLocaleDateString("en-US", { month: "short", day: "numeric" })
+    .toUpperCase();
 }
 
 function ExerciseRow({ exercise }) {
@@ -121,7 +144,11 @@ export function SessionHeroCard({
   const rawBlocks = Array.isArray(day?.am_session_blocks) ? day.am_session_blocks : [];
   const hasBlocks = rawBlocks.length > 0;
   const noteFull = String(day?.note ?? day?.note2a ?? "").trim();
+  const hasNote = Boolean(noteFull);
+  const parsedNote = useMemo(() => parseWorkoutNote(noteFull), [noteFull]);
   const blocks = editMode ? editedBlocks : rawBlocks;
+  const dayLabel = String(day?.day_name || day?.day || "").toUpperCase();
+  const dateLabel = formatShortDate(day?.calendar_date || day?._iso || day?.date, day?.date_label);
 
   const plannedKey = day?.am_session || day?.am;
   const canMarkComplete =
@@ -154,6 +181,31 @@ export function SessionHeroCard({
         boxShadow: "0 8px 32px rgba(0,0,0,0.25)",
       }}
     >
+      {isToday ? (
+        <div
+          style={{
+            fontSize: 9,
+            fontWeight: 600,
+            color: "#C9A875",
+            letterSpacing: "2.5px",
+            marginBottom: 8,
+          }}
+        >
+          {`TODAY${dayLabel ? ` · ${dayLabel}` : ""}${dateLabel ? ` · ${dateLabel}` : ""}`}
+        </div>
+      ) : (
+        <div
+          style={{
+            fontSize: 9,
+            fontWeight: 500,
+            color: "rgba(255,255,255,0.45)",
+            letterSpacing: "2.5px",
+            marginBottom: 8,
+          }}
+        >
+          {`${dayLabel || "DAY"}${dateLabel ? ` · ${dateLabel}` : ""}`}
+        </div>
+      )}
       <div style={{ display: "flex", gap: 8, alignItems: "center", marginBottom: 6, flexWrap: "wrap" }}>
         <span
           style={{
@@ -169,20 +221,12 @@ export function SessionHeroCard({
           {String(intent.label || "").toUpperCase()}
           {day?.is_user_modified ? " · ✏️" : ""}
         </span>
-        <span style={{ fontSize: 8, color: "rgba(255,255,255,0.5)", fontWeight: 500, letterSpacing: "2px" }}>
-          {String(day?.day_name || day?.day || "").toUpperCase()}
-        </span>
-        {isToday ? (
-          <span style={{ fontSize: 8, color: "#C9A875", fontWeight: 500, letterSpacing: "2px", marginLeft: "auto" }}>
-            TODAY
-          </span>
-        ) : null}
         {!editMode ? (
           <button
             type="button"
             onClick={() => setEditMode(true)}
             style={{
-              marginLeft: isToday ? 8 : "auto",
+              marginLeft: "auto",
               fontSize: 9,
               fontWeight: 500,
               letterSpacing: "1.4px",
@@ -305,19 +349,107 @@ export function SessionHeroCard({
             })}
           </div>
         ))
-      ) : noteFull ? (
+      ) : hasNote ? (
         <div
           style={{
             marginTop: 14,
             paddingTop: 13,
             borderTop: "0.5px solid rgba(201,168,117,0.15)",
-            fontSize: 13,
-            color: "rgba(255,255,255,0.85)",
-            lineHeight: 1.6,
-            whiteSpace: "pre-wrap",
           }}
         >
-          {day?.note ?? day?.note2a}
+          {parsedNote.why ? (
+            <div style={{ fontSize: 13, color: "rgba(255,255,255,0.78)", lineHeight: 1.5, marginBottom: 14 }}>
+              {parsedNote.why}
+            </div>
+          ) : null}
+
+          {(parsedNote.duration || parsedNote.targets) ? (
+            <div style={{ display: "flex", gap: 14, flexWrap: "wrap", marginBottom: 14 }}>
+              {parsedNote.duration ? (
+                <div>
+                  <div
+                    style={{
+                      fontSize: 8,
+                      color: "rgba(201,168,117,0.65)",
+                      letterSpacing: "1.8px",
+                      fontWeight: 500,
+                      marginBottom: 3,
+                    }}
+                  >
+                    DURATION
+                  </div>
+                  <div style={{ fontSize: 13, color: "white", fontWeight: 500 }}>{parsedNote.duration}</div>
+                </div>
+              ) : null}
+              {parsedNote.targets ? (
+                <div>
+                  <div
+                    style={{
+                      fontSize: 8,
+                      color: "rgba(201,168,117,0.65)",
+                      letterSpacing: "1.8px",
+                      fontWeight: 500,
+                      marginBottom: 3,
+                    }}
+                  >
+                    TARGETS
+                  </div>
+                  <div style={{ fontSize: 13, color: "white", fontWeight: 500 }}>{parsedNote.targets}</div>
+                </div>
+              ) : null}
+            </div>
+          ) : null}
+
+          {parsedNote.structure.length > 0 ? (
+            <div style={{ marginBottom: parsedNote.extras.length > 0 ? 14 : 0 }}>
+              <div
+                style={{
+                  fontSize: 8,
+                  color: "rgba(201,168,117,0.65)",
+                  letterSpacing: "1.8px",
+                  fontWeight: 500,
+                  marginBottom: 6,
+                }}
+              >
+                STRUCTURE
+              </div>
+              {parsedNote.structure.map((line, i) => (
+                <div key={`st_${i}`} style={{ fontSize: 13, color: "rgba(255,255,255,0.85)", lineHeight: 1.55, marginBottom: 2 }}>
+                  {line}
+                </div>
+              ))}
+            </div>
+          ) : null}
+
+          {parsedNote.extras.length > 0 ? (
+            <div>
+              <div
+                style={{
+                  fontSize: 8,
+                  color: "rgba(255,255,255,0.4)",
+                  letterSpacing: "1.8px",
+                  fontWeight: 500,
+                  marginBottom: 6,
+                }}
+              >
+                NOTES
+              </div>
+              {parsedNote.extras.map((line, i) => (
+                <div
+                  key={`ex_${i}`}
+                  style={{
+                    fontSize: 12,
+                    color: "rgba(255,255,255,0.55)",
+                    lineHeight: 1.55,
+                    fontStyle: "italic",
+                    marginBottom: 2,
+                  }}
+                >
+                  {line}
+                </div>
+              ))}
+            </div>
+          ) : null}
         </div>
       ) : (
         <div style={{ marginTop: 14, fontSize: 12, color: "rgba(255,255,255,0.4)", fontStyle: "italic" }}>

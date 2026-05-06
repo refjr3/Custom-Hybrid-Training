@@ -20,12 +20,11 @@ export function PhaseHeaderStrip({
   phaseTotalWeeks = 1,
   isDeloadWeek = false,
 }) {
-  const raceDateLabel = formatRaceDate(raceDate);
-  const raceNameLabel = String(raceName || "").trim().toUpperCase();
+  const raceDateFormatted = formatRaceDate(raceDate);
+  const raceNameLabel = String(raceName || "").trim();
   const weekInPhase = Number(currentWeekInPhase) || Number(currentWeekOrder) || 1;
   const weekCount = Number(phaseTotalWeeks) || Number(totalWeeks) || 1;
-  const raceCountdownLabel =
-    daysToRace != null ? `${daysToRace}d to race` : raceDateLabel ? `${raceDateLabel} race` : "Race TBD";
+  const raceCountdownLabel = daysToRace != null ? `${daysToRace}d` : null;
 
   return (
     <button
@@ -47,67 +46,85 @@ export function PhaseHeaderStrip({
         fontFamily: "'DM Sans', sans-serif",
       }}
     >
-      <div
-        style={{
-          display: "flex",
-          alignItems: "baseline",
-          gap: 8,
-          flex: 1,
-          minWidth: 0,
-        }}
-      >
-        <span
-          style={{
-            fontSize: 13,
-            color: "rgba(255,255,255,0.85)",
-            fontWeight: 500,
-            letterSpacing: "-0.1px",
-            whiteSpace: "nowrap",
-            overflow: "hidden",
-            textOverflow: "ellipsis",
-          }}
-        >
-          {currentPhaseName || "Current Block"}
-          {isDeloadWeek ? " · Deload" : ""}
-        </span>
-        <span style={{ fontSize: 10, color: "rgba(255,255,255,0.35)" }}>·</span>
-        <span
-          style={{
-            fontSize: 11,
-            color: "rgba(255,255,255,0.55)",
-            fontWeight: 500,
-            whiteSpace: "nowrap",
-          }}
-        >
-          Wk {weekInPhase} of {weekCount}
-        </span>
-        <span style={{ fontSize: 10, color: "rgba(255,255,255,0.35)" }}>·</span>
-        <span
-          style={{
-            fontSize: 11,
-            color: "#C9A875",
-            fontWeight: 500,
-            fontVariantNumeric: "tabular-nums",
-            whiteSpace: "nowrap",
-          }}
-        >
-          {raceCountdownLabel}
-        </span>
-        {raceNameLabel ? (
-          <>
-            <span style={{ fontSize: 10, color: "rgba(255,255,255,0.35)" }}>·</span>
+      <div style={{ flex: 1, minWidth: 0 }}>
+        <div style={{ display: "flex", alignItems: "baseline", gap: 8, marginBottom: 4, minWidth: 0 }}>
+          <span
+            style={{
+              fontSize: 13,
+              color: "rgba(255,255,255,0.85)",
+              fontWeight: 500,
+              letterSpacing: "-0.1px",
+              whiteSpace: "nowrap",
+              overflow: "hidden",
+              textOverflow: "ellipsis",
+            }}
+          >
+            {currentPhaseName || "Current Block"}
+            {isDeloadWeek ? " · Deload" : ""}
+          </span>
+          <span style={{ fontSize: 10, color: "rgba(255,255,255,0.35)" }}>·</span>
+          <span
+            style={{
+              fontSize: 11,
+              color: "rgba(255,255,255,0.55)",
+              fontWeight: 500,
+              whiteSpace: "nowrap",
+            }}
+          >
+            Wk {weekInPhase} of {weekCount}
+          </span>
+        </div>
+
+        <div style={{ display: "flex", alignItems: "baseline", gap: 6, minWidth: 0 }}>
+          {raceCountdownLabel ? (
             <span
               style={{
-                fontSize: 10,
-                color: "rgba(255,255,255,0.5)",
-                letterSpacing: "0.6px",
+                fontSize: 11,
+                color: "#C9A875",
+                fontWeight: 500,
+                fontVariantNumeric: "tabular-nums",
                 whiteSpace: "nowrap",
               }}
             >
+              {raceCountdownLabel}
+            </span>
+          ) : null}
+          {raceCountdownLabel && (raceNameLabel || raceDateFormatted) ? (
+            <span style={{ fontSize: 9, color: "rgba(255,255,255,0.3)" }}>·</span>
+          ) : null}
+          {raceNameLabel ? (
+            <span
+              style={{
+                fontSize: 11,
+                color: "rgba(255,255,255,0.6)",
+                fontWeight: 500,
+                minWidth: 0,
+                maxWidth: "60%",
+                whiteSpace: "nowrap",
+                overflow: "hidden",
+                textOverflow: "ellipsis",
+              }}
+              title={raceNameLabel}
+            >
               {raceNameLabel}
             </span>
-          </>
-        ) : null}
+          ) : null}
+          {raceNameLabel && raceDateFormatted ? (
+            <span style={{ fontSize: 9, color: "rgba(255,255,255,0.3)" }}>·</span>
+          ) : null}
+          {raceDateFormatted ? (
+            <span
+              style={{
+                fontSize: 11,
+                color: "rgba(255,255,255,0.45)",
+                fontWeight: 500,
+                whiteSpace: "nowrap",
+              }}
+            >
+              {raceDateFormatted}
+            </span>
+          ) : null}
+        </div>
       </div>
       <span style={{ fontSize: 12, color: "rgba(255,255,255,0.4)", flexShrink: 0 }}>→</span>
     </button>

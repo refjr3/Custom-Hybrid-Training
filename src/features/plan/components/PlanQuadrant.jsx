@@ -101,6 +101,9 @@ export function PlanQuadrant({
   onTapCompliance,
 }) {
   const safeDays = Array.isArray(weekDays) ? weekDays : [];
+  if (import.meta.env.DEV) {
+    console.log("[PlanQuadrant] phaseProgress:", phaseProgress);
+  }
   return (
     <div
       style={{

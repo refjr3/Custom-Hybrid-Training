@@ -101,6 +101,7 @@ function normalizeDays(week) {
       ...day,
       id: day?.id || `${week?.id || "w"}_${idx}`,
       date_label: dateLabel,
+      calendar_date: day?.calendar_date || iso || null,
       am_session: day?.am_session ?? day?.am ?? null,
       pm_session: day?.pm_session ?? day?.pm ?? null,
       am_completed_at: day?.am_completed_at || null,
@@ -336,6 +337,8 @@ export default function PlanWeekView({
       isDeloadWeek: /deload/i.test(String(currentWeek?.subtitle || "")),
       currentWeekInPhase: progress.currentWeekInPhase,
       phaseTotalWeeks: progress.phaseTotalWeeks,
+      phaseProgressPercent: Number(progress.phaseProgressPercent || 0),
+      phaseStatusLabel: progress.phaseStatusLabel || `Wk ${progress.currentWeekInPhase} of ${progress.phaseTotalWeeks}`,
     };
   }, [allWeeks, currentWeek, currentWeek?._blockLabel, currentWeek?.phase, currentWeek?.subtitle, todayInfo?.todayDayIndex, todayInfo?.week?._weekOrder, todayInfo?.week?.week_order]);
   const hasPrevWeek = useMemo(() => {
