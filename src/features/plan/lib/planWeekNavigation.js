@@ -1,3 +1,5 @@
+/* global Map */
+
 export function getWeekOrderValue(week, fallback = Number.MAX_SAFE_INTEGER) {
   const ord = Number(week?.week_order ?? week?._weekOrder);
   return Number.isFinite(ord) && ord > 0 ? ord : fallback;

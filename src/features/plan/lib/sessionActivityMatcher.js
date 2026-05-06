@@ -1,3 +1,4 @@
+/* global Map */
 import { parseWeekDates } from "./weekDateUtils.js";
 
 const DAY_ORDER = { MON: 0, TUE: 1, WED: 2, THU: 3, FRI: 4, SAT: 5, SUN: 6 };

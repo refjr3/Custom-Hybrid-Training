@@ -1,3 +1,4 @@
+/* global Map */
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { PhaseHeaderStrip } from "./components/PhaseHeaderStrip.jsx";
 import PlanBlockTimeline from "./PlanBlockTimeline.jsx";
@@ -131,6 +132,19 @@ function scoreSession(day) {
   return score;
 }
 
+function getTopKeySessions(days) {
+  return (Array.isArray(days) ? days : [])
+    .filter((day) => dayIsPlanned(day))
+    .map((day) => ({
+      day: String(day?.day_name || day?.day || "").trim().slice(0, 3).toUpperCase(),
+      session: day?.am_session || day?.am || "Session",
+      score: scoreSession(day),
+    }))
+    .sort((a, b) => b.score - a.score)
+    .slice(0, 3)
+    .map(({ day, session }) => ({ day, session }));
+}
+
 function deriveWeekFocusText(phaseName, weekType) {
   const phase = String(phaseName || "").toLowerCase();
   const type = String(weekType || "").toUpperCase();
@@ -147,6 +161,14 @@ function deriveWeekFocusText(phaseName, weekType) {
     return "Sharpen race specificity while preserving freshness. Precision and pacing matter most now.";
   }
   return "Stay consistent with the plan. Trust the periodization.";
+}
+
+function deriveNextWeekPreview(nextWeek) {
+  const phase = String(nextWeek?.phase || nextWeek?._blockLabel || "next phase").trim();
+  const weekLabel = String(nextWeek?.label || "").trim();
+  const typeHint = extractWeekTypeFromNotes(nextWeek?.days || []);
+  const focus = deriveWeekFocusText(phase, typeHint);
+  return `${weekLabel ? `${weekLabel}: ` : ""}${focus}`;
 }
 
 export default function PlanWeekView({
@@ -785,7 +807,7 @@ export default function PlanWeekView({
           weekLabel={currentWeek?.label || `Week ${currentWeekOrder || "—"}`}
           weekType={weeklyStructure.weekType}
           focusText={weekFocus}
-          keySessions={keySessions}
+          keySessions={focusKeySessions}
           nextWeekPreview={nextWeekPreview}
           onClose={() => setShowWeekFocusModal(false)}
         />
@@ -796,7 +818,7 @@ export default function PlanWeekView({
           currentWeekLabel={currentWeek?.label || `Week ${currentWeekOrder || "—"}`}
           currentWeekDays={daysState}
           completionResolver={resolveCompletionState}
-          recentWeeks={recentWeekRows}
+          recentWeeks={recentComplianceWeeks}
           onNavigateToDay={(weekId, dayIndex) => {
             setDisplayedWeek(weekId, dayIndex);
             setShowComplianceModal(false);

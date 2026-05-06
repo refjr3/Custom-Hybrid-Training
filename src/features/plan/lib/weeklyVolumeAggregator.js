@@ -1,3 +1,5 @@
+/* global Map */
+
 function startOfIsoWeek(date) {
   const d = new Date(date);
   const day = d.getDay();
