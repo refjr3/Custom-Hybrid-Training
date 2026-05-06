@@ -1,10 +1,12 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { PhaseHeaderStrip } from "./components/PhaseHeaderStrip.jsx";
-import { WeekGrid } from "./components/WeekGrid.jsx";
 import PlanBlockTimeline from "./PlanBlockTimeline.jsx";
 import { SessionHeroCard } from "./components/SessionHeroCard.jsx";
 import { SessionFeedbackSheet } from "./components/SessionFeedbackSheet.jsx";
 import { WeeklyStructureSnapshot } from "./components/WeeklyStructureSnapshot.jsx";
+import { PlanQuadrant } from "./components/PlanQuadrant.jsx";
+import { WeekFocusModal } from "./components/WeekFocusModal.jsx";
+import { ComplianceDetailModal } from "./components/ComplianceDetailModal.jsx";
 import { getCompletionState, matchSessionsToActivities } from "./lib/sessionActivityMatcher.js";
 import {
   computePhaseProgress,
@@ -114,6 +116,39 @@ function inferWeekId(week) {
   return week?.week_id || week?.id || null;
 }
 
+function dayIsPlanned(day) {
+  const slot = day?.am_session || day?.am;
+  return Boolean(slot && !String(slot).toUpperCase().includes("REST"));
+}
+
+function scoreSession(day) {
+  const text = `${day?.am_session_type || ""} ${day?.am_session || ""}`.toLowerCase();
+  let score = 1;
+  if (/vo2|threshold|tempo|track|interval|quality/.test(text)) score += 4;
+  if (/hyrox|brick|simulation|sim/.test(text)) score += 4;
+  if (/strength|weight/.test(text)) score += 3;
+  if (/long run|long/.test(text)) score += 2;
+  return score;
+}
+
+function deriveWeekFocusText(phaseName, weekType) {
+  const phase = String(phaseName || "").toLowerCase();
+  const type = String(weekType || "").toUpperCase();
+  if (type === "DELOAD") {
+    return "Final deload before the next build. Absorb prior load and prioritize recovery quality.";
+  }
+  if (phase.includes("accumulation")) {
+    return "Volume builds this week. Threshold work returns while aerobic durability stays the anchor.";
+  }
+  if (phase.includes("base")) {
+    return "Rebuild consistency and aerobic capacity with controlled quality sessions and smooth execution.";
+  }
+  if (phase.includes("race")) {
+    return "Sharpen race specificity while preserving freshness. Precision and pacing matter most now.";
+  }
+  return "Stay consistent with the plan. Trust the periodization.";
+}
+
 export default function PlanWeekView({
   user,
   supabase,
@@ -132,8 +167,9 @@ export default function PlanWeekView({
   const [feedbackOpen, setFeedbackOpen] = useState(false);
   const [feedbackDay, setFeedbackDay] = useState(null);
   const [daysState, setDaysState] = useState([]);
+  const [showWeekFocusModal, setShowWeekFocusModal] = useState(false);
+  const [showComplianceModal, setShowComplianceModal] = useState(false);
   const [activityMatches, setActivityMatches] = useState(new Map());
-  const discardWarnedRef = useRef(false);
 
   const allWeeks = useMemo(() => {
     let fallbackOrder = 1;
@@ -327,9 +363,52 @@ export default function PlanWeekView({
     [activityMatches],
   );
 
+  const weekFocus = useMemo(
+    () => deriveWeekFocusText(currentWeek?.phase || currentWeek?._blockLabel, weeklyStructure.weekType),
+    [currentWeek?.phase, currentWeek?._blockLabel, weeklyStructure.weekType],
+  );
+
+  const focusKeySessions = useMemo(
+    () => getTopKeySessions(daysState),
+    [daysState],
+  );
+
+  const nextWeekPreview = useMemo(() => {
+    if (currentWeekOrder == null) return "Stay consistent with the plan. Trust the periodization.";
+    const nextWeek = weekByOrder.get(Number(currentWeekOrder) + 1);
+    if (!nextWeek) return "Stay consistent with the plan. Trust the periodization.";
+    return deriveNextWeekPreview(nextWeek);
+  }, [currentWeekOrder, weekByOrder]);
+
+  const recentComplianceWeeks = useMemo(() => {
+    const rows = allWeeks.map((week) => {
+      const days = normalizeDays(week);
+      let planned = 0;
+      let completed = 0;
+      for (const day of days) {
+        const slot = day?.am_session || day?.am;
+        if (slot && !String(slot).toUpperCase().includes("REST")) {
+          planned += 1;
+          if (getCompletionState(day, activityMatches).complete) completed += 1;
+        }
+      }
+      return {
+        weekId: week.id,
+        weekOrder: getWeekOrderValue(week, null),
+        weekLabel: week?.label || `Week ${getWeekOrderValue(week, "—")}`,
+        days,
+        planned,
+        completed,
+      };
+    });
+    const currentIdx = rows.findIndex((r) => String(r.weekId) === String(currentWeek?.id));
+    if (currentIdx < 0) return rows.slice(-4);
+    return rows.slice(Math.max(0, currentIdx - 3), currentIdx + 1);
+  }, [allWeeks, activityMatches, currentWeek?.id]);
+
   const isOnTodayInThisWeek = isCurrentWeek && selectedDayIndex === todayIndex;
 
-  function setDisplayedWeek(weekRef) {
+  function setDisplayedWeek(weekRef, preferredDayIndex = null) {
     const targetWeek =
       allWeeks.find((w) => String(w?.id) === String(weekRef)) ||
       weekByOrder.get(Number(weekRef)) ||
@@ -339,8 +418,14 @@ export default function PlanWeekView({
     const nextToday = getCurrentWeek([targetWeek], new Date());
     setSelectedWeekId(targetWeek.id);
     setDaysState(nextDays);
-    if (nextToday?.week?.id === targetWeek?.id) setSelectedDayIndex(getDayIndex(new Date()));
-    else setSelectedDayIndex(nextDays.length ? 0 : null);
+    if (Number.isInteger(preferredDayIndex) && nextDays.length) {
+      const clamped = Math.max(0, Math.min(nextDays.length - 1, Number(preferredDayIndex)));
+      setSelectedDayIndex(clamped);
+    } else if (nextToday?.week?.id === targetWeek?.id) {
+      setSelectedDayIndex(getDayIndex(new Date()));
+    } else {
+      setSelectedDayIndex(nextDays.length ? 0 : null);
+    }
     if (import.meta.env.DEV) {
       console.log("[PlanWeekView] navigate", {
         selectedWeekId: targetWeek.id,
@@ -354,13 +439,7 @@ export default function PlanWeekView({
       (a, b) => getWeekOrderValue(a) - getWeekOrderValue(b),
     );
     const currentOrder = currentWeek?.week_order ?? currentWeek?._weekOrder ?? null;
-    console.log("[handlePrev] currentWeek.week_order =", currentOrder);
-    console.log(
-      "[handlePrev] sortedWeeks order =",
-      sortedWeeks.map((w) => getWeekOrderValue(w, null)),
-    );
     const prev = getAdjacentWeekByOrder(sortedWeeks, currentOrder, -1);
-    console.log("[handlePrev] prev.week_order =", prev?.week_order ?? prev?._weekOrder ?? null);
     if (prev) setSelectedWeekId(prev.id);
   };
 
@@ -369,19 +448,7 @@ export default function PlanWeekView({
       (a, b) => getWeekOrderValue(a) - getWeekOrderValue(b),
     );
     const currentOrder = currentWeek?.week_order ?? currentWeek?._weekOrder ?? null;
-    console.log(
-      "[handleNext] currentWeek.week_order =",
-      currentOrder,
-    );
-    console.log(
-      "[handleNext] sortedWeeks order =",
-      sortedWeeks.map((w) => getWeekOrderValue(w, null)),
-    );
     const next = getAdjacentWeekByOrder(sortedWeeks, currentOrder, +1);
-    console.log(
-      "[handleNext] next.week_order =",
-      next?.week_order ?? next?._weekOrder ?? null,
-    );
     if (next) setSelectedWeekId(next.id);
   };
 
@@ -662,59 +729,6 @@ export default function PlanWeekView({
         </button>
       ) : null}
 
-      <WeekGrid
-        days={daysState}
-        selectedDayIndex={selectedDayIndex}
-        todayIndex={todayIndex}
-        completionResolver={resolveCompletionState}
-        onSelectDay={(idx) => {
-          if (!discardWarnedRef.current) {
-            discardWarnedRef.current = true;
-          }
-          setSelectedDayIndex(idx);
-        }}
-      />
-
-      <div
-        style={{
-          marginTop: 8,
-          marginBottom: 26,
-          display: "flex",
-          alignItems: "center",
-          gap: 8,
-        }}
-      >
-        <div
-          style={{
-            flex: 1,
-            height: 3,
-            background: "rgba(255,255,255,0.05)",
-            borderRadius: 2,
-            overflow: "hidden",
-          }}
-        >
-          <div
-            style={{
-              height: "100%",
-              width: `${weeklyStructure.compliancePercent}%`,
-              background: "rgba(120,200,180,0.7)",
-              borderRadius: 2,
-            }}
-          />
-        </div>
-        <span
-          style={{
-            fontSize: 9,
-            color: "rgba(255,255,255,0.45)",
-            letterSpacing: "1.2px",
-            fontWeight: 500,
-            fontVariantNumeric: "tabular-nums",
-          }}
-        >
-          {weeklyStructure.completedCount}/{weeklyStructure.plannedSessions}
-        </span>
-      </div>
-
       {selectedDay ? (
         <SessionHeroCard
           day={selectedDay}
@@ -729,6 +743,19 @@ export default function PlanWeekView({
           onSaveNote={handleSaveNote}
         />
       ) : null}
+
+      <PlanQuadrant
+        weekDays={daysState}
+        todayDayIndex={isCurrentWeek ? todayIndex : null}
+        phaseProgress={phaseCtx}
+        weekFocus={weekFocus}
+        weekType={weeklyStructure.weekType}
+        completionResolver={resolveCompletionState}
+        onTapDay={(idx) => setSelectedDayIndex(idx)}
+        onTapPhase={() => setShowBlockTimeline(true)}
+        onTapFocus={() => setShowWeekFocusModal(true)}
+        onTapCompliance={() => setShowComplianceModal(true)}
+      />
 
       <WeeklyStructureSnapshot
         days={daysState}
@@ -749,6 +776,32 @@ export default function PlanWeekView({
             setDisplayedWeek(weekId);
             setShowBlockTimeline(false);
           }}
+        />
+      ) : null}
+
+      {showWeekFocusModal ? (
+        <WeekFocusModal
+          phaseName={String(currentWeek?.phase || currentWeek?._blockLabel || "Current Phase")}
+          weekLabel={currentWeek?.label || `Week ${currentWeekOrder || "—"}`}
+          weekType={weeklyStructure.weekType}
+          focusText={weekFocus}
+          keySessions={keySessions}
+          nextWeekPreview={nextWeekPreview}
+          onClose={() => setShowWeekFocusModal(false)}
+        />
+      ) : null}
+
+      {showComplianceModal ? (
+        <ComplianceDetailModal
+          currentWeekLabel={currentWeek?.label || `Week ${currentWeekOrder || "—"}`}
+          currentWeekDays={daysState}
+          completionResolver={resolveCompletionState}
+          recentWeeks={recentWeekRows}
+          onNavigateToDay={(weekId, dayIndex) => {
+            setDisplayedWeek(weekId, dayIndex);
+            setShowComplianceModal(false);
+          }}
+          onClose={() => setShowComplianceModal(false)}
         />
       ) : null}
 
