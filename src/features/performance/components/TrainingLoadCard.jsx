@@ -1,16 +1,15 @@
-function safeNum(value, fallback = 0) {
+function safeNum(value, fallback = null) {
   const n = Number(value);
   return Number.isFinite(n) ? n : fallback;
 }
 
 function buildPath(values, width, height, baseline = height - 8) {
-  const points = Array.isArray(values) ? values : [];
-  if (!points.length) return "";
-  const valid = points.map((v) => safeNum(v));
+  const valid = (Array.isArray(values) ? values : []).map((v) => safeNum(v)).filter((v) => v != null);
+  if (valid.length < 2) return "";
   const max = Math.max(...valid, 1);
   const min = Math.min(...valid, 0);
   const span = Math.max(1, max - min);
-  const xStep = points.length > 1 ? (width - 12) / (points.length - 1) : 0;
+  const xStep = valid.length > 1 ? (width - 12) / (valid.length - 1) : 0;
   const coords = valid.map((v, i) => {
     const x = 6 + i * xStep;
     const y = baseline - ((v - min) / span) * (height - 24);
@@ -43,10 +42,10 @@ export default function TrainingLoadCard({
   const height = 88;
   const ctlPath = buildPath(ctlSeries, width, height);
   const atlPath = buildPath(atlSeries, width, height, height - 4);
-  const ctlValues = Array.isArray(ctlSeries) ? ctlSeries : [];
-  const latestCtl = ctlValues.length ? safeNum(ctlValues[ctlValues.length - 1]) : 0;
-  const ctlMax = Math.max(...ctlValues.map((v) => safeNum(v)), 1);
-  const ctlMin = Math.min(...ctlValues.map((v) => safeNum(v)), 0);
+  const ctlValues = (Array.isArray(ctlSeries) ? ctlSeries : []).map((v) => safeNum(v)).filter((v) => v != null);
+  const latestCtl = ctlValues.length ? ctlValues[ctlValues.length - 1] : 0;
+  const ctlMax = Math.max(...ctlValues, 1);
+  const ctlMin = Math.min(...ctlValues, 0);
   const ctlSpan = Math.max(1, ctlMax - ctlMin);
   const latestY = (height - 8) - ((latestCtl - ctlMin) / ctlSpan) * (height - 24);
 

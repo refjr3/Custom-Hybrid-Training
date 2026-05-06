@@ -21,10 +21,7 @@ function trendLabel(series) {
 
 function sparklinePath(series, width = 88, height = 26) {
   const vals = (Array.isArray(series) ? series : []).map(toNumber).filter((n) => n != null);
-  if (!vals.length) return "";
-  if (vals.length === 1) {
-    return `M 0 ${height / 2} L ${width} ${height / 2}`;
-  }
+  if (vals.length < 2) return "";
   const min = Math.min(...vals);
   const max = Math.max(...vals);
   const span = Math.max(0.0001, max - min);
@@ -38,7 +35,9 @@ function sparklinePath(series, width = 88, height = 26) {
 }
 
 function StatCell({ icon, label, value, unit, trend, sparkline, accent = "#C9A875" }) {
-  const path = sparklinePath(sparkline);
+  const series = (Array.isArray(sparkline) ? sparkline : []).map(toNumber).filter((v) => v != null);
+  const path = sparklinePath(series);
+  const hasValue = value !== "—" && value != null;
   return (
     <div
       style={{
@@ -58,18 +57,22 @@ function StatCell({ icon, label, value, unit, trend, sparkline, accent = "#C9A87
         <span style={{ fontFamily: "'DM Serif Display', serif", fontSize: 25, color: "#fff", lineHeight: 1 }}>
           {value}
         </span>
-        <span style={{ fontSize: 10, color: "rgba(255,255,255,0.5)", letterSpacing: "0.6px" }}>{unit}</span>
+        {hasValue && unit ? (
+          <span style={{ fontSize: 10, color: "rgba(255,255,255,0.5)", letterSpacing: "0.6px" }}>{unit}</span>
+        ) : null}
       </div>
       <div style={{ fontSize: 9, color: "rgba(255,255,255,0.42)", letterSpacing: "1.1px", marginTop: 3 }}>
         {label}
       </div>
       <div style={{ marginTop: 8, height: 28 }}>
-        {path ? (
+        {path && series.length >= 2 ? (
           <svg viewBox="0 0 88 26" width="100%" height="26" preserveAspectRatio="none">
             <path d={path} fill="none" stroke={accent} strokeWidth="1.6" strokeLinecap="round" />
           </svg>
         ) : (
-          <div style={{ fontSize: 9, color: "rgba(255,255,255,0.2)" }}>No trend data</div>
+          <svg viewBox="0 0 88 26" width="100%" height="26" preserveAspectRatio="none">
+            <line x1="0" y1="13" x2="88" y2="13" stroke="rgba(255,255,255,0.18)" strokeDasharray="3 3" />
+          </svg>
         )}
       </div>
     </div>

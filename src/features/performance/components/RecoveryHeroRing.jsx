@@ -10,12 +10,15 @@ function deltaTone(delta) {
 }
 
 export default function RecoveryHeroRing({ recoveryScore, status, deltaVsAvg }) {
-  const normalized = Number.isFinite(Number(recoveryScore)) ? clamp(Number(recoveryScore), 0, 100) : 0;
+  const hasScore = Number.isFinite(Number(recoveryScore));
+  const normalized = hasScore ? clamp(Number(recoveryScore), 0, 100) : 0;
   const circumference = 2 * Math.PI * 86;
-  const offset = circumference * (1 - normalized / 100);
-  const scoreLabel = Number.isFinite(Number(recoveryScore)) ? `${Math.round(Number(recoveryScore))}%` : "—";
+  const offset = hasScore ? circumference * (1 - normalized / 100) : circumference;
+  const scoreLabel = hasScore ? Math.round(Number(recoveryScore)) : "—";
   const delta = Number(deltaVsAvg);
-  const deltaLabel = Number.isFinite(delta) ? `${delta > 0 ? "+" : ""}${Math.round(delta)} vs 7d` : "—";
+  const deltaLabel = Number.isFinite(delta) && hasScore
+    ? `${delta > 0 ? "+" : ""}${Math.round(delta)} vs 7d`
+    : "—";
 
   return (
     <div
@@ -95,6 +98,9 @@ export default function RecoveryHeroRing({ recoveryScore, status, deltaVsAvg }) 
             }}
           >
             {scoreLabel}
+            {hasScore ? (
+              <span style={{ fontFamily: "'DM Sans', sans-serif", fontSize: 20, marginLeft: 2 }}>%</span>
+            ) : null}
           </div>
           <div
             style={{

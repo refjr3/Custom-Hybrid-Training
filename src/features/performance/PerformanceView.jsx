@@ -1,11 +1,12 @@
-import { useEffect, useMemo, useState } from "react";
+/* global Map */
+import { useEffect, useState } from "react";
 import RecoveryHeroRing from "./components/RecoveryHeroRing.jsx";
 import VitalStatsQuadrant from "./components/VitalStatsQuadrant.jsx";
 import TrainingLoadCard from "./components/TrainingLoadCard.jsx";
 
 function classifyRecovery(score) {
   const n = Number(score);
-  if (!Number.isFinite(n)) return "STEADY";
+  if (!Number.isFinite(n)) return "NO DATA";
   if (n >= 67) return "PRIMED";
   if (n >= 34) return "STEADY";
   return "COMPROMISED";
@@ -22,6 +23,95 @@ function formatToday() {
     month: "short",
     day: "numeric",
   });
+}
+
+function roundOrNull(value, digits = 0) {
+  const n = Number(value);
+  if (!Number.isFinite(n)) return null;
+  if (digits <= 0) return Math.round(n);
+  const p = 10 ** digits;
+  return Math.round(n * p) / p;
+}
+
+function mergeRowsByDay(rows) {
+  const byDate = new Map();
+  for (const row of Array.isArray(rows) ? rows : []) {
+    const date = String(row?.date || "");
+    if (!date) continue;
+
+    if (!byDate.has(date)) {
+      byDate.set(date, {
+        date,
+        recoveryScore: null,
+        hrv: null,
+        rhr: null,
+        sleepHours: null,
+        strain: null,
+        ctl: null,
+        atl: null,
+        tsb: null,
+      });
+    }
+    const merged = byDate.get(date);
+    const source = String(row?.source || "").toLowerCase();
+    const isPrimary = row?.is_primary === true;
+
+    // Prefer intervals/is_primary rows for load/recovery metrics.
+    if (row?.recovery_score != null && (merged.recoveryScore == null || isPrimary || source === "intervals")) {
+      merged.recoveryScore = Number(row.recovery_score);
+    }
+    if (row?.ctl != null && (merged.ctl == null || isPrimary || source === "intervals")) {
+      merged.ctl = Number(row.ctl);
+    }
+    if (row?.tsb != null && (merged.tsb == null || isPrimary || source === "intervals")) {
+      merged.tsb = Number(row.tsb);
+    }
+    if (row?.training_load != null && (merged.atl == null || isPrimary || source === "intervals")) {
+      merged.atl = Number(row.training_load);
+    }
+
+    // HRV: intervals.hrv first, then whoop.hrv_rmssd fallback.
+    if (merged.hrv == null) {
+      if (row?.hrv != null && (isPrimary || source === "intervals")) {
+        merged.hrv = roundOrNull(row.hrv, 0);
+      } else if (row?.hrv_rmssd != null && source === "whoop") {
+        merged.hrv = roundOrNull(row.hrv_rmssd, 0);
+      }
+    } else if (row?.hrv != null && (isPrimary || source === "intervals")) {
+      merged.hrv = roundOrNull(row.hrv, 0);
+    }
+
+    // RHR: intervals.rhr first, then whoop.resting_hr fallback.
+    if (merged.rhr == null) {
+      if (row?.rhr != null && (isPrimary || source === "intervals")) {
+        merged.rhr = roundOrNull(row.rhr, 0);
+      } else if (row?.resting_hr != null && source === "whoop") {
+        merged.rhr = roundOrNull(row.resting_hr, 0);
+      }
+    } else if (row?.rhr != null && (isPrimary || source === "intervals")) {
+      merged.rhr = roundOrNull(row.rhr, 0);
+    }
+
+    // Sleep comes from WHOOP rows.
+    if (row?.sleep_total_min != null && source === "whoop" && merged.sleepHours == null) {
+      merged.sleepHours = roundOrNull(Number(row.sleep_total_min) / 60, 1);
+    }
+
+    // User-facing strain should prefer WHOOP 0-21 style.
+    if (source === "whoop" && row?.strain != null) {
+      const strain = Number(row.strain);
+      if (Number.isFinite(strain) && strain <= 25) {
+        merged.strain = roundOrNull(strain, 1);
+      }
+    } else if (merged.strain == null && row?.strain != null) {
+      const strain = Number(row.strain);
+      if (Number.isFinite(strain) && strain <= 25) {
+        merged.strain = roundOrNull(strain, 1);
+      }
+    }
+  }
+
+  return [...byDate.values()].sort((a, b) => String(a.date).localeCompare(String(b.date)));
 }
 
 function SectionHeader({ label, meta }) {
@@ -71,15 +161,21 @@ export default function PerformanceView({ user, supabase }) {
       cutoff.setDate(cutoff.getDate() - 14);
       const cutoffIso = cutoff.toISOString().slice(0, 10);
 
-      const { data: recent, error: recentErr } = await supabase
+      const { data: rows, error: recentErr } = await supabase
         .from("unified_metrics")
-        .select("date, recovery_score, hrv, rhr, sleep_total_min, strain, ctl, tsb, training_load")
+        .select("date, source, is_primary, recovery_score, hrv, hrv_rmssd, rhr, resting_hr, sleep_total_min, strain, ctl, tsb, training_load")
         .eq("user_id", user.id)
         .gte("date", cutoffIso)
         .order("date", { ascending: true });
 
       if (cancelled) return;
-      if (recentErr || !Array.isArray(recent) || !recent.length) {
+      if (recentErr || !Array.isArray(rows) || !rows.length) {
+        setPerfData({ empty: true });
+        setLoading(false);
+        return;
+      }
+      const daily = mergeRowsByDay(rows);
+      if (!daily.length) {
         setPerfData({ empty: true });
         setLoading(false);
         return;
@@ -89,42 +185,42 @@ export default function PerformanceView({ user, supabase }) {
       loadCutoff.setDate(loadCutoff.getDate() - 56);
       const loadCutoffIso = loadCutoff.toISOString().slice(0, 10);
 
-      const { data: loadHistory } = await supabase
+      const { data: loadRows } = await supabase
         .from("unified_metrics")
-        .select("date, ctl, training_load")
+        .select("date, source, is_primary, ctl, training_load")
         .eq("user_id", user.id)
         .gte("date", loadCutoffIso)
         .order("date", { ascending: true });
 
       if (cancelled) return;
+      const loadDaily = mergeRowsByDay(loadRows || []);
 
-      const today = recent[recent.length - 1];
-      const sevenDayAvgRows = recent.slice(-7);
-      const todayRecovery = Number(today?.recovery_score);
+      const today = daily[daily.length - 1];
+      const sevenDayAvgRows = daily.slice(-7);
+      const todayRecovery = Number(today?.recoveryScore);
+      const recoveryAvg = avg(sevenDayAvgRows.map((r) => r?.recoveryScore));
 
       setPerfData({
         empty: false,
         recoveryScore: Number.isFinite(todayRecovery) ? todayRecovery : null,
         recoveryStatus: classifyRecovery(todayRecovery),
-        deltaVsAvg: Number.isFinite(todayRecovery)
-          ? todayRecovery - avg(sevenDayAvgRows.map((r) => r?.recovery_score))
+        deltaVsAvg: Number.isFinite(todayRecovery) && Number.isFinite(recoveryAvg)
+          ? Math.round(todayRecovery - recoveryAvg)
           : 0,
         hrv: today?.hrv,
         rhr: today?.rhr,
-        sleepHours: Number.isFinite(Number(today?.sleep_total_min))
-          ? Number(today.sleep_total_min) / 60
-          : null,
+        sleepHours: today?.sleepHours ?? null,
         strain: today?.strain,
         sparklines: {
-          hrv: recent.map((r) => r?.hrv),
-          rhr: recent.map((r) => r?.rhr),
-          sleep: recent.map((r) => (Number.isFinite(Number(r?.sleep_total_min)) ? Number(r.sleep_total_min) / 60 : null)),
-          strain: recent.map((r) => r?.strain),
+          hrv: daily.map((r) => r?.hrv).filter((v) => v != null),
+          rhr: daily.map((r) => r?.rhr).filter((v) => v != null),
+          sleep: daily.map((r) => r?.sleepHours).filter((v) => v != null),
+          strain: daily.map((r) => r?.strain).filter((v) => v != null),
         },
-        ctlSeries: (loadHistory || []).map((r) => r?.ctl),
-        atlSeries: (loadHistory || []).map((r) => r?.training_load),
+        ctlSeries: loadDaily.map((r) => r?.ctl).filter((v) => v != null),
+        atlSeries: loadDaily.map((r) => r?.atl).filter((v) => v != null),
         currentCTL: today?.ctl,
-        currentATL: today?.training_load,
+        currentATL: today?.atl,
         currentTSB: today?.tsb,
       });
       setLoading(false);
