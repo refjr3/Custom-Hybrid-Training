@@ -99,6 +99,7 @@ export function SessionHeroCard({
   onSaveEdit,
   onSaveNote,
   onResetComplete,
+  completionState,
 }) {
   const [editMode, setEditMode] = useState(false);
   const [editedBlocks, setEditedBlocks] = useState([]);
@@ -114,7 +115,9 @@ export function SessionHeroCard({
     () => getSessionIntent(day?.am_session_type, day?.am_session),
     [day?.am_session_type, day?.am_session],
   );
-  const isCompleted = Boolean(day?.am_completed_at);
+  const resolvedCompletion = completionState || (day?.am_completed_at ? { complete: true, source: "manual" } : { complete: false });
+  const isCompleted = Boolean(resolvedCompletion?.complete);
+  const isManualCompleted = Boolean(day?.am_completed_at);
   const rawBlocks = Array.isArray(day?.am_session_blocks) ? day.am_session_blocks : [];
   const hasBlocks = rawBlocks.length > 0;
   const noteFull = String(day?.note ?? day?.note2a ?? "").trim();
@@ -395,25 +398,29 @@ export function SessionHeroCard({
           }}
         >
           <div style={{ fontSize: 11, color: "rgba(120,200,180,0.7)" }}>
-            ✓ Completed
+            {resolvedCompletion?.auto
+              ? `✓ Detected from ${String(resolvedCompletion.source || "activity").toUpperCase()}`
+              : "✓ Completed"}
           </div>
-          <button
-            type="button"
-            onClick={onResetComplete}
-            style={{
-              border: "0.5px solid rgba(255,255,255,0.2)",
-              background: "rgba(255,255,255,0.04)",
-              color: "rgba(255,255,255,0.72)",
-              borderRadius: 8,
-              padding: "2px 7px",
-              fontSize: 10,
-              letterSpacing: "0.2px",
-              cursor: "pointer",
-              fontFamily: "'DM Sans', sans-serif",
-            }}
-          >
-            ↺ Reset
-          </button>
+          {isManualCompleted ? (
+            <button
+              type="button"
+              onClick={onResetComplete}
+              style={{
+                border: "0.5px solid rgba(255,255,255,0.2)",
+                background: "rgba(255,255,255,0.04)",
+                color: "rgba(255,255,255,0.72)",
+                borderRadius: 8,
+                padding: "2px 7px",
+                fontSize: 10,
+                letterSpacing: "0.2px",
+                cursor: "pointer",
+                fontFamily: "'DM Sans', sans-serif",
+              }}
+            >
+              ↺ Reset
+            </button>
+          ) : null}
         </div>
       ) : null}
     </div>

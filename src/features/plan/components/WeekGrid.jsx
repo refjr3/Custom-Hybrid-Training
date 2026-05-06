@@ -8,7 +8,7 @@ function extractDayNumber(dateLabel) {
   return match ? match[1] : "";
 }
 
-export function WeekGrid({ days, selectedDayIndex, onSelectDay, todayIndex }) {
+export function WeekGrid({ days, selectedDayIndex, onSelectDay, todayIndex, completionResolver }) {
   const safeDays = Array.isArray(days) ? days : [];
   return (
     <div
@@ -28,7 +28,8 @@ export function WeekGrid({ days, selectedDayIndex, onSelectDay, todayIndex }) {
         const isToday = i === todayIndex;
         const isSelected = i === selectedDayIndex;
         const isRest = !day.am_session || /^rest$/i.test(String(day.am_session || ""));
-        const isCompleted = !!day.am_completed_at;
+        const completionState = completionResolver?.(day) || { complete: !!day.am_completed_at };
+        const isCompleted = !!completionState.complete;
         const dateNum = extractDayNumber(day.date_label || day.date);
         const dayName = String(day.day_name || day.day || dayKey);
         const dowShort = dayName.slice(0, 3).toUpperCase();

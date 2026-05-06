@@ -1,4 +1,5 @@
 import { getSessionIntent } from "./intentConfig.js";
+import { getCompletionState as resolveCompletion } from "../lib/sessionActivityMatcher.js";
 
 const DAY_ORDER = ["MON", "TUE", "WED", "THU", "FRI", "SAT", "SUN"];
 
@@ -63,6 +64,8 @@ export function WeeklyStructureSnapshot({
   days,
   todayDayIndex = null,
   weekType,
+  matches,
+  getCompletionState,
 }) {
   const orderedDays = orderDays(days);
   const resolvedWeekType = weekTypeFromNotes(orderedDays, weekType);
@@ -105,7 +108,8 @@ export function WeeklyStructureSnapshot({
           const intent = getSessionIntent(day?.am_session_type, day?.am_session);
           const isToday = Number.isInteger(todayDayIndex) && i === Number(todayDayIndex);
           const isRest = !day?.am_session || /^rest$/i.test(String(day?.am_session));
-          const isDone = Boolean(day?.am_completed_at);
+          const completion = getCompletionState ? getCompletionState(day) : resolveCompletion(day, matches);
+          const isDone = Boolean(completion?.complete);
           const dotColor = isRest ? "rgba(255,255,255,0.15)" : intent.color;
 
           return (

@@ -1,10 +1,11 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { PhaseHeaderStrip } from "./components/PhaseHeaderStrip.jsx";
 import { WeekGrid } from "./components/WeekGrid.jsx";
 import PlanBlockTimeline from "./PlanBlockTimeline.jsx";
 import { SessionHeroCard } from "./components/SessionHeroCard.jsx";
 import { SessionFeedbackSheet } from "./components/SessionFeedbackSheet.jsx";
 import { WeeklyStructureSnapshot } from "./components/WeeklyStructureSnapshot.jsx";
+import { getCompletionState, matchSessionsToActivities } from "./lib/sessionActivityMatcher.js";
 import {
   computePhaseProgress,
   getCurrentWeek,
@@ -131,6 +132,7 @@ export default function PlanWeekView({
   const [feedbackOpen, setFeedbackOpen] = useState(false);
   const [feedbackDay, setFeedbackDay] = useState(null);
   const [daysState, setDaysState] = useState([]);
+  const [activityMatches, setActivityMatches] = useState(new Map());
   const discardWarnedRef = useRef(false);
 
   const allWeeks = useMemo(() => {
@@ -180,6 +182,22 @@ export default function PlanWeekView({
     setSelectedWeekId(current?.week?.id || allWeeks[0]?.id || null);
     setSelectedDayIndex(null);
   }, [allWeeks, selectedWeekId]);
+
+  useEffect(() => {
+    let cancelled = false;
+    async function runMatch() {
+      if (!supabase || !user?.id || !allWeeks.length) {
+        setActivityMatches(new Map());
+        return;
+      }
+      const next = await matchSessionsToActivities(supabase, user.id, allWeeks);
+      if (!cancelled) setActivityMatches(next);
+    }
+    runMatch();
+    return () => {
+      cancelled = true;
+    };
+  }, [supabase, user?.id, allWeeks]);
 
   useEffect(() => {
     if (!import.meta.env.DEV || !selectedWeekId) return;
@@ -293,7 +311,7 @@ export default function PlanWeekView({
       if (slot && !String(slot).toUpperCase().includes("REST")) {
         plannedSessions += 1;
       }
-      if (d?.am_completed_at) completedCount += 1;
+      if (getCompletionState(d, activityMatches).complete) completedCount += 1;
     }
     const pct = plannedSessions ? (completedCount / plannedSessions) * 100 : 0;
     return {
@@ -302,7 +320,12 @@ export default function PlanWeekView({
       completedCount,
       compliancePercent: pct,
     };
-  }, [daysState, currentWeek?.subtitle]);
+  }, [daysState, currentWeek?.subtitle, activityMatches]);
+
+  const resolveCompletionState = useCallback(
+    (day) => getCompletionState(day, activityMatches),
+    [activityMatches],
+  );
 
   const isOnTodayInThisWeek = isCurrentWeek && selectedDayIndex === todayIndex;
 
@@ -643,6 +666,7 @@ export default function PlanWeekView({
         days={daysState}
         selectedDayIndex={selectedDayIndex}
         todayIndex={todayIndex}
+        completionResolver={resolveCompletionState}
         onSelectDay={(idx) => {
           if (!discardWarnedRef.current) {
             discardWarnedRef.current = true;
@@ -695,6 +719,7 @@ export default function PlanWeekView({
         <SessionHeroCard
           day={selectedDay}
           isToday={selectedDayIndex === todayIndex}
+          completionState={resolveCompletionState(selectedDay)}
           onMarkComplete={() => {
             setFeedbackDay(selectedDay);
             setFeedbackOpen(true);
@@ -709,6 +734,8 @@ export default function PlanWeekView({
         days={daysState}
         todayDayIndex={isCurrentWeek ? todayIndex : null}
         weekType={weeklyStructure.weekType}
+        matches={activityMatches}
+        completionResolver={resolveCompletionState}
       />
 
       {showBlockTimeline ? (
