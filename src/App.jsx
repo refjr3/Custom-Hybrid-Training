@@ -4100,13 +4100,20 @@ export default function App() {
           const minutes = safe % 60;
           return `${hours}h ${String(minutes).padStart(2, "0")}min`;
         };
-        const zoneTickCount = 60;
-        const zoneFilledRatio = Math.max(0, Math.min(1, selectedZoneMinutes / Math.max(zoneTarget, 1)));
-        const zoneFilledCount = Math.round(zoneTickCount * zoneFilledRatio);
-        const zoneHourLabels = [0.25, 0.5, 0.75, 1].map((fraction) => {
-          const mins = Math.max(0, Math.round(zoneTarget * fraction));
-          if (mins % 60 === 0) return `${Math.round(mins / 60)}h`;
-          return `${(mins / 60).toFixed(1)}h`;
+        const zoneMinutesPerTick = 5;
+        const zoneTickCount = Math.max(1, Math.ceil(Math.max(zoneTarget, 1) / zoneMinutesPerTick));
+        const zoneFilledCount = Math.min(
+          zoneTickCount,
+          Math.max(0, Math.round(selectedZoneMinutes / zoneMinutesPerTick)),
+        );
+        const zoneHourLabels = [0.25, 0.5, 0.75, 1].map((fraction, idx) => {
+          const mins = Math.max(zoneMinutesPerTick, Math.round((zoneTarget * fraction) / zoneMinutesPerTick) * zoneMinutesPerTick);
+          const tickIndex = Math.min(zoneTickCount - 1, Math.max(0, Math.round(mins / zoneMinutesPerTick) - 1));
+          return {
+            id: `${idx}_${mins}`,
+            label: mins % 60 === 0 ? `${Math.round(mins / 60)}h` : `${(mins / 60).toFixed(1)}h`,
+            leftPercent: zoneTickCount <= 1 ? 0 : (tickIndex / (zoneTickCount - 1)) * 100,
+          };
         });
         const todayDateIso = getDeviceLocalTodayYmd();
         const PLAN_YEAR = parseInt(String(todayDateIso || "").slice(0, 4), 10) || 2026;
@@ -4568,29 +4575,35 @@ export default function App() {
                 ) : null}
                 <div style={{ overflowX: "auto", WebkitOverflowScrolling: "touch", marginBottom: 4 }}>
                   <div style={{ width: "100%" }}>
-                    <div style={{ display: "flex", alignItems: "flex-end", gap: 1, height: 40, marginBottom: 8 }}>
+                    <div style={{ display: "flex", alignItems: "center", gap: "2.5px", height: 36, marginBottom: 8 }}>
                       {Array.from({ length: zoneTickCount }).map((_, i) => {
                         const isFilled = i < zoneFilledCount;
+                        const isBoundary = i === zoneFilledCount;
                         return (
-                          <div
+                          <span
                             key={`z2_tick_${i}`}
                             style={{
                               flex: 1,
-                              minWidth: 1,
-                              height: isFilled ? 27 : 17,
-                              background: isFilled ? designColors.accentGold : designColors.accentGoldMuted,
-                              opacity: isFilled ? 1 : 0.25,
-                              borderRadius: 1,
+                              maxWidth: 4,
+                              width: 1,
+                              flexShrink: 0,
+                              borderRadius: "0.5px",
+                              height: isFilled ? 28 : isBoundary ? 22 : 18,
+                              background: designColors.accentGold,
+                              opacity: isFilled ? 1 : isBoundary ? 0.35 : 0.18,
                             }}
                           />
                         );
                       })}
                     </div>
-                    <div style={{ display: "flex", justifyContent: "space-between", padding: "0 2px" }}>
-                      {zoneHourLabels.map((label, idx) => (
+                    <div style={{ position: "relative", height: 14, marginTop: 4 }}>
+                      {zoneHourLabels.map((entry) => (
                         <span
-                          key={`z2_label_${idx}`}
+                          key={`z2_label_${entry.id}`}
                           style={{
+                            position: "absolute",
+                            left: `${entry.leftPercent}%`,
+                            transform: "translateX(-50%)",
                             fontSize: 9,
                             color: designColors.textTertiary,
                             letterSpacing: "0.5px",
@@ -4598,7 +4611,7 @@ export default function App() {
                             fontFamily: C.fs,
                           }}
                         >
-                          {label}
+                          {entry.label}
                         </span>
                       ))}
                     </div>
