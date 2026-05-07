@@ -645,6 +645,37 @@ export default function PlanWeekView({
 
   return (
     <div style={{ padding: "0 16px 100px" }}>
+      <div
+        style={{
+          display: "flex",
+          justifyContent: "space-between",
+          alignItems: "baseline",
+          padding: "20px 4px 14px",
+        }}
+      >
+        <span
+          style={{
+            fontSize: typography.sizePageTitle,
+            fontWeight: typography.weightSemibold,
+            color: colors.accentGold,
+            letterSpacing: "3px",
+          }}
+        >
+          PLAN
+        </span>
+        <span
+          style={{
+            fontSize: 10,
+            color: colors.textTertiary,
+            fontWeight: typography.weightMedium,
+            letterSpacing: "1.2px",
+            fontVariantNumeric: "tabular-nums",
+          }}
+        >
+          {weekDateRangeDisplay}
+        </span>
+      </div>
+
       {(planVariants || []).length > 1 ? (
         <div
           style={{
@@ -681,37 +712,6 @@ export default function PlanWeekView({
           </select>
         </div>
       ) : null}
-
-      <div
-        style={{
-          display: "flex",
-          justifyContent: "space-between",
-          alignItems: "baseline",
-          padding: "20px 4px 14px",
-        }}
-      >
-        <span
-          style={{
-            fontSize: 11,
-            fontWeight: typography.weightSemibold,
-            color: colors.accentGold,
-            letterSpacing: "3px",
-          }}
-        >
-          PLAN
-        </span>
-        <span
-          style={{
-            fontSize: 10,
-            color: colors.textTertiary,
-            fontWeight: typography.weightMedium,
-            letterSpacing: "1.2px",
-            fontVariantNumeric: "tabular-nums",
-          }}
-        >
-          {weekDateRangeDisplay}
-        </span>
-      </div>
 
       <PhaseHeaderStrip
         currentPhaseName={String(currentWeek?.phase || currentWeek?._blockLabel || "Training").trim()}

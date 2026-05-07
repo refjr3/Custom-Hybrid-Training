@@ -186,7 +186,7 @@ export default function PerformanceView({ user, supabase }) {
   return (
     <div style={{ padding: `${spacing.cardPadding + 2}px`, paddingBottom: 80 }}>
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", marginBottom: 12 }}>
-        <div style={{ fontSize: 11, color: colors.accentGold, letterSpacing: "3px", fontWeight: typography.weightSemibold }}>
+        <div style={{ fontSize: typography.sizePageTitle, color: colors.accentGold, letterSpacing: "3px", fontWeight: typography.weightSemibold }}>
           PERFORMANCE
         </div>
         <div style={{ fontSize: 10, color: colors.textTertiary, letterSpacing: "1.2px" }}>

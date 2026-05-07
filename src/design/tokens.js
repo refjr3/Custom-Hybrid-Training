@@ -38,6 +38,7 @@ export const typography = {
   sizeHeroNumber: 56,
   sizeHeadline: 32,
   sizeSectionTitle: 19,
+  sizePageTitle: 13,
   sizeBodyLarge: 14,
   sizeBody: 13,
   sizeBodySmall: 12,
