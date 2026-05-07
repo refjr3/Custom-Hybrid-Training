@@ -1,5 +1,7 @@
 import { getSessionIntent } from "./intentConfig.js";
 import { getCompletionState as resolveCompletion } from "../lib/sessionActivityMatcher.js";
+import { colors, getIntentColor, typography } from "../../../design/tokens";
+import { Pill } from "../../../design/components";
 
 const DAY_ORDER = ["MON", "TUE", "WED", "THU", "FRI", "SAT", "SUN"];
 
@@ -18,12 +20,12 @@ function orderDays(days) {
 function weekTypeStyles(type) {
   const key = String(type || "STANDARD").trim().toUpperCase();
   if (key === "BRICK") {
-    return { color: "#FF8A6C", background: "rgba(255,138,108,0.14)" };
+    return { color: colors.intentHyrox, pillVariant: "intentHyrox", label: "BRICK" };
   }
   if (key === "DELOAD") {
-    return { color: "rgba(120,200,180,0.95)", background: "rgba(120,200,180,0.14)" };
+    return { color: colors.intentRecovery, pillVariant: "intentRecovery", label: "DELOAD" };
   }
-  return { color: "#C9A875", background: "rgba(201,168,117,0.14)" };
+  return { color: colors.accentGold, pillVariant: "intentZ2", label: key || "STANDARD" };
 }
 
 function parseDurationFromSessionName(sessionName) {
@@ -76,7 +78,7 @@ export function WeeklyStructureSnapshot({
       <div
         style={{
           fontSize: 9,
-          color: "rgba(255,255,255,0.45)",
+          color: colors.textSecondary,
           letterSpacing: "2px",
           fontWeight: 500,
           marginBottom: 12,
@@ -86,15 +88,7 @@ export function WeeklyStructureSnapshot({
         }}
       >
         <span>THIS WEEK</span>
-        <span
-          style={{
-            fontSize: 8,
-            color: weekTypeTone.color,
-            letterSpacing: "1.6px",
-          }}
-        >
-          {resolvedWeekType}
-        </span>
+        <Pill variant={weekTypeTone.pillVariant} size="sm">{weekTypeTone.label}</Pill>
       </div>
 
       <div style={{ display: "flex", flexDirection: "column", gap: 1 }}>
@@ -110,7 +104,7 @@ export function WeeklyStructureSnapshot({
           const isRest = !day?.am_session || /^rest$/i.test(String(day?.am_session));
           const completion = getCompletionState ? getCompletionState(day) : resolveCompletion(day, matches);
           const isDone = Boolean(completion?.complete);
-          const dotColor = isRest ? "rgba(255,255,255,0.15)" : intent.color;
+          const dotColor = isRest ? colors.intentRest : getIntentColor(intent?.key || day?.am_session_type || day?.am_session);
 
           return (
             <div
@@ -137,7 +131,7 @@ export function WeeklyStructureSnapshot({
                   flexShrink: 0,
                   fontSize: 9,
                   fontWeight: isToday ? 600 : 500,
-                  color: isToday ? "#C9A875" : "rgba(255,255,255,0.45)",
+                  color: isToday ? colors.accentGold : colors.textSecondary,
                   letterSpacing: "1.4px",
                 }}
               >
@@ -157,7 +151,7 @@ export function WeeklyStructureSnapshot({
                   flex: 1,
                   minWidth: 0,
                   fontSize: 12,
-                  color: isRest ? "rgba(255,255,255,0.35)" : isToday ? "#fff" : "rgba(255,255,255,0.85)",
+                  color: isRest ? colors.textSecondary : isToday ? colors.textPrimary : "rgba(255,255,255,0.85)",
                   fontStyle: isRest ? "italic" : "normal",
                   fontWeight: 500,
                   letterSpacing: "-0.1px",
@@ -169,12 +163,12 @@ export function WeeklyStructureSnapshot({
                 {isRest ? "Rest" : day?.am_session}
               </span>
               {isDone ? (
-                <span style={{ fontSize: 10, color: "rgba(120,200,180,0.7)", flexShrink: 0 }}>✓</span>
+                <span style={{ fontSize: 10, color: colors.semanticGood, flexShrink: 0 }}>✓</span>
               ) : (
                 <span
                   style={{
                     fontSize: 10,
-                    color: "rgba(255,255,255,0.4)",
+                    color: colors.textSecondary,
                     flexShrink: 0,
                     fontVariantNumeric: "tabular-nums",
                   }}

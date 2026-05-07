@@ -1,4 +1,5 @@
 import { getSessionIntent } from "./intentConfig.js";
+import { colors, getIntentColor, typography } from "../../../design/tokens";
 
 const DAY_ORDER = ["mon", "tue", "wed", "thu", "fri", "sat", "sun"];
 
@@ -40,8 +41,8 @@ export function WeekGrid({ days, selectedDayIndex, onSelectDay, todayIndex, comp
             type="button"
             onClick={() => onSelectDay?.(i)}
             style={{
-              background: isSelected ? "rgba(201,168,117,0.12)" : "rgba(255,255,255,0.03)",
-              border: isSelected ? "1px solid #C9A875" : "0.5px solid rgba(255,255,255,0.06)",
+              background: isSelected ? colors.accentGoldGlow : colors.bgCardSubtle,
+              border: isSelected ? `1px solid ${colors.accentGold}` : `0.5px solid ${colors.borderSubtle}`,
               borderRadius: 10,
               padding: "8px 4px 9px",
               textAlign: "center",
@@ -52,7 +53,7 @@ export function WeekGrid({ days, selectedDayIndex, onSelectDay, todayIndex, comp
               justifyContent: "space-between",
               opacity: isRest && !isToday ? 0.4 : isCompleted && !isToday ? 0.55 : 1,
               cursor: "pointer",
-              fontFamily: "'DM Sans', sans-serif",
+              fontFamily: typography.fontBody,
             }}
           >
             <div
@@ -60,7 +61,7 @@ export function WeekGrid({ days, selectedDayIndex, onSelectDay, todayIndex, comp
                 fontSize: 8,
                 fontWeight: 500,
                 letterSpacing: "1.4px",
-                color: isSelected ? "#C9A875" : "rgba(255,255,255,0.45)",
+                color: isSelected ? colors.accentGold : colors.textSecondary,
               }}
             >
               {dowShort}
@@ -70,7 +71,7 @@ export function WeekGrid({ days, selectedDayIndex, onSelectDay, todayIndex, comp
                 fontSize: 17,
                 fontWeight: 500,
                 lineHeight: 1,
-                color: "rgba(255,255,255,0.92)",
+                color: colors.textPrimary,
                 fontVariantNumeric: "tabular-nums",
                 letterSpacing: "-0.4px",
               }}
@@ -78,14 +79,14 @@ export function WeekGrid({ days, selectedDayIndex, onSelectDay, todayIndex, comp
               {dateNum}
             </div>
             {isCompleted ? (
-              <div style={{ fontSize: 9, color: "rgba(120,200,180,0.7)", marginTop: 1 }}>✓</div>
+              <div style={{ fontSize: 9, color: colors.semanticGood, marginTop: 1 }}>✓</div>
             ) : (
               <div
                 style={{
                   width: 6,
                   height: 6,
                   borderRadius: "50%",
-                  background: isRest ? "rgba(255,255,255,0.15)" : intent.color,
+                  background: isRest ? colors.intentRest : getIntentColor(intent?.key || day?.am_session_type || day?.am_session),
                   marginTop: 1,
                 }}
               />

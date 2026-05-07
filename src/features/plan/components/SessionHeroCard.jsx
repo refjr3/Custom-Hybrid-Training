@@ -1,6 +1,8 @@
 import { useEffect, useMemo, useState } from "react";
 import { getSessionIntent } from "./intentConfig.js";
 import { parseWorkoutNote } from "../lib/workoutNoteParser.js";
+import { Pill } from "../../../design/components";
+import { colors, typography } from "../../../design/tokens";
 
 function formatExerciseMeta(exercise) {
   const parts = [];
@@ -53,6 +55,16 @@ function formatShortDate(value, fallbackLabel = "") {
     .toUpperCase();
 }
 
+function intentPillVariant(intent) {
+  const key = String(intent?.key || "").toLowerCase();
+  if (key === "strength") return "intentStrength";
+  if (key === "hyrox" || key === "brick") return "intentHyrox";
+  if (key === "threshold") return "intentThreshold";
+  if (key === "recovery") return "intentRecovery";
+  if (key === "z2" || key === "z2_aerobic" || key === "long_run") return "intentZ2";
+  return "default";
+}
+
 function ExerciseRow({ exercise }) {
   return (
     <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", padding: "3px 0", gap: 12 }}>
@@ -102,7 +114,7 @@ function ExerciseEditor({ exercise, onChange }) {
                 borderRadius: 7,
                 padding: "4px 8px",
                 fontSize: 11,
-                color: "#fff",
+                color: colors.textPrimary,
                 fontVariantNumeric: "tabular-nums",
                 minWidth: 56,
                 fontFamily: "'DM Sans', sans-serif",
@@ -186,7 +198,7 @@ export function SessionHeroCard({
           style={{
             fontSize: 9,
             fontWeight: 600,
-            color: "#C9A875",
+            color: colors.accentGold,
             letterSpacing: "2.5px",
             marginBottom: 8,
           }}
@@ -207,55 +219,29 @@ export function SessionHeroCard({
         </div>
       )}
       <div style={{ display: "flex", gap: 8, alignItems: "center", marginBottom: 6, flexWrap: "wrap" }}>
-        <span
-          style={{
-            fontSize: 8,
-            letterSpacing: "2px",
-            fontWeight: 500,
-            padding: "2px 8px",
-            borderRadius: 10,
-            color: intent.color,
-            background: intent.bgTint,
-          }}
-        >
+        <Pill variant={intentPillVariant(intent)} size="sm">
           {String(intent.label || "").toUpperCase()}
           {day?.is_user_modified ? " · ✏️" : ""}
-        </span>
+        </Pill>
         {!editMode ? (
           <button
             type="button"
             onClick={() => setEditMode(true)}
             style={{
               marginLeft: "auto",
-              fontSize: 9,
-              fontWeight: 500,
-              letterSpacing: "1.4px",
-              padding: "3px 8px",
-              borderRadius: 8,
-              color: "rgba(255,255,255,0.5)",
-              background: "rgba(255,255,255,0.04)",
-              border: "0.5px solid rgba(255,255,255,0.1)",
+              border: "none",
+              background: "transparent",
+              padding: 0,
               cursor: "pointer",
-              fontFamily: "'DM Sans', sans-serif",
             }}
           >
-            ✎ EDIT
+            <Pill variant="default" size="sm">✎ EDIT</Pill>
           </button>
         ) : (
-          <span
-            style={{
-              marginLeft: "auto",
-              fontSize: 9,
-              fontWeight: 500,
-              letterSpacing: "1.4px",
-              padding: "3px 8px",
-              borderRadius: 8,
-              color: "#C9A875",
-              background: "rgba(201,168,117,0.1)",
-              border: "0.5px solid rgba(201,168,117,0.3)",
-            }}
-          >
+          <span style={{ marginLeft: "auto" }}>
+            <Pill variant="gold" size="sm">
             ✎ EDITING
+            </Pill>
           </span>
         )}
       </div>
@@ -264,7 +250,7 @@ export function SessionHeroCard({
         style={{
           fontFamily: "'DM Serif Display', serif",
           fontSize: 26,
-          color: "#fff",
+          color: colors.textPrimary,
           letterSpacing: "-0.5px",
           lineHeight: 1.15,
           marginTop: 6,
@@ -287,7 +273,7 @@ export function SessionHeroCard({
             borderRadius: 10,
             padding: "12px 14px",
             fontSize: 13,
-            color: "#fff",
+            color: colors.textPrimary,
             fontFamily: "inherit",
             lineHeight: 1.6,
             resize: "vertical",
@@ -378,7 +364,7 @@ export function SessionHeroCard({
                   >
                     DURATION
                   </div>
-                  <div style={{ fontSize: 13, color: "white", fontWeight: 500 }}>{parsedNote.duration}</div>
+                  <div style={{ fontSize: 13, color: colors.textPrimary, fontWeight: 500 }}>{parsedNote.duration}</div>
                 </div>
               ) : null}
               {parsedNote.targets ? (
@@ -394,7 +380,7 @@ export function SessionHeroCard({
                   >
                     TARGETS
                   </div>
-                  <div style={{ fontSize: 13, color: "white", fontWeight: 500 }}>{parsedNote.targets}</div>
+                  <div style={{ fontSize: 13, color: colors.textPrimary, fontWeight: 500 }}>{parsedNote.targets}</div>
                 </div>
               ) : null}
             </div>
@@ -488,7 +474,7 @@ export function SessionHeroCard({
               border: "0.5px solid rgba(201,168,117,0.4)",
               borderRadius: 12,
               fontSize: 12,
-              color: "#C9A875",
+              color: colors.accentGold,
               fontWeight: 500,
               letterSpacing: "0.3px",
               cursor: "pointer",
@@ -511,7 +497,7 @@ export function SessionHeroCard({
             borderRadius: 12,
             fontSize: 12,
             fontWeight: 500,
-            color: "#C9A875",
+            color: colors.accentGold,
             letterSpacing: "0.3px",
             cursor: "pointer",
             fontFamily: "'DM Sans', sans-serif",
@@ -539,18 +525,13 @@ export function SessionHeroCard({
               type="button"
               onClick={onResetComplete}
               style={{
-                border: "0.5px solid rgba(255,255,255,0.2)",
-                background: "rgba(255,255,255,0.04)",
-                color: "rgba(255,255,255,0.72)",
-                borderRadius: 8,
-                padding: "2px 7px",
-                fontSize: 10,
-                letterSpacing: "0.2px",
+                border: "none",
+                background: "transparent",
+                padding: 0,
                 cursor: "pointer",
-                fontFamily: "'DM Sans', sans-serif",
               }}
             >
-              ↺ Reset
+              <Pill variant="default" size="sm">↺ Reset</Pill>
             </button>
           ) : null}
         </div>
