@@ -1,16 +1,8 @@
 /* global Map, console */
 import { useEffect, useState } from "react";
-import RecoveryHeroRing from "./components/RecoveryHeroRing.jsx";
-import VitalStatsQuadrant from "./components/VitalStatsQuadrant.jsx";
 import TrainingLoadCard from "./components/TrainingLoadCard.jsx";
-
-function classifyRecovery(score) {
-  const n = Number(score);
-  if (!Number.isFinite(n)) return "NO DATA";
-  if (n >= 67) return "PRIMED";
-  if (n >= 34) return "STEADY";
-  return "COMPROMISED";
-}
+import { SectionLabel, RecoveryDial, MetricCard } from "../../design/components";
+import { colors, spacing, typography } from "../../design/tokens";
 
 function avg(arr) {
   const valid = (Array.isArray(arr) ? arr : []).map(Number).filter((v) => Number.isFinite(v));
@@ -106,15 +98,38 @@ function mergeRowsByDay(rows) {
   return [...byDate.values()].sort((a, b) => String(a.date).localeCompare(String(b.date)));
 }
 
-function SectionHeader({ label, meta }) {
-  return (
-    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", marginBottom: 10 }}>
-      <div style={{ fontSize: 10, color: "rgba(201,168,117,0.72)", letterSpacing: "2px", fontWeight: 600 }}>
-        {label}
-      </div>
-      <div style={{ fontSize: 9, color: "rgba(255,255,255,0.42)", letterSpacing: "1.4px" }}>{meta}</div>
-    </div>
-  );
+function trendDirection(series) {
+  const values = (Array.isArray(series) ? series : []).map(Number).filter((v) => Number.isFinite(v));
+  if (values.length < 2) return "flat";
+  const diff = values[values.length - 1] - values[0];
+  if (Math.abs(diff) < 0.001) return "flat";
+  return diff > 0 ? "up" : "down";
+}
+
+function trendColor(series, polarity = "neutral") {
+  const direction = trendDirection(series);
+  if (direction === "flat" || polarity === "neutral") return colors.accentGold;
+  if (polarity === "higherIsBetter") {
+    return direction === "up" ? colors.semanticGood : colors.semanticBad;
+  }
+  if (polarity === "lowerIsBetter") {
+    return direction === "up" ? colors.semanticBad : colors.semanticGood;
+  }
+  return colors.accentGold;
+}
+
+function trendText(series) {
+  const direction = trendDirection(series);
+  if (direction === "up") return "trend up";
+  if (direction === "down") return "trend down";
+  return "trend stable";
+}
+
+function metricValue(value, digits = 0) {
+  const n = Number(value);
+  if (!Number.isFinite(n)) return null;
+  if (digits > 0) return n.toFixed(digits);
+  return String(Math.round(n));
 }
 
 function EmptyState({ message }) {
@@ -122,12 +137,12 @@ function EmptyState({ message }) {
     <div
       style={{
         marginTop: 20,
-        borderRadius: 18,
-        border: "0.5px solid rgba(255,255,255,0.1)",
-        background: "rgba(255,255,255,0.02)",
-        padding: "20px 18px",
-        color: "rgba(255,255,255,0.62)",
-        fontSize: 13,
+        borderRadius: spacing.cardRadius,
+        border: `0.5px solid ${colors.borderSubtle}`,
+        background: colors.bgCardSubtle,
+        padding: `${spacing.cardPadding}px`,
+        color: colors.textSecondary,
+        fontSize: typography.sizeBody,
         lineHeight: 1.5,
       }}
     >
@@ -201,7 +216,6 @@ export default function PerformanceView({ user, supabase }) {
       setPerfData({
         empty: false,
         recoveryScore: Number.isFinite(todayRecovery) ? todayRecovery : null,
-        recoveryStatus: classifyRecovery(todayRecovery),
         deltaVsAvg: Number.isFinite(todayRecovery) && Number.isFinite(recoveryAvg) && sevenDayAvgRows.length > 0
           ? Math.round(todayRecovery - recoveryAvg)
           : null,
@@ -230,46 +244,84 @@ export default function PerformanceView({ user, supabase }) {
   }, [supabase, user?.id]);
 
   const data = perfData || { empty: false };
+  const hrvSeries = data.sparklines?.hrv || [];
+  const rhrSeries = data.sparklines?.rhr || [];
+  const sleepSeries = data.sparklines?.sleep || [];
+  const strainSeries = data.sparklines?.strain || [];
 
   return (
-    <div style={{ padding: "20px" }}>
+    <div style={{ padding: `${spacing.cardPadding + 2}px` }}>
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", marginBottom: 12 }}>
-        <div style={{ fontSize: 11, color: "rgba(201,168,117,0.78)", letterSpacing: "3px", fontWeight: 600 }}>
+        <div style={{ fontSize: 11, color: colors.accentGold, letterSpacing: "3px", fontWeight: typography.weightSemibold }}>
           PERFORMANCE
         </div>
-        <div style={{ fontSize: 10, color: "rgba(255,255,255,0.42)", letterSpacing: "1.2px" }}>
+        <div style={{ fontSize: 10, color: colors.textTertiary, letterSpacing: "1.2px" }}>
           {formatToday()}
         </div>
       </div>
 
       {loading ? (
-        <div style={{ fontSize: 10, color: "rgba(255,255,255,0.45)", letterSpacing: "1.5px" }}>
+        <div style={{ fontSize: 10, color: colors.textTertiary, letterSpacing: "1.5px" }}>
           LOADING METRICS...
         </div>
       ) : null}
 
       {!data.empty ? (
         <>
-          <RecoveryHeroRing
-            recoveryScore={data.recoveryScore}
-            status={data.recoveryStatus}
+          <RecoveryDial
+            score={data.recoveryScore}
             deltaVsAvg={data.deltaVsAvg}
+            size="hero"
           />
 
-          <VitalStatsQuadrant
-            hrv={data.hrv}
-            rhr={data.rhr}
-            sleep={data.sleepHours}
-            strain={data.strain}
-            sparklineData={{
-              hrv: data.sparklines?.hrv,
-              rhr: data.sparklines?.rhr,
-              sleep: data.sparklines?.sleep,
-              strain: data.sparklines?.strain,
+          <SectionLabel meta="14 DAYS">VITAL STATS</SectionLabel>
+          <div
+            style={{
+              display: "grid",
+              gridTemplateColumns: "1fr 1fr",
+              gap: spacing.inlineGapWide,
+              marginBottom: spacing.sectionGapTight,
             }}
-          />
+          >
+            <MetricCard
+              label="HRV"
+              value={metricValue(data.hrv)}
+              unit="ms"
+              sparklineData={hrvSeries}
+              sparklineColor={trendColor(hrvSeries, "higherIsBetter")}
+              trendDescriptor={trendText(hrvSeries)}
+              icon="heart"
+            />
+            <MetricCard
+              label="RHR"
+              value={metricValue(data.rhr)}
+              unit="bpm"
+              sparklineData={rhrSeries}
+              sparklineColor={trendColor(rhrSeries, "lowerIsBetter")}
+              trendDescriptor={trendText(rhrSeries)}
+              icon="moon"
+            />
+            <MetricCard
+              label="Sleep"
+              value={metricValue(data.sleepHours, 1)}
+              unit="hrs"
+              sparklineData={sleepSeries}
+              sparklineColor={trendColor(sleepSeries, "higherIsBetter")}
+              trendDescriptor={trendText(sleepSeries)}
+              icon="bed"
+            />
+            <MetricCard
+              label="Strain"
+              value={metricValue(data.strain, 1)}
+              unit=""
+              sparklineData={strainSeries}
+              sparklineColor={colors.accentGold}
+              trendDescriptor={trendText(strainSeries)}
+              icon="lightning"
+            />
+          </div>
 
-          <SectionHeader label="TRAINING LOAD" meta="8 WEEKS" />
+          <SectionLabel meta="8 WEEKS">TRAINING LOAD</SectionLabel>
           <TrainingLoadCard
             ctlSeries={data.ctlSeries}
             atlSeries={data.atlSeries}
