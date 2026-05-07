@@ -4467,9 +4467,8 @@ export default function App() {
                   <div
                     style={{
                       marginTop: 4,
-                      display: "grid",
-                      gridTemplateColumns: "repeat(3, minmax(0, 1fr))",
-                      gap: 8,
+                      display: "flex",
+                      gap: 16,
                     }}
                   >
                     {todayInlineMetricCards.map((metric) => (
