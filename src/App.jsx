@@ -4099,30 +4099,14 @@ export default function App() {
           const minutes = safe % 60;
           return `${hours}h ${String(minutes).padStart(2, "0")}min`;
         };
-        const buildLinePath = (series, width, height, pad = 8) => {
-          const safeSeries = (Array.isArray(series) ? series : []).map((v) => Number(v)).filter((v) => Number.isFinite(v));
-          if (safeSeries.length < 2) return "";
-          const min = Math.min(...safeSeries, 0);
-          const max = Math.max(...safeSeries, 1);
-          const span = Math.max(1, max - min);
-          return safeSeries
-            .map((v, i) => {
-              const x = pad + (i / (safeSeries.length - 1)) * (width - pad * 2);
-              const y = height - pad - ((v - min) / span) * (height - pad * 2);
-              return `${i === 0 ? "M" : "L"} ${x.toFixed(2)} ${y.toFixed(2)}`;
-            })
-            .join(" ");
-        };
-        const zoneProgressRatio = Math.max(0, Math.min(1, selectedZoneMinutes / Math.max(zoneTarget, 1)));
-        const zoneAreaSeries = [0.1, 0.18, 0.3, 0.42, 0.58, 0.78, 1].map((step) =>
-          Math.round(zoneTarget * zoneProgressRatio * step)
-        );
-        const zoneChartW = 332;
-        const zoneChartH = 92;
-        const zoneLinePath = buildLinePath(zoneAreaSeries, zoneChartW, zoneChartH, 10);
-        const zoneAreaPath = zoneLinePath
-          ? `${zoneLinePath} L ${zoneChartW - 10} ${zoneChartH - 8} L 10 ${zoneChartH - 8} Z`
-          : "";
+        const zoneTickCount = 60;
+        const zoneFilledRatio = Math.max(0, Math.min(1, selectedZoneMinutes / Math.max(zoneTarget, 1)));
+        const zoneFilledCount = Math.round(zoneTickCount * zoneFilledRatio);
+        const zoneHourLabels = [0.25, 0.5, 0.75, 1].map((fraction) => {
+          const mins = Math.max(0, Math.round(zoneTarget * fraction));
+          if (mins % 60 === 0) return `${Math.round(mins / 60)}h`;
+          return `${(mins / 60).toFixed(1)}h`;
+        });
         const todayDateIso = getDeviceLocalTodayYmd();
         const PLAN_YEAR = parseInt(String(todayDateIso || "").slice(0, 4), 10) || 2026;
         const allPlanEntries = planBlocks
@@ -4573,28 +4557,41 @@ export default function App() {
                   </div>
                 ) : null}
                 <div style={{ overflowX: "auto", WebkitOverflowScrolling: "touch", marginBottom: 4 }}>
-                  <div style={{ width: "100%", borderRadius: 10, overflow: "hidden" }}>
-                    <svg viewBox={`0 0 ${zoneChartW} ${zoneChartH}`} width="100%" height="88" preserveAspectRatio="none">
-                      <defs>
-                        <linearGradient id="today-zone-area-fill" x1="0" y1="0" x2="0" y2="1">
-                          <stop offset="0%" stopColor={designColors.accentGold} stopOpacity="0.26" />
-                          <stop offset="100%" stopColor={designColors.accentGold} stopOpacity="0" />
-                        </linearGradient>
-                      </defs>
-                      {zoneAreaPath ? (
-                        <path d={zoneAreaPath} fill="url(#today-zone-area-fill)" />
-                      ) : null}
-                      {zoneLinePath ? (
-                        <path
-                          d={zoneLinePath}
-                          fill="none"
-                          stroke={designColors.accentGold}
-                          strokeWidth="1.7"
-                          strokeLinecap="round"
-                          strokeLinejoin="round"
-                        />
-                      ) : null}
-                    </svg>
+                  <div style={{ width: "100%" }}>
+                    <div style={{ display: "flex", alignItems: "flex-end", gap: 1, height: 40, marginBottom: 8 }}>
+                      {Array.from({ length: zoneTickCount }).map((_, i) => {
+                        const isFilled = i < zoneFilledCount;
+                        return (
+                          <div
+                            key={`z2_tick_${i}`}
+                            style={{
+                              flex: 1,
+                              minWidth: 1,
+                              height: isFilled ? 27 : 17,
+                              background: isFilled ? designColors.accentGold : designColors.accentGoldMuted,
+                              opacity: isFilled ? 1 : 0.25,
+                              borderRadius: 1,
+                            }}
+                          />
+                        );
+                      })}
+                    </div>
+                    <div style={{ display: "flex", justifyContent: "space-between", padding: "0 2px" }}>
+                      {zoneHourLabels.map((label, idx) => (
+                        <span
+                          key={`z2_label_${idx}`}
+                          style={{
+                            fontSize: 9,
+                            color: designColors.textTertiary,
+                            letterSpacing: "0.5px",
+                            fontWeight: 500,
+                            fontFamily: C.fs,
+                          }}
+                        >
+                          {label}
+                        </span>
+                      ))}
+                    </div>
                   </div>
                 </div>
                 <div style={{ fontSize: 10, color: "rgba(255,255,255,0.2)", marginTop: 14, fontFamily: C.fs }}>
