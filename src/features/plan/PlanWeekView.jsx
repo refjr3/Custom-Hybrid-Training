@@ -16,6 +16,7 @@ import {
   parseWeekDates,
 } from "./lib/weekDateUtils.js";
 import { buildWeekOrderMap, getAdjacentWeekByOrder, getWeekOrderValue } from "./lib/planWeekNavigation.js";
+import { colors, typography } from "../../design/tokens";
 
 function parseWeekOrder(week, fallbackOrder) {
   const fromField = Number(week?.week_order);
@@ -319,6 +320,10 @@ export default function PlanWeekView({
   const raceName = String(
     profile?.target_race_name || activeVariant?.target_race_name || activeVariant?.race_name || "",
   ).trim();
+  const weekDateRangeDisplay = useMemo(
+    () => String(currentWeek?.dates || "").toUpperCase(),
+    [currentWeek?.dates],
+  );
   const phaseCtx = useMemo(() => {
     const base = computePhaseProgress(
       allWeeks,
@@ -677,6 +682,37 @@ export default function PlanWeekView({
         </div>
       ) : null}
 
+      <div
+        style={{
+          display: "flex",
+          justifyContent: "space-between",
+          alignItems: "baseline",
+          padding: "20px 4px 14px",
+        }}
+      >
+        <span
+          style={{
+            fontSize: 11,
+            fontWeight: typography.weightSemibold,
+            color: colors.accentGold,
+            letterSpacing: "3px",
+          }}
+        >
+          PLAN
+        </span>
+        <span
+          style={{
+            fontSize: 10,
+            color: colors.textTertiary,
+            fontWeight: typography.weightMedium,
+            letterSpacing: "1.2px",
+            fontVariantNumeric: "tabular-nums",
+          }}
+        >
+          {weekDateRangeDisplay}
+        </span>
+      </div>
+
       <PhaseHeaderStrip
         currentPhaseName={String(currentWeek?.phase || currentWeek?._blockLabel || "Training").trim()}
         currentWeekOrder={currentWeekOrder}
@@ -709,17 +745,17 @@ export default function PlanWeekView({
         </button>
         <div
           style={{
-            fontSize: 11,
+            fontSize: 10,
             fontWeight: 500,
-            color: "rgba(255,255,255,0.6)",
-            letterSpacing: "1.3px",
+            color: "rgba(255,255,255,0.45)",
+            letterSpacing: "1.4px",
             textAlign: "center",
             lineHeight: 1.4,
             fontVariantNumeric: "tabular-nums",
             fontFamily: "'DM Sans', sans-serif",
           }}
         >
-          {currentWeek?.dates || ""}
+          {currentWeek?.label || (currentWeekOrder ? `WEEK ${currentWeekOrder}` : "")}
         </div>
         <button
           type="button"
