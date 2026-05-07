@@ -21,6 +21,7 @@ import { InfoPop } from "./components/InfoPop.jsx";
 import { metricExplainers } from "./features/explainers/metrics.js";
 import { parseExerciseLine, normalizeWorkoutBlocks } from "./features/plan/lib/normalizeWorkoutBlocks.js";
 import PerformanceView from "./features/performance/PerformanceView.jsx";
+import { mergeRowsByDay } from "./features/performance/lib/dataMerge.js";
 
 const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
 const supabaseKey = import.meta.env.VITE_SUPABASE_ANON_KEY;
@@ -3861,29 +3862,26 @@ export default function App() {
     }));
 
   const todayLocal = getDeviceLocalTodayYmd();
-  const intervalsTodayMetric = unifiedMetrics?.find(
-    (m) => m?.source === "intervals" && String(m?.date || "").slice(0, 10) === todayLocal
+  const mergedDailyMetrics = mergeRowsByDay(unifiedMetrics || []);
+  const todayMergedMetric = mergedDailyMetrics.find(
+    (m) => String(m?.date || "").slice(0, 10) === todayLocal
   );
 
-  const intervalsNum = (row, key) => {
-    if (!row || row[key] == null || row[key] === "") return null;
-    const n = Number(row[key]);
-    return Number.isFinite(n) ? n : null;
-  };
-
-  const rec = intervalsNum(intervalsTodayMetric, "recovery_score")
-    ?? Number(whoopData?.recovery?.score ?? 0);
+  const mergedRecovery = Number(todayMergedMetric?.recoveryScore);
+  const rec = Number.isFinite(mergedRecovery) && mergedRecovery > 0
+    ? mergedRecovery
+    : Number(whoopData?.recovery?.score ?? 0);
   const whoopHrvMilli = whoopData?.recovery?.hrv_rmssd_milli ?? whoopData?.recovery?.hrv;
   const whoopHrvRounded =
     whoopHrvMilli != null && Number.isFinite(Number(whoopHrvMilli)) ? Math.round(Number(whoopHrvMilli)) : null;
-  const hrv = intervalsNum(intervalsTodayMetric, "hrv") ?? whoopHrvRounded;
+  const hrv = todayMergedMetric?.hrv ?? whoopHrvRounded;
   const whoopRhrRaw = whoopData?.recovery?.resting_heart_rate ?? whoopData?.recovery?.rhr;
   const whoopRhrRounded =
     whoopRhrRaw != null && Number.isFinite(Number(whoopRhrRaw)) ? Math.round(Number(whoopRhrRaw)) : null;
-  const rhr = intervalsNum(intervalsTodayMetric, "rhr") ?? whoopRhrRounded;
-  const sleepHoursRaw = intervalsNum(intervalsTodayMetric, "sleep_hours");
-  const sleepHours = sleepHoursRaw != null && sleepHoursRaw > 0
-    ? Math.round(sleepHoursRaw * 10) / 10
+  const rhr = todayMergedMetric?.rhr ?? whoopRhrRounded;
+  const mergedSleepHours = Number(todayMergedMetric?.sleepHours);
+  const sleepHours = Number.isFinite(mergedSleepHours) && mergedSleepHours > 0
+    ? mergedSleepHours
     : Number(whoopData?.sleep?.hours ?? 0);
   const sleepEff   = whoopData?.sleep?.efficiency ?? 0;
 

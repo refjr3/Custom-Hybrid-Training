@@ -129,6 +129,7 @@ export function buildWhoopUnifiedRowFromRecoverySleep(userId, timeZone, rec, sle
     user_id: userId,
     date,
     source: "whoop",
+    recovery_score: readiness,
     readiness_score: readiness,
     readiness_color: readinessColor,
     hrv_rmssd: hrvMilli != null && Number.isFinite(Number(hrvMilli)) ? Number(hrvMilli) : null,
@@ -252,6 +253,7 @@ export function formatClientWhoopResponse(recData, sleepData, cycleData) {
   const sleep = sleepData?.records?.[0];
   const cycle = cycleData?.records?.[0];
   const inBedMilli = sleep?.score?.stage_summary?.total_in_bed_time_milli;
+  const awakeMilli = sleep?.score?.stage_summary?.total_awake_time_milli;
   const score = rec?.score || {};
   const hrvMilli =
     score.hrv_rmssd_milli ??
@@ -265,6 +267,13 @@ export function formatClientWhoopResponse(recData, sleepData, cycleData) {
   const rhrRounded =
     rhrRaw != null && Number.isFinite(Number(rhrRaw)) ? Math.round(Number(rhrRaw)) : null;
 
+  const asleepHours = (() => {
+    const total = inBedMilli != null && Number.isFinite(Number(inBedMilli)) ? Number(inBedMilli) : null;
+    const awake = awakeMilli != null && Number.isFinite(Number(awakeMilli)) ? Number(awakeMilli) : 0;
+    if (total == null) return 0;
+    return Math.floor((Math.max(total - awake, 0) / 3600000) * 10) / 10;
+  })();
+
   return {
     recovery: {
       score: Math.round(score.recovery_score ?? rec?.recovery_score ?? 0),
@@ -275,10 +284,7 @@ export function formatClientWhoopResponse(recData, sleepData, cycleData) {
     },
     sleep: {
       score: Math.round(sleep?.score?.sleep_performance_percentage ?? 0),
-      hours:
-        inBedMilli != null && Number.isFinite(Number(inBedMilli))
-          ? Math.round((Number(inBedMilli) / 3600000) * 10) / 10
-          : 0,
+      hours: asleepHours,
       total_in_bed_time_milli:
         inBedMilli != null && Number.isFinite(Number(inBedMilli)) ? Number(inBedMilli) : null,
       efficiency: Math.round(sleep?.score?.sleep_efficiency_percentage ?? 0),
@@ -312,7 +318,8 @@ export function buildUnifiedWhoopPayload(userId, timeZone, recData, sleepData, c
   const cycle = cycleData?.records?.[0] || null;
   const score = rec.score || {};
 
-  const recoveryScore = Number(score.recovery_score ?? rec.recovery_score ?? 0);
+  const recoveryScore = numOrNull(score.recovery_score ?? rec.recovery_score);
+  if (recoveryScore == null) return null;
   const readiness = Math.round(recoveryScore);
   const readinessColor =
     readiness >= 67 ? "green" : readiness >= 34 ? "yellow" : "red";
@@ -345,6 +352,7 @@ export function buildUnifiedWhoopPayload(userId, timeZone, recData, sleepData, c
     user_id: userId,
     date,
     source: "whoop",
+    recovery_score: readiness,
     readiness_score: readiness,
     readiness_color: readinessColor,
     hrv_rmssd: hrvMilli != null && Number.isFinite(Number(hrvMilli)) ? Number(hrvMilli) : null,

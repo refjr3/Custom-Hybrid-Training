@@ -1,8 +1,9 @@
-/* global Map, console */
+/* global console */
 import { useEffect, useState } from "react";
 import TrainingLoadCard from "./components/TrainingLoadCard.jsx";
 import { SectionLabel, RecoveryDial, MetricCard } from "../../design/components";
 import { colors, spacing, typography } from "../../design/tokens";
+import { mergeRowsByDay } from "./lib/dataMerge.js";
 
 function avg(arr) {
   const valid = (Array.isArray(arr) ? arr : []).map(Number).filter((v) => Number.isFinite(v));
@@ -15,87 +16,6 @@ function formatToday() {
     month: "short",
     day: "numeric",
   });
-}
-
-function roundOrNull(value, digits = 0) {
-  const n = Number(value);
-  if (!Number.isFinite(n)) return null;
-  if (digits <= 0) return Math.round(n);
-  const p = 10 ** digits;
-  return Math.round(n * p) / p;
-}
-
-function mergeRowsByDay(rows) {
-  const byDate = new Map();
-  for (const row of Array.isArray(rows) ? rows : []) {
-    const date = String(row?.date || "");
-    if (!date) continue;
-
-    if (!byDate.has(date)) {
-      byDate.set(date, {
-        date,
-        recoveryScore: null,
-        hrv: null,
-        rhr: null,
-        sleepHours: null,
-        strain: null,
-        ctl: null,
-        atl: null,
-        tsb: null,
-      });
-    }
-    const merged = byDate.get(date);
-    const source = String(row?.source || "").toLowerCase();
-
-    // Load/recovery metrics should come from intervals/is_primary rows.
-    if (row?.recovery_score != null && (merged.recoveryScore == null || source === "intervals" || row?.is_primary === true)) {
-      merged.recoveryScore = Number(row.recovery_score);
-    }
-    if (row?.ctl != null && (merged.ctl == null || source === "intervals" || row?.is_primary === true)) {
-      merged.ctl = Number(row.ctl);
-    }
-    if (row?.tsb != null && (merged.tsb == null || source === "intervals" || row?.is_primary === true)) {
-      merged.tsb = Number(row.tsb);
-    }
-    if (row?.training_load != null && (merged.atl == null || source === "intervals" || row?.is_primary === true)) {
-      merged.atl = Number(row.training_load);
-    }
-
-    // HRV: intervals.hrv preferred, fallback to whoop.hrv_rmssd.
-    if (row?.hrv != null && (source === "intervals" || row?.is_primary === true)) {
-      merged.hrv = roundOrNull(row.hrv, 0);
-    }
-    if (merged.hrv == null) {
-      if (row?.hrv_rmssd != null && source === "whoop") {
-        merged.hrv = roundOrNull(row.hrv_rmssd, 0);
-      }
-    }
-
-    // RHR: intervals.rhr preferred, fallback to whoop.resting_hr.
-    if (row?.rhr != null && (source === "intervals" || row?.is_primary === true)) {
-      merged.rhr = roundOrNull(row.rhr, 0);
-    }
-    if (merged.rhr == null) {
-      if (row?.resting_hr != null && source === "whoop") {
-        merged.rhr = roundOrNull(row.resting_hr, 0);
-      }
-    }
-
-    // Sleep comes from WHOOP rows.
-    if (row?.sleep_total_min != null && source === "whoop" && merged.sleepHours == null) {
-      merged.sleepHours = roundOrNull(Number(row.sleep_total_min) / 60, 1);
-    }
-
-    // Strain should stay on WHOOP 0-21 scale only.
-    if (source === "whoop" && row?.strain != null) {
-      const strain = Number(row.strain);
-      if (Number.isFinite(strain) && strain <= 25) {
-        merged.strain = roundOrNull(strain, 1);
-      }
-    }
-  }
-
-  return [...byDate.values()].sort((a, b) => String(a.date).localeCompare(String(b.date)));
 }
 
 function trendDirection(series) {
@@ -170,7 +90,7 @@ export default function PerformanceView({ user, supabase }) {
 
       const { data: rows, error: recentErr } = await supabase
         .from("unified_metrics")
-        .select("date, source, is_primary, recovery_score, hrv, hrv_rmssd, rhr, resting_hr, sleep_total_min, strain, ctl, tsb, training_load")
+        .select("date, source, is_primary, recovery_score, readiness_score, hrv, hrv_rmssd, rhr, resting_hr, sleep_total_min, sleep_awake_min, strain, ctl, tsb, training_load, created_at, updated_at")
         .eq("user_id", user.id)
         .gte("date", cutoffIso)
         .order("date", { ascending: true });
@@ -200,7 +120,7 @@ export default function PerformanceView({ user, supabase }) {
 
       const { data: loadRows } = await supabase
         .from("unified_metrics")
-        .select("date, source, is_primary, ctl, training_load")
+        .select("date, source, is_primary, ctl, training_load, sleep_awake_min, created_at, updated_at")
         .eq("user_id", user.id)
         .gte("date", loadCutoffIso)
         .order("date", { ascending: true });
@@ -250,7 +170,7 @@ export default function PerformanceView({ user, supabase }) {
   const strainSeries = data.sparklines?.strain || [];
 
   return (
-    <div style={{ padding: `${spacing.cardPadding + 2}px` }}>
+    <div style={{ padding: `${spacing.cardPadding + 2}px`, paddingBottom: 80 }}>
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", marginBottom: 12 }}>
         <div style={{ fontSize: 11, color: colors.accentGold, letterSpacing: "3px", fontWeight: typography.weightSemibold }}>
           PERFORMANCE
