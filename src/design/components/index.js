@@ -8,3 +8,5 @@ export { LineIcon, InfoIcon } from "./LineIcon";
 export { SessionCard } from "./SessionCard";
 export { Chip } from "./Chip";
 export { TSBHero } from "./TSBHero";
+export { SleepStagesBar } from "./SleepStagesBar";
+export { StrainGauge } from "./StrainGauge";

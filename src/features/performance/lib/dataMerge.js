@@ -78,10 +78,15 @@ export function mergeRowsByDay(rows) {
         ? roundOrNull(whoop.resting_hr, 0)
         : null;
 
+    const sleepAwakeMin = toNumberOrNull(whoop?.sleep_awake_min);
+    const sleepDeepMin = toNumberOrNull(whoop?.sleep_deep_min);
+    const sleepRemMin = toNumberOrNull(whoop?.sleep_rem_min);
+    const sleepLightMin = toNumberOrNull(whoop?.sleep_light_min);
+
     let sleepHours = null;
     if (whoop?.sleep_total_min != null) {
       const totalMin = toNumberOrNull(whoop.sleep_total_min);
-      const awakeMin = toNumberOrNull(whoop.sleep_awake_min) || 0;
+      const awakeMin = sleepAwakeMin || 0;
       const asleepMin = totalMin != null ? Math.max(totalMin - awakeMin, 0) : null;
       sleepHours = asleepMin != null ? truncateToTenths(asleepMin / 60) : null;
     }
@@ -97,6 +102,10 @@ export function mergeRowsByDay(rows) {
       hrv,
       rhr,
       sleepHours,
+      sleepAwakeMin: roundOrNull(sleepAwakeMin, 0),
+      sleepDeepMin: roundOrNull(sleepDeepMin, 0),
+      sleepRemMin: roundOrNull(sleepRemMin, 0),
+      sleepLightMin: roundOrNull(sleepLightMin, 0),
       strain,
       ctl: toNumberOrNull(intervals?.ctl),
       atl: toNumberOrNull(intervals?.training_load),

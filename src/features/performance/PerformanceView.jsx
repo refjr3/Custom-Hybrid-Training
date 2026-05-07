@@ -1,7 +1,14 @@
 /* global console */
 import { useEffect, useState } from "react";
 import TrainingLoadCard from "./components/TrainingLoadCard.jsx";
-import { SectionLabel, MetricCard, TSBHero } from "../../design/components";
+import {
+  SectionLabel,
+  MetricCard,
+  RecoveryDial,
+  SleepStagesBar,
+  StrainGauge,
+  TSBHero,
+} from "../../design/components";
 import { colors, spacing, typography } from "../../design/tokens";
 import { mergeRowsByDay } from "./lib/dataMerge.js";
 
@@ -97,7 +104,7 @@ export default function PerformanceView({ user, supabase }) {
 
       const { data: rows, error: recentErr } = await supabase
         .from("unified_metrics")
-        .select("date, source, is_primary, recovery_score, readiness_score, hrv, hrv_rmssd, rhr, resting_hr, sleep_total_min, sleep_awake_min, strain, ctl, tsb, training_load, created_at, updated_at")
+        .select("date, source, is_primary, recovery_score, readiness_score, hrv, hrv_rmssd, rhr, resting_hr, sleep_total_min, sleep_awake_min, sleep_deep_min, sleep_rem_min, sleep_light_min, strain, ctl, tsb, training_load, created_at, updated_at")
         .eq("user_id", user.id)
         .gte("date", cutoffIso)
         .order("date", { ascending: true });
@@ -151,13 +158,16 @@ export default function PerformanceView({ user, supabase }) {
         hrv: today?.hrv,
         rhr: today?.rhr,
         sleepHours: today?.sleepHours ?? null,
+        sleepStages: {
+          deepMin: today?.sleepDeepMin ?? null,
+          remMin: today?.sleepRemMin ?? null,
+          lightMin: today?.sleepLightMin ?? null,
+          awakeMin: today?.sleepAwakeMin ?? null,
+        },
         strain: today?.strain,
         sparklines: {
-          recovery: daily.map((r) => r?.recoveryScore).filter((v) => v != null),
           hrv: daily.map((r) => r?.hrv).filter((v) => v != null),
           rhr: daily.map((r) => r?.rhr).filter((v) => v != null),
-          sleep: daily.map((r) => r?.sleepHours).filter((v) => v != null),
-          strain: daily.map((r) => r?.strain).filter((v) => v != null),
         },
         tsbSeries: loadDaily.map((r) => r?.tsb).filter((v) => v != null),
         blockStartDate: formatMonthDay(blockStartDate),
@@ -177,11 +187,11 @@ export default function PerformanceView({ user, supabase }) {
   }, [supabase, user?.id]);
 
   const data = perfData || { empty: false };
-  const recoverySeries = data.sparklines?.recovery || [];
   const hrvSeries = data.sparklines?.hrv || [];
   const rhrSeries = data.sparklines?.rhr || [];
-  const sleepSeries = data.sparklines?.sleep || [];
-  const strainSeries = data.sparklines?.strain || [];
+  const sleepStageData = data.sleepStages || {};
+  const hasSleepStageData = [sleepStageData.deepMin, sleepStageData.remMin, sleepStageData.lightMin, sleepStageData.awakeMin]
+    .some((value) => Number.isFinite(Number(value)) && Number(value) > 0);
 
   return (
     <div style={{ padding: `${spacing.cardPadding + 2}px`, paddingBottom: 80 }}>
@@ -218,15 +228,23 @@ export default function PerformanceView({ user, supabase }) {
               marginBottom: spacing.sectionGapTight,
             }}
           >
-            <MetricCard
-              label="Recovery"
-              value={metricValue(data.recoveryScore)}
-              unit=""
-              sparklineData={recoverySeries}
-              sparklineColor={colors.accentGold}
-              trendDescriptor={trendText(recoverySeries)}
-              icon="sparkle"
-            />
+            <div
+              style={{
+                background: colors.bgCardSubtle,
+                border: `0.5px solid ${colors.borderSubtle}`,
+                borderRadius: spacing.cardRadius,
+                padding: spacing.cardPaddingTight,
+                display: "flex",
+                justifyContent: "center",
+                alignItems: "center",
+              }}
+            >
+              <RecoveryDial
+                score={metricValue(data.recoveryScore) != null ? Number(data.recoveryScore) : null}
+                deltaVsAvg={data.deltaVsAvg}
+                size="compact"
+              />
+            </div>
             <MetricCard
               label="HRV"
               value={metricValue(data.hrv)}
@@ -245,24 +263,24 @@ export default function PerformanceView({ user, supabase }) {
               trendDescriptor={trendText(rhrSeries)}
               icon="pulse"
             />
-            <MetricCard
-              label="Sleep"
-              value={metricValue(data.sleepHours, 1)}
-              unit="hrs"
-              sparklineData={sleepSeries}
-              sparklineColor={trendColor(sleepSeries, "higherIsBetter")}
-              trendDescriptor={trendText(sleepSeries)}
-              icon="moon"
-            />
-            <MetricCard
-              label="Strain"
-              value={metricValue(data.strain, 1)}
-              unit=""
-              sparklineData={strainSeries}
-              sparklineColor={colors.accentGold}
-              trendDescriptor={trendText(strainSeries)}
-              icon="lightning"
-            />
+            {hasSleepStageData ? (
+              <SleepStagesBar
+                deepMin={sleepStageData.deepMin}
+                remMin={sleepStageData.remMin}
+                lightMin={sleepStageData.lightMin}
+                awakeMin={sleepStageData.awakeMin}
+              />
+            ) : (
+              <MetricCard
+                label="Sleep"
+                value={metricValue(data.sleepHours, 1)}
+                unit="hrs"
+                icon="moon"
+              />
+            )}
+            <div style={{ gridColumn: "1 / -1" }}>
+              <StrainGauge strain={data.strain} />
+            </div>
           </div>
 
           <SectionLabel meta="8 WEEKS">TRAINING LOAD</SectionLabel>

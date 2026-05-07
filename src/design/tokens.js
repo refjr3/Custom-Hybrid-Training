@@ -21,6 +21,14 @@ export const colors = {
 
   recoveryGradientStart: "rgba(120,200,180,0.95)",
   recoveryGradientEnd: "#C9A875",
+  sleepStageDeep: "#5B7FB8",
+  sleepStageRem: "#9DB3E0",
+  sleepStageLight: "rgba(120,180,200,0.95)",
+  sleepStageAwake: "rgba(255,255,255,0.15)",
+  strainZoneLight: "rgba(120,180,200,0.4)",
+  strainZoneModerate: "#C9A961",
+  strainZoneHigh: "#E8A855",
+  strainZoneAllOut: "#D97757",
 
   intentZ2: "#C9A875",
   intentThreshold: "#E8A855",
