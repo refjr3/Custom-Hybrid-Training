@@ -1,7 +1,7 @@
 /* global console */
 import { useEffect, useState } from "react";
 import TrainingLoadCard from "./components/TrainingLoadCard.jsx";
-import { SectionLabel, RecoveryDial, MetricCard } from "../../design/components";
+import { SectionLabel, MetricCard, TSBHero } from "../../design/components";
 import { colors, spacing, typography } from "../../design/tokens";
 import { mergeRowsByDay } from "./lib/dataMerge.js";
 
@@ -16,6 +16,13 @@ function formatToday() {
     month: "short",
     day: "numeric",
   });
+}
+
+function formatMonthDay(dateStr) {
+  if (!dateStr) return "—";
+  const d = new Date(`${String(dateStr).slice(0, 10)}T12:00:00`);
+  if (Number.isNaN(d.getTime())) return "—";
+  return d.toLocaleDateString("en-US", { month: "short", day: "numeric" }).toUpperCase();
 }
 
 function trendDirection(series) {
@@ -115,12 +122,12 @@ export default function PerformanceView({ user, supabase }) {
       }
 
       const loadCutoff = new Date();
-      loadCutoff.setDate(loadCutoff.getDate() - 56);
+      loadCutoff.setDate(loadCutoff.getDate() - 84);
       const loadCutoffIso = loadCutoff.toISOString().slice(0, 10);
 
       const { data: loadRows } = await supabase
         .from("unified_metrics")
-        .select("date, source, is_primary, ctl, training_load, sleep_awake_min, created_at, updated_at")
+        .select("date, source, is_primary, ctl, tsb, training_load, sleep_awake_min, created_at, updated_at")
         .eq("user_id", user.id)
         .gte("date", loadCutoffIso)
         .order("date", { ascending: true });
@@ -129,6 +136,8 @@ export default function PerformanceView({ user, supabase }) {
       const loadDaily = mergeRowsByDay(loadRows || []);
 
       const today = daily[daily.length - 1];
+      const blockStartDate = loadDaily[0]?.date || daily[0]?.date || null;
+      const blockEndDate = loadDaily[loadDaily.length - 1]?.date || today?.date || null;
       const sevenDayAvgRows = daily.slice(-7);
       const todayRecovery = Number(today?.recoveryScore);
       const recoveryAvg = avg(sevenDayAvgRows.map((r) => r?.recoveryScore));
@@ -144,11 +153,15 @@ export default function PerformanceView({ user, supabase }) {
         sleepHours: today?.sleepHours ?? null,
         strain: today?.strain,
         sparklines: {
+          recovery: daily.map((r) => r?.recoveryScore).filter((v) => v != null),
           hrv: daily.map((r) => r?.hrv).filter((v) => v != null),
           rhr: daily.map((r) => r?.rhr).filter((v) => v != null),
           sleep: daily.map((r) => r?.sleepHours).filter((v) => v != null),
           strain: daily.map((r) => r?.strain).filter((v) => v != null),
         },
+        tsbSeries: loadDaily.map((r) => r?.tsb).filter((v) => v != null),
+        blockStartDate: formatMonthDay(blockStartDate),
+        blockEndDate: formatMonthDay(blockEndDate),
         ctlSeries: loadDaily.map((r) => r?.ctl).filter((v) => v != null),
         atlSeries: loadDaily.map((r) => r?.atl).filter((v) => v != null),
         currentCTL: today?.ctl,
@@ -164,6 +177,7 @@ export default function PerformanceView({ user, supabase }) {
   }, [supabase, user?.id]);
 
   const data = perfData || { empty: false };
+  const recoverySeries = data.sparklines?.recovery || [];
   const hrvSeries = data.sparklines?.hrv || [];
   const rhrSeries = data.sparklines?.rhr || [];
   const sleepSeries = data.sparklines?.sleep || [];
@@ -188,10 +202,11 @@ export default function PerformanceView({ user, supabase }) {
 
       {!data.empty ? (
         <>
-          <RecoveryDial
-            score={data.recoveryScore}
-            deltaVsAvg={data.deltaVsAvg}
-            size="hero"
+          <TSBHero
+            currentTSB={data.currentTSB}
+            tsbSeries={data.tsbSeries}
+            blockStartDate={data.blockStartDate}
+            blockEndDate={data.blockEndDate}
           />
 
           <SectionLabel meta="14 DAYS">VITAL STATS</SectionLabel>
@@ -203,6 +218,15 @@ export default function PerformanceView({ user, supabase }) {
               marginBottom: spacing.sectionGapTight,
             }}
           >
+            <MetricCard
+              label="Recovery"
+              value={metricValue(data.recoveryScore)}
+              unit=""
+              sparklineData={recoverySeries}
+              sparklineColor={colors.accentGold}
+              trendDescriptor={trendText(recoverySeries)}
+              icon="sparkle"
+            />
             <MetricCard
               label="HRV"
               value={metricValue(data.hrv)}
