@@ -4500,6 +4500,77 @@ export default function App() {
               />
             )}
 
+            <div style={glassCard}>
+              <div style={specularTop()} />
+              <div style={{ position: "absolute", top: -20, right: -20, width: 120, height: 120, background: "radial-gradient(circle,rgba(210,190,155,0.10) 0%,transparent 70%)", pointerEvents: "none" }} />
+              <div style={{ padding: "20px 22px", position: "relative", zIndex: 1 }}>
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 14 }}>
+                  <div style={{ fontSize: 9, fontWeight: 600, color: "rgba(255,255,255,0.22)", letterSpacing: "2.5px", textTransform: "uppercase", fontFamily: C.fs }}>AI Coach</div>
+                  <div style={{ fontSize: 9, color: "rgba(255,255,255,0.18)", letterSpacing: "1px", fontFamily: C.fs }}>{"Today's brief"}</div>
+                </div>
+                {coachBriefLoading ? (
+                  <div style={{ height: 60, background: "rgba(255,255,255,0.04)", borderRadius: 10, animation: "coach-brief-pulse 2s ease-in-out infinite" }} />
+                ) : (
+                  <>
+                    {coachSynthesis?.headline && (
+                      <div
+                        style={{
+                          marginBottom: 10,
+                          fontSize: 15,
+                          fontWeight: 600,
+                          color: "rgba(255,255,255,0.85)",
+                          letterSpacing: "-0.3px",
+                        }}
+                      >
+                        {coachSynthesis.headline}
+                      </div>
+                    )}
+                    {coachSynthesis?.summary && (
+                      <div
+                        style={{
+                          fontSize: 13,
+                          color: "rgba(255,255,255,0.55)",
+                          lineHeight: 1.55,
+                          marginBottom: coachSynthesis?.action ? 10 : 0,
+                        }}
+                      >
+                        {coachSynthesis.summary}
+                      </div>
+                    )}
+                    {coachSynthesis?.action && (
+                      <div style={{ fontSize: 12, color: "rgba(201,168,117,0.85)", lineHeight: 1.55, fontWeight: 500 }}>
+                        → {coachSynthesis.action}
+                      </div>
+                    )}
+                    {!coachSynthesis?.headline && (
+                      <div
+                        style={{
+                          fontSize: 14,
+                          fontWeight: 400,
+                          color: "rgba(255,255,255,0.78)",
+                          lineHeight: 1.6,
+                          letterSpacing: "-0.1px",
+                          marginBottom: 16,
+                          fontFamily: C.fs,
+                        }}
+                      >
+                        Your coach is reviewing your data...
+                      </div>
+                    )}
+                    <div style={{ display: "flex", gap: 8, marginTop: coachSynthesis?.headline || coachSynthesis?.summary || coachSynthesis?.action ? 14 : 0 }}>
+                      <Pill
+                        variant="gold"
+                        size="md"
+                        onClick={() => setCoachExpandSignal((s) => s + 1)}
+                      >
+                        Ask your coach ↗
+                      </Pill>
+                    </div>
+                  </>
+                )}
+              </div>
+            </div>
+
             {dataSources.hasActivitySource ? (
             <div onClick={() => setZ2ModalOpen(true)} style={{ ...glassCard, cursor: "pointer" }}>
               <div style={specularTop()} />
@@ -4731,77 +4802,6 @@ export default function App() {
               <div style={{ fontSize: 8, fontWeight: 600, color: "rgba(255,255,255,0.22)", letterSpacing: "3px", textTransform: "uppercase", marginBottom: 8, fontFamily: C.fs }}>Tomorrow</div>
               <div style={{ fontSize: 17, fontWeight: 600, color: "#fff", lineHeight: 1.15, fontFamily: C.fs }}>{tomorrowSessionLabel}</div>
               <div style={{ fontSize: 9, color: "rgba(255,255,255,0.28)", marginTop: 4, fontFamily: C.fs, lineHeight: 1.4 }}>{tomorrowStructure}</div>
-            </div>
-
-            <div style={glassCard}>
-              <div style={specularTop()} />
-              <div style={{ position: "absolute", top: -20, right: -20, width: 120, height: 120, background: "radial-gradient(circle,rgba(210,190,155,0.10) 0%,transparent 70%)", pointerEvents: "none" }} />
-              <div style={{ padding: "20px 22px", position: "relative", zIndex: 1 }}>
-                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 14 }}>
-                  <div style={{ fontSize: 9, fontWeight: 600, color: "rgba(255,255,255,0.22)", letterSpacing: "2.5px", textTransform: "uppercase", fontFamily: C.fs }}>AI Coach</div>
-                  <div style={{ fontSize: 9, color: "rgba(255,255,255,0.18)", letterSpacing: "1px", fontFamily: C.fs }}>{"Today's brief"}</div>
-                </div>
-                {coachBriefLoading ? (
-                  <div style={{ height: 60, background: "rgba(255,255,255,0.04)", borderRadius: 10, animation: "coach-brief-pulse 2s ease-in-out infinite" }} />
-                ) : (
-                  <>
-                    {coachSynthesis?.headline && (
-                      <div
-                        style={{
-                          marginBottom: 10,
-                          fontSize: 15,
-                          fontWeight: 600,
-                          color: "rgba(255,255,255,0.85)",
-                          letterSpacing: "-0.3px",
-                        }}
-                      >
-                        {coachSynthesis.headline}
-                      </div>
-                    )}
-                    {coachSynthesis?.summary && (
-                      <div
-                        style={{
-                          fontSize: 13,
-                          color: "rgba(255,255,255,0.55)",
-                          lineHeight: 1.55,
-                          marginBottom: coachSynthesis?.action ? 10 : 0,
-                        }}
-                      >
-                        {coachSynthesis.summary}
-                      </div>
-                    )}
-                    {coachSynthesis?.action && (
-                      <div style={{ fontSize: 12, color: "rgba(201,168,117,0.85)", lineHeight: 1.55, fontWeight: 500 }}>
-                        → {coachSynthesis.action}
-                      </div>
-                    )}
-                    {!coachSynthesis?.headline && (
-                      <div
-                        style={{
-                          fontSize: 14,
-                          fontWeight: 400,
-                          color: "rgba(255,255,255,0.78)",
-                          lineHeight: 1.6,
-                          letterSpacing: "-0.1px",
-                          marginBottom: 16,
-                          fontFamily: C.fs,
-                        }}
-                      >
-                        Your coach is reviewing your data...
-                      </div>
-                    )}
-                    <div style={{ display: "flex", gap: 8, marginTop: coachSynthesis?.headline || coachSynthesis?.summary || coachSynthesis?.action ? 14 : 0 }}>
-                      <Pill
-                        variant="gold"
-                        size="md"
-                        onClick={() => setCoachExpandSignal((s) => s + 1)}
-                      >
-                        Ask your coach ↗
-                      </Pill>
-                    </div>
-                  </>
-                )}
-              </div>
             </div>
 
             {hasRaceCountdown && (
