@@ -1,4 +1,4 @@
-/* global Map */
+/* global Map, console */
 import { useEffect, useState } from "react";
 import RecoveryHeroRing from "./components/RecoveryHeroRing.jsx";
 import VitalStatsQuadrant from "./components/VitalStatsQuadrant.jsx";
@@ -54,42 +54,39 @@ function mergeRowsByDay(rows) {
     }
     const merged = byDate.get(date);
     const source = String(row?.source || "").toLowerCase();
-    const isPrimary = row?.is_primary === true;
 
-    // Prefer intervals/is_primary rows for load/recovery metrics.
-    if (row?.recovery_score != null && (merged.recoveryScore == null || isPrimary || source === "intervals")) {
+    // Load/recovery metrics should come from intervals/is_primary rows.
+    if (row?.recovery_score != null && (merged.recoveryScore == null || source === "intervals" || row?.is_primary === true)) {
       merged.recoveryScore = Number(row.recovery_score);
     }
-    if (row?.ctl != null && (merged.ctl == null || isPrimary || source === "intervals")) {
+    if (row?.ctl != null && (merged.ctl == null || source === "intervals" || row?.is_primary === true)) {
       merged.ctl = Number(row.ctl);
     }
-    if (row?.tsb != null && (merged.tsb == null || isPrimary || source === "intervals")) {
+    if (row?.tsb != null && (merged.tsb == null || source === "intervals" || row?.is_primary === true)) {
       merged.tsb = Number(row.tsb);
     }
-    if (row?.training_load != null && (merged.atl == null || isPrimary || source === "intervals")) {
+    if (row?.training_load != null && (merged.atl == null || source === "intervals" || row?.is_primary === true)) {
       merged.atl = Number(row.training_load);
     }
 
-    // HRV: intervals.hrv first, then whoop.hrv_rmssd fallback.
-    if (merged.hrv == null) {
-      if (row?.hrv != null && (isPrimary || source === "intervals")) {
-        merged.hrv = roundOrNull(row.hrv, 0);
-      } else if (row?.hrv_rmssd != null && source === "whoop") {
-        merged.hrv = roundOrNull(row.hrv_rmssd, 0);
-      }
-    } else if (row?.hrv != null && (isPrimary || source === "intervals")) {
+    // HRV: intervals.hrv preferred, fallback to whoop.hrv_rmssd.
+    if (row?.hrv != null && (source === "intervals" || row?.is_primary === true)) {
       merged.hrv = roundOrNull(row.hrv, 0);
     }
+    if (merged.hrv == null) {
+      if (row?.hrv_rmssd != null && source === "whoop") {
+        merged.hrv = roundOrNull(row.hrv_rmssd, 0);
+      }
+    }
 
-    // RHR: intervals.rhr first, then whoop.resting_hr fallback.
+    // RHR: intervals.rhr preferred, fallback to whoop.resting_hr.
+    if (row?.rhr != null && (source === "intervals" || row?.is_primary === true)) {
+      merged.rhr = roundOrNull(row.rhr, 0);
+    }
     if (merged.rhr == null) {
-      if (row?.rhr != null && (isPrimary || source === "intervals")) {
-        merged.rhr = roundOrNull(row.rhr, 0);
-      } else if (row?.resting_hr != null && source === "whoop") {
+      if (row?.resting_hr != null && source === "whoop") {
         merged.rhr = roundOrNull(row.resting_hr, 0);
       }
-    } else if (row?.rhr != null && (isPrimary || source === "intervals")) {
-      merged.rhr = roundOrNull(row.rhr, 0);
     }
 
     // Sleep comes from WHOOP rows.
@@ -97,13 +94,8 @@ function mergeRowsByDay(rows) {
       merged.sleepHours = roundOrNull(Number(row.sleep_total_min) / 60, 1);
     }
 
-    // User-facing strain should prefer WHOOP 0-21 style.
+    // Strain should stay on WHOOP 0-21 scale only.
     if (source === "whoop" && row?.strain != null) {
-      const strain = Number(row.strain);
-      if (Number.isFinite(strain) && strain <= 25) {
-        merged.strain = roundOrNull(strain, 1);
-      }
-    } else if (merged.strain == null && row?.strain != null) {
       const strain = Number(row.strain);
       if (Number.isFinite(strain) && strain <= 25) {
         merged.strain = roundOrNull(strain, 1);
@@ -169,7 +161,13 @@ export default function PerformanceView({ user, supabase }) {
         .order("date", { ascending: true });
 
       if (cancelled) return;
-      if (recentErr || !Array.isArray(rows) || !rows.length) {
+      if (recentErr) {
+        console.error("[PerformanceView] load error", recentErr);
+        setPerfData({ empty: true });
+        setLoading(false);
+        return;
+      }
+      if (!Array.isArray(rows) || !rows.length) {
         setPerfData({ empty: true });
         setLoading(false);
         return;
@@ -204,9 +202,9 @@ export default function PerformanceView({ user, supabase }) {
         empty: false,
         recoveryScore: Number.isFinite(todayRecovery) ? todayRecovery : null,
         recoveryStatus: classifyRecovery(todayRecovery),
-        deltaVsAvg: Number.isFinite(todayRecovery) && Number.isFinite(recoveryAvg)
+        deltaVsAvg: Number.isFinite(todayRecovery) && Number.isFinite(recoveryAvg) && sevenDayAvgRows.length > 0
           ? Math.round(todayRecovery - recoveryAvg)
-          : 0,
+          : null,
         hrv: today?.hrv,
         rhr: today?.rhr,
         sleepHours: today?.sleepHours ?? null,
