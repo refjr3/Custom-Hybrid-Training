@@ -22,6 +22,8 @@ import { metricExplainers } from "./features/explainers/metrics.js";
 import { parseExerciseLine, normalizeWorkoutBlocks } from "./features/plan/lib/normalizeWorkoutBlocks.js";
 import PerformanceView from "./features/performance/PerformanceView.jsx";
 import { mergeRowsByDay } from "./features/performance/lib/dataMerge.js";
+import { RecoveryDial, MetricCard, Pill } from "./design/components";
+import { colors as designColors, spacing as designSpacing, typography as designTypography } from "./design/tokens";
 
 const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
 const supabaseKey = import.meta.env.VITE_SUPABASE_ANON_KEY;
@@ -4097,6 +4099,30 @@ export default function App() {
           const minutes = safe % 60;
           return `${hours}h ${String(minutes).padStart(2, "0")}min`;
         };
+        const buildLinePath = (series, width, height, pad = 8) => {
+          const safeSeries = (Array.isArray(series) ? series : []).map((v) => Number(v)).filter((v) => Number.isFinite(v));
+          if (safeSeries.length < 2) return "";
+          const min = Math.min(...safeSeries, 0);
+          const max = Math.max(...safeSeries, 1);
+          const span = Math.max(1, max - min);
+          return safeSeries
+            .map((v, i) => {
+              const x = pad + (i / (safeSeries.length - 1)) * (width - pad * 2);
+              const y = height - pad - ((v - min) / span) * (height - pad * 2);
+              return `${i === 0 ? "M" : "L"} ${x.toFixed(2)} ${y.toFixed(2)}`;
+            })
+            .join(" ");
+        };
+        const zoneProgressRatio = Math.max(0, Math.min(1, selectedZoneMinutes / Math.max(zoneTarget, 1)));
+        const zoneAreaSeries = [0.1, 0.18, 0.3, 0.42, 0.58, 0.78, 1].map((step) =>
+          Math.round(zoneTarget * zoneProgressRatio * step)
+        );
+        const zoneChartW = 332;
+        const zoneChartH = 92;
+        const zoneLinePath = buildLinePath(zoneAreaSeries, zoneChartW, zoneChartH, 10);
+        const zoneAreaPath = zoneLinePath
+          ? `${zoneLinePath} L ${zoneChartW - 10} ${zoneChartH - 8} L 10 ${zoneChartH - 8} Z`
+          : "";
         const todayDateIso = getDeviceLocalTodayYmd();
         const PLAN_YEAR = parseInt(String(todayDateIso || "").slice(0, 4), 10) || 2026;
         const allPlanEntries = planBlocks
@@ -4156,23 +4182,6 @@ export default function App() {
         const todayStart = new Date(todayDateObj.getFullYear(), todayDateObj.getMonth(), todayDateObj.getDate());
         const daysAway = raceDateObj ? Math.max(0, Math.ceil((raceDateObj.getTime() - todayStart.getTime()) / (1000 * 60 * 60 * 24))) : null;
 
-        const gateUpper = whoopLabel(Number(rec) || 0);
-        const recoveryBadge =
-          gateUpper === "GREEN"
-            ? { bg: "rgba(93,255,160,0.12)", border: "1px solid rgba(93,255,160,0.2)", fg: DS.green }
-            : gateUpper === "YELLOW"
-              ? { bg: "rgba(255,209,102,0.14)", border: "1px solid rgba(255,209,102,0.28)", fg: DS.yellow }
-              : { bg: "rgba(255,107,107,0.12)", border: "1px solid rgba(255,107,107,0.22)", fg: DS.red };
-        const hrvDisp =
-          Number.isFinite(hrv) && hrv > 0 ? `${Math.round(hrv)}ms` : "—";
-        const rhrDisp =
-          Number.isFinite(rhr) && rhr > 0 ? `${Math.round(rhr)}bpm` : "—";
-        const sleepDisp =
-          sleepHours > 0 ? `${sleepHours}hr` : "—";
-        const recDisp =
-          !Number.isFinite(Number(rec)) || Number(rec) <= 0
-            ? "—"
-            : String(Math.round(Number(rec)));
         const sessionStructure =
           (todayWorkout?.steps || [])
             .filter((s) => s && !String(s).startsWith("—"))
@@ -4191,7 +4200,6 @@ export default function App() {
             .filter(Boolean)
             .join(" · ")
           || String(tomorrowDuration || "—");
-        const gateWord = gateUpper.charAt(0) + gateUpper.slice(1).toLowerCase();
         const phaseNameHdr = perfHdr?.currentPhase || "Training";
         const currentWeekNum = perfHdr?.currentWeekNum ?? 1;
         const currentPhaseName = perfHdr?.currentPhase || "Training";
@@ -4397,16 +4405,35 @@ export default function App() {
               count, {profile?.name?.split(" ")[0] || "Rafael"}.
             </div>
             {dataSources.hasRecoverySource ? (
-              <div onClick={() => setRecoveryModalOpen(true)} style={{ ...creamCard, cursor: "pointer" }}>
-                <div style={{ position: "absolute", top: 0, left: "5%", right: "5%", height: 1, background: "linear-gradient(90deg,transparent,rgba(255,255,255,0.9) 50%,transparent)", pointerEvents: "none" }} />
-                <div style={{ position: "absolute", top: -30, right: -30, width: 160, height: 130, background: "radial-gradient(ellipse at top right, rgba(255,255,255,0.4) 0%, transparent 65%)", pointerEvents: "none" }} />
-                <div style={{ padding: "22px 22px 18px", position: "relative", zIndex: 1 }}>
-                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12 }}>
-                    <div style={{ fontSize: 9, fontWeight: 600, color: "rgba(13,14,16,0.3)", letterSpacing: "2.5px", textTransform: "uppercase", fontFamily: C.fs }}>Recovery</div>
+              <div
+                onClick={() => setRecoveryModalOpen(true)}
+                style={{
+                  ...glassCard,
+                  cursor: "pointer",
+                  background: designColors.bgCardDark,
+                  border: `1px solid ${designColors.borderSubtle}`,
+                  borderRadius: designSpacing.cardRadiusLarge,
+                }}
+              >
+                <div style={specularTop()} />
+                <div
+                  style={{
+                    position: "absolute",
+                    top: -20,
+                    right: -20,
+                    width: 120,
+                    height: 120,
+                    background: `radial-gradient(circle,${designColors.accentGoldGlow} 0%,transparent 70%)`,
+                    pointerEvents: "none",
+                  }}
+                />
+                <div style={{ padding: "16px 18px", position: "relative", zIndex: 1 }}>
+                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 4 }}>
+                    <div style={{ fontSize: designTypography.sizeCaps, fontWeight: designTypography.weightMedium, color: designColors.accentGold, letterSpacing: designTypography.trackingCaps, textTransform: "uppercase" }}>
+                      Recovery
+                    </div>
                     <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
-                      <div style={{ fontSize: 8, fontWeight: 600, color: "rgba(13,14,16,0.3)", letterSpacing: "1.5px", textTransform: "uppercase" }}>
-                        via {dataSources.primaryRecoverySource}
-                      </div>
+                      <Pill variant="default" size="sm">via {dataSources.primaryRecoverySource}</Pill>
                       <div
                         style={{
                           width: 6,
@@ -4418,108 +4445,39 @@ export default function App() {
                       />
                     </div>
                   </div>
-                  <div style={{ display: "flex", alignItems: "flex-end", justifyContent: "space-between", marginBottom: 16 }}>
-                    <div style={{ display: "flex", alignItems: "flex-end", gap: 6 }}>
-                      <div style={{ fontFamily: C.serif, fontSize: 76, color: DS.base, lineHeight: 1, letterSpacing: "-3px", fontWeight: 400 }}>{recDisp}</div>
-                      <InfoPop
-                        title={metricExplainers.readiness.title}
-                        short={metricExplainers.readiness.short}
-                        detailed={metricExplainers.readiness.detailed}
-                        userContext={
-                          recReadinessNum != null
-                            ? metricExplainers.readiness.userContext(profile, recReadinessNum)
-                            : null
-                        }
-                        icon="i"
-                        size={11}
-                        color="rgba(13,14,16,0.32)"
-                      />
-                    </div>
-                    <div style={{ textAlign: "right", paddingBottom: 10 }}>
-                      <div style={{ fontSize: 12, fontWeight: 600, color: recoveryBadge.fg, marginBottom: 4, fontFamily: C.fs }}>{gateWord}</div>
-                      <div style={{ fontSize: 10, color: "rgba(13,14,16,0.38)", fontFamily: C.fs }}>Execute as programmed</div>
-                    </div>
-                  </div>
-                  <div style={{ display: "flex", borderTop: "1px solid rgba(13,14,16,0.08)", paddingTop: 14 }}>
-                    {[
-                      ["HRV", hrvDisp, metricExplainers.hrv, hrvMetricNum, metricBaselines?.baseline_hrv_rmssd],
-                      ["RHR", rhrDisp, metricExplainers.rhr, rhrMetricNum, metricBaselines?.baseline_resting_hr],
-                    ].map(([lbl, val, expl, metricVal, baselineVal]) => (
-                      <div
-                        key={lbl}
-                        style={{
-                          flex: 1,
-                          textAlign: "center",
-                          borderRight: "1px solid rgba(13,14,16,0.08)",
-                        }}
-                      >
-                        <div
-                          style={{
-                            fontSize: 20,
-                            fontWeight: 600,
-                            color: DS.base,
-                            letterSpacing: "-0.5px",
-                            lineHeight: 1,
-                            marginBottom: 3,
-                            fontFamily: C.fs,
-                          }}
-                        >
-                          {val}
-                        </div>
-                        <div
-                          style={{
-                            display: "inline-flex",
-                            alignItems: "center",
-                            justifyContent: "center",
-                            gap: 2,
-                            fontSize: 8,
-                            fontWeight: 600,
-                            color: "rgba(13,14,16,0.3)",
-                            letterSpacing: "1.5px",
-                            textTransform: "uppercase",
-                            fontFamily: C.fs,
-                          }}
-                        >
-                          <span>{lbl}</span>
-                          <InfoPop
-                            title={expl.title}
-                            short={expl.short}
-                            detailed={expl.detailed}
-                            userContext={expl.userContext?.(profile, metricVal, baselineVal)}
-                            icon="i"
-                            size={10}
-                            color="rgba(13,14,16,0.32)"
-                          />
-                        </div>
-                      </div>
-                    ))}
-                    <div style={{ flex: 1, textAlign: "center" }}>
-                      <div
-                        style={{
-                          fontSize: 20,
-                          fontWeight: 600,
-                          color: DS.base,
-                          letterSpacing: "-0.5px",
-                          lineHeight: 1,
-                          marginBottom: 3,
-                          fontFamily: C.fs,
-                        }}
-                      >
-                        {sleepDisp}
-                      </div>
-                      <div
-                        style={{
-                          fontSize: 8,
-                          fontWeight: 600,
-                          color: "rgba(13,14,16,0.3)",
-                          letterSpacing: "1.5px",
-                          textTransform: "uppercase",
-                          fontFamily: C.fs,
-                        }}
-                      >
-                        Sleep
-                      </div>
-                    </div>
+                  <RecoveryDial
+                    score={recReadinessNum}
+                    size="compact"
+                  />
+                  <div
+                    style={{
+                      marginTop: 4,
+                      display: "grid",
+                      gridTemplateColumns: "repeat(3, minmax(0, 1fr))",
+                      gap: 8,
+                    }}
+                  >
+                    <MetricCard
+                      layout="inline"
+                      label="HRV"
+                      value={Number.isFinite(hrv) && hrv > 0 ? Math.round(hrv) : null}
+                      unit="ms"
+                      icon="heart"
+                    />
+                    <MetricCard
+                      layout="inline"
+                      label="RHR"
+                      value={Number.isFinite(rhr) && rhr > 0 ? Math.round(rhr) : null}
+                      unit="bpm"
+                      icon="moon"
+                    />
+                    <MetricCard
+                      layout="inline"
+                      label="Sleep"
+                      value={sleepHours > 0 ? Number(sleepHours).toFixed(1) : null}
+                      unit="hrs"
+                      icon="bed"
+                    />
                   </div>
                 </div>
               </div>
@@ -4606,64 +4564,29 @@ export default function App() {
                   </div>
                 ) : null}
                 <div style={{ overflowX: "auto", WebkitOverflowScrolling: "touch", marginBottom: 4 }}>
-                  {(() => {
-                    const TARGET_MIN = Math.max(1, zoneTarget);
-                    const DONE_MIN = selectedZoneMinutes || 0;
-                    const TOTAL_TICKS = 80;
-                    const LIT_TICKS = Math.min(Math.round((DONE_MIN / TARGET_MIN) * TOTAL_TICKS), TOTAL_TICKS);
-                    const TICK_WIDTH = 1;
-                    const TICK_GAP = 1.8;
-                    const TICK_STRIDE = TICK_WIDTH + TICK_GAP;
-                    const TOTAL_WIDTH = TOTAL_TICKS * TICK_STRIDE - TICK_GAP;
-                    const labelFracs = [0.25, 0.5, 0.75, 1];
-                    const HOUR_TICKS = labelFracs.map((f) => Math.round(f * TOTAL_TICKS));
-                    const HOUR_LABELS = labelFracs.map((f) => formatMinutesLabel(Math.round(TARGET_MIN * f)));
-                    return (
-                      <div style={{ position: "relative", width: TOTAL_WIDTH, maxWidth: "100%", minWidth: 0 }}>
-                        <div style={{ display: "flex", gap: `${TICK_GAP}px`, alignItems: "flex-end" }}>
-                          {Array.from({ length: TOTAL_TICKS }).map((_, i) => {
-                            const isHour = HOUR_TICKS.includes(i + 1);
-                            const isLit = i < LIT_TICKS;
-                            return (
-                              <span
-                                key={i}
-                                style={{
-                                  width: TICK_WIDTH,
-                                  height: isHour ? 11 : 6,
-                                  flexShrink: 0,
-                                  borderRadius: "0.5px",
-                                  background: isLit ? zoneConfig.color : "rgba(58,53,48,0.9)",
-                                }}
-                              />
-                            );
-                          })}
-                        </div>
-                        <div style={{ position: "relative", height: 16, marginTop: 4 }}>
-                          {HOUR_TICKS.map((tickIdx, i) => {
-                            const leftPx = (tickIdx - 1) * TICK_STRIDE;
-                            return (
-                              <span
-                                key={tickIdx}
-                                style={{
-                                  position: "absolute",
-                                  left: leftPx,
-                                  transform: "translateX(-50%)",
-                                  fontSize: 8,
-                                  fontWeight: 500,
-                                  color: "rgba(255,255,255,0.18)",
-                                  letterSpacing: "0.5px",
-                                  whiteSpace: "nowrap",
-                                  fontFamily: C.fs,
-                                }}
-                              >
-                                {HOUR_LABELS[i]}
-                              </span>
-                            );
-                          })}
-                        </div>
-                      </div>
-                    );
-                  })()}
+                  <div style={{ width: "100%", borderRadius: 10, overflow: "hidden" }}>
+                    <svg viewBox={`0 0 ${zoneChartW} ${zoneChartH}`} width="100%" height="88" preserveAspectRatio="none">
+                      <defs>
+                        <linearGradient id="today-zone-area-fill" x1="0" y1="0" x2="0" y2="1">
+                          <stop offset="0%" stopColor={designColors.accentGold} stopOpacity="0.26" />
+                          <stop offset="100%" stopColor={designColors.accentGold} stopOpacity="0" />
+                        </linearGradient>
+                      </defs>
+                      {zoneAreaPath ? (
+                        <path d={zoneAreaPath} fill="url(#today-zone-area-fill)" />
+                      ) : null}
+                      {zoneLinePath ? (
+                        <path
+                          d={zoneLinePath}
+                          fill="none"
+                          stroke={designColors.accentGold}
+                          strokeWidth="1.7"
+                          strokeLinecap="round"
+                          strokeLinejoin="round"
+                        />
+                      ) : null}
+                    </svg>
+                  </div>
                 </div>
                 <div style={{ fontSize: 10, color: "rgba(255,255,255,0.2)", marginTop: 14, fontFamily: C.fs }}>
                   This week{" "}
@@ -4796,13 +4719,13 @@ export default function App() {
                       </div>
                     )}
                     <div style={{ display: "flex", gap: 8, marginTop: coachSynthesis?.headline || coachSynthesis?.summary || coachSynthesis?.action ? 14 : 0 }}>
-                      <button
-                        type="button"
+                      <Pill
+                        variant="gold"
+                        size="md"
                         onClick={() => setCoachExpandSignal((s) => s + 1)}
-                        style={{ background: "rgba(201,168,117,0.1)", border: "1px solid rgba(201,168,117,0.2)", borderRadius: 20, padding: "7px 14px", fontSize: 11, fontWeight: 600, color: "#C9A875", cursor: "pointer", fontFamily: C.fs }}
                       >
                         Ask your coach ↗
-                      </button>
+                      </Pill>
                     </div>
                   </>
                 )}
@@ -5243,36 +5166,24 @@ export default function App() {
 
       {/* TEMP DEBUG — TEST WEEK only; remove after Phase 3B week confirmation */}
       {nav === "today" && (
-        <button
-          type="button"
-          onClick={async () => {
-            const {
-              data: { session: s },
-            } = await supabase.auth.getSession();
-            const res = await fetch("/api/metrics/range?start=2026-04-13&end=2026-04-18", {
-              headers: { Authorization: `Bearer ${s?.access_token}` },
-            });
-            const data = await res.json();
-            alert(JSON.stringify(data, null, 2));
-          }}
-          style={{
-            position: "fixed",
-            bottom: 140,
-            right: 16,
-            background: "rgba(93,255,160,0.12)",
-            border: "1px solid rgba(93,255,160,0.3)",
-            borderRadius: 20,
-            padding: "8px 14px",
-            fontSize: 10,
-            fontWeight: 600,
-            color: "#5dffa0",
-            letterSpacing: "1px",
-            cursor: "pointer",
-            zIndex: 999,
-          }}
-        >
-          TEST WEEK
-        </button>
+        <div style={{ position: "fixed", bottom: 140, right: 16, zIndex: 999 }}>
+          <Pill
+            variant="good"
+            size="md"
+            onClick={async () => {
+              const {
+                data: { session: s },
+              } = await supabase.auth.getSession();
+              const res = await fetch("/api/metrics/range?start=2026-04-13&end=2026-04-18", {
+                headers: { Authorization: `Bearer ${s?.access_token}` },
+              });
+              const data = await res.json();
+              alert(JSON.stringify(data, null, 2));
+            }}
+          >
+            TEST WEEK
+          </Pill>
+        </div>
       )}
 
       <div style={{ position:"fixed", bottom:0, left:0, right:0, maxWidth:480, margin:"0 auto", background:"rgba(255,255,255,0.032)", backdropFilter:"blur(24px)", WebkitBackdropFilter:"blur(24px)", borderTop:"1px solid rgba(255,255,255,0.09)", display:"flex", justifyContent:"space-around", padding:"12px 16px 28px", zIndex:100 }}>
