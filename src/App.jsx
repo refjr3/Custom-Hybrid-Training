@@ -20,9 +20,10 @@ import { SleepDeepDive } from "./features/today/SleepDeepDive.jsx";
 import { InfoPop } from "./components/InfoPop.jsx";
 import { metricExplainers } from "./features/explainers/metrics.js";
 import { parseExerciseLine, normalizeWorkoutBlocks } from "./features/plan/lib/normalizeWorkoutBlocks.js";
+import { parseWorkoutNote } from "./features/plan/lib/workoutNoteParser.js";
 import PerformanceView from "./features/performance/PerformanceView.jsx";
 import { mergeRowsByDay } from "./features/performance/lib/dataMerge.js";
-import { RecoveryDial, MetricCard, Pill } from "./design/components";
+import { RecoveryDial, MetricCard, Pill, Chip } from "./design/components";
 import { colors as designColors, spacing as designSpacing, typography as designTypography } from "./design/tokens";
 
 const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
@@ -4176,6 +4177,28 @@ export default function App() {
           || (todaySessionName && String(todaySessionName).includes(" — ")
             ? String(todaySessionName).split(" — ").slice(1).join(" · ")
             : `${todayZone.zone} · ${todayZone.hr}`);
+        const parsedTodayNote = parseWorkoutNote(todayCoachingNote);
+        const sessionChipItems = [
+          parsedTodayNote?.hrTarget?.range
+            ? { label: parsedTodayNote.hrTarget.zone || "HR", value: parsedTodayNote.hrTarget.range, icon: "heart" }
+            : null,
+          parsedTodayNote?.durationInfo?.display
+            ? { label: "DURATION", value: parsedTodayNote.durationInfo.display, icon: "clock" }
+            : null,
+          parsedTodayNote?.cadence?.display
+            ? { label: "CADENCE", value: parsedTodayNote.cadence.display, icon: null }
+            : null,
+        ].filter(Boolean);
+        const hasSessionChips = sessionChipItems.length > 0;
+        const sessionProse =
+          parsedTodayNote?.prose
+          || (!hasSessionChips ? (sessionStructure || (hasTodaySession ? "" : "Recovery is the work.")) : null);
+        const sessionContextNote = parsedTodayNote?.contextNote || null;
+        const weekTypePillVariant = parsedTodayNote?.weekType === "BRICK"
+          ? "intentHyrox"
+          : parsedTodayNote?.weekType === "DELOAD"
+            ? "intentRecovery"
+            : "default";
         const tomorrowStructure =
           (tomorrowWorkout?.steps || [])
             .filter((s) => s && !String(s).startsWith("—"))
@@ -4618,19 +4641,62 @@ export default function App() {
               <div style={{ position: "absolute", top: -20, right: -20, width: 120, height: 120, background: "radial-gradient(circle,rgba(210,190,155,0.10) 0%,transparent 70%)", pointerEvents: "none" }} />
               <div style={{ padding: "20px 22px", position: "relative", zIndex: 1 }}>
                 <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 10 }}>
-                  <div style={{ fontSize: 9, fontWeight: 600, color: "rgba(255,255,255,0.25)", letterSpacing: "2.5px", textTransform: "uppercase", fontFamily: C.fs }}>
+                  <div style={{ fontSize: 9, fontWeight: 600, color: designColors.accentGold, letterSpacing: "2.5px", textTransform: "uppercase", fontFamily: C.fs }}>
                     Today · {todayMeta.tag}
                   </div>
-                  <div style={{ width: 7, height: 7, borderRadius: "50%", background: DS.green, boxShadow: "0 0 8px rgba(93,255,160,0.5)", marginTop: 2 }} />
+                  {parsedTodayNote?.weekType ? (
+                    <Pill variant={weekTypePillVariant} size="xs">
+                      {parsedTodayNote.weekType} WEEK
+                    </Pill>
+                  ) : null}
                 </div>
-                <div style={{ fontSize: 21, fontWeight: 600, color: "#fff", letterSpacing: "-0.5px", lineHeight: 1.1, marginBottom: 5, fontFamily: C.fs }}>
+                <div
+                  style={{
+                    fontFamily: designTypography.fontDisplay,
+                    fontSize: 26,
+                    color: designColors.textPrimary,
+                    letterSpacing: "-0.5px",
+                    lineHeight: 1.15,
+                    marginBottom: 12,
+                  }}
+                >
                   {hasTodaySession ? todaySessionLabel : "Rest"}
                 </div>
-                <div style={{ fontSize: 11, color: "rgba(255,255,255,0.3)", lineHeight: 1.5, fontFamily: C.fs }}>
-                  {sessionStructure || (hasTodaySession ? "" : "Recovery is the work.")}
-                </div>
-                {todayCoachingNote ? (
-                  <div style={{ fontSize: 11, color: "rgba(255,255,255,0.35)", lineHeight: 1.45, marginTop: 6, fontFamily: C.fs }}>{todayCoachingNote}</div>
+                {hasSessionChips ? (
+                  <div
+                    style={{
+                      display: "flex",
+                      gap: 14,
+                      flexWrap: "wrap",
+                      marginBottom: 14,
+                      paddingBottom: 12,
+                      borderBottom: `0.5px solid ${designColors.borderHairline}`,
+                    }}
+                  >
+                    {sessionChipItems.map((chip) => (
+                      <Chip
+                        key={`${chip.label}_${chip.value}`}
+                        icon={chip.icon}
+                        label={chip.label}
+                        value={chip.value}
+                      />
+                    ))}
+                  </div>
+                ) : null}
+                {sessionProse ? (
+                  <div style={{ fontSize: 13, color: "rgba(255,255,255,0.78)", lineHeight: 1.5, marginBottom: 12, fontFamily: C.fs }}>
+                    {sessionProse}
+                  </div>
+                ) : null}
+                {sessionContextNote ? (
+                  <div style={{ marginBottom: 12 }}>
+                    <div style={{ fontSize: 8, color: designColors.accentGoldMuted, letterSpacing: "1.8px", fontWeight: 500, marginBottom: 4 }}>
+                      NOTE
+                    </div>
+                    <div style={{ fontSize: 12, color: designColors.textSecondary, lineHeight: 1.5, fontStyle: "italic", fontFamily: C.fs }}>
+                      {sessionContextNote}
+                    </div>
+                  </div>
                 ) : null}
                 <div style={{ height: 1, background: "rgba(255,255,255,0.07)", margin: "14px 0" }} />
                 <div style={{ display: "flex", gap: 18, flexWrap: "wrap" }}>
