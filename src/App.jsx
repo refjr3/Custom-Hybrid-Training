@@ -4855,7 +4855,7 @@ export default function App() {
               )
             ) : (
               <ConnectPrompt
-                icon="🌙"
+                icon="◔"
                 title="Connect a sleep tracker"
                 description="WHOOP, Oura, or Garmin — see your sleep quality, stages, and recovery correlation."
                 onConnect={openConnectionsDrawer}

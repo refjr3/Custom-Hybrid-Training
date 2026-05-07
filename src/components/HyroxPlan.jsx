@@ -8,9 +8,9 @@ const PHASES = [
 ];
 
 const WHOOP = {
-  green: { emoji: "🟢", label: "Green", color: "#4ade80", rule: "Execute as programmed." },
-  yellow: { emoji: "🟡", label: "Yellow", color: "#facc15", rule: "Reduce Z2 volume 30–40%. Quality sessions: full send or skip — no half measures." },
-  red: { emoji: "🔴", label: "Red", color: "#f87171", rule: "Full rest. No exceptions." },
+  green: { emoji: "●", label: "Green", color: "#4ade80", rule: "Execute as programmed." },
+  yellow: { emoji: "●", label: "Yellow", color: "#facc15", rule: "Reduce Z2 volume 30–40%. Quality sessions: full send or skip — no half measures." },
+  red: { emoji: "●", label: "Red", color: "#f87171", rule: "Full rest. No exceptions." },
 };
 
 const phaseFor = (w) => (w <= 3 ? 0 : w <= 6 ? 1 : w <= 9 ? 2 : 3);
@@ -76,7 +76,7 @@ const buildWeek = (w) => {
     week: w, phase: p,
     days: [
       {
-        day: "MON", icon: "🔥", label: "HYROX",
+        day: "MON", icon: "HX", label: "HYROX",
         color: "#fb923c",
         detail: isDeload ? "HYROX: full race simulation — log all splits" : `HYROX: ${hyrox}`,
         green: "Full session, full load.",
@@ -84,7 +84,7 @@ const buildWeek = (w) => {
         red: "Full rest.",
       },
       {
-        day: "TUE", icon: "🚣", label: "Z2 Erg + Mobility",
+        day: "TUE", icon: "ERG", label: "Z2 Erg + Mobility",
         color: "#38bdf8",
         detail: "Z2 erg to WHOOP strain target — SkiErg / Echo Bike / Row. Dynamic mobility after.",
         green: "Erg to strain target. HR ceiling strict.",
@@ -92,7 +92,7 @@ const buildWeek = (w) => {
         red: "Full rest.",
       },
       {
-        day: "WED", icon: "💪", label: "Upper + Z2 Erg Cap",
+        day: "WED", icon: "UPR", label: "Upper + Z2 Erg Cap",
         color: "#a78bfa",
         detail: "Upper body lift. Cap with Z2 erg to strain target — SkiErg / Echo Bike / Row. Legs off the floor.",
         green: "Full lift + Z2 cap to strain.",
@@ -100,7 +100,7 @@ const buildWeek = (w) => {
         red: "Full rest.",
       },
       {
-        day: "THU", icon: "🏃", label: "Z2 Run + Mobility",
+        day: "THU", icon: "RUN", label: "Z2 Run + Mobility",
         color: "#34d399",
         detail: "Z2 run to WHOOP strain target. HR ceiling 133–148bpm strict. Static stretch after.",
         green: "Run to strain target. Walk if HR drifts.",
@@ -108,7 +108,7 @@ const buildWeek = (w) => {
         red: "Full rest.",
       },
       {
-        day: "FRI", icon: "💪", label: "Upper Body",
+        day: "FRI", icon: "UPR", label: "Upper Body",
         color: "#a78bfa",
         detail: "Upper body lift only. No cardio. Legs arrive Saturday fresh.",
         green: "Full session.",
@@ -116,7 +116,7 @@ const buildWeek = (w) => {
         red: "Full rest.",
       },
       {
-        day: "SAT", icon: "⚡", label: isDeload ? "Benchmark" : satLabel,
+        day: "SAT", icon: "Q", label: isDeload ? "Benchmark" : satLabel,
         color: "#f43f5e",
         detail: isDeload ? "Benchmark: track + threshold combo. Log everything vs Week 1." : satSession,
         green: "Full output. 5 days from HYROX — take it.",
@@ -124,7 +124,7 @@ const buildWeek = (w) => {
         red: "Full rest.",
       },
       {
-        day: "SUN", icon: "🌿", label: "Long Z2 Run",
+        day: "SUN", icon: "L", label: "Long Z2 Run",
         color: "#4ade80",
         detail: "Long Z2 run to WHOOP strain target. HR ceiling 133–148bpm. Walk breaks as needed.",
         green: "Full duration to strain target.",
