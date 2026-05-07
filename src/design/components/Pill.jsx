@@ -3,6 +3,7 @@ import { colors, typography } from "../tokens";
 export const Pill = ({ children, variant = "default", size = "sm", onClick, ...rest }) => {
   const variants = {
     default: { color: colors.textSecondary, bg: "rgba(255,255,255,0.04)", border: colors.borderSubtle },
+    subtle: { color: "rgba(255,255,255,0.4)", bg: "rgba(255,255,255,0.03)", border: "rgba(255,255,255,0.08)" },
     gold: { color: colors.accentGold, bg: colors.accentGoldGlow, border: "rgba(201,168,117,0.4)" },
     good: { color: colors.semanticGood, bg: "rgba(107,174,126,0.12)", border: "rgba(107,174,126,0.3)" },
     warn: { color: colors.semanticWarn, bg: "rgba(201,169,97,0.12)", border: "rgba(201,169,97,0.3)" },

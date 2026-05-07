@@ -4271,6 +4271,26 @@ export default function App() {
           Number.isFinite(Number(rec)) && Number(rec) > 0 ? Math.round(Number(rec)) : null;
         const hrvMetricNum = Number.isFinite(hrv) && hrv > 0 ? Math.round(hrv) : null;
         const rhrMetricNum = Number.isFinite(rhr) && rhr > 0 ? Math.round(rhr) : null;
+        const todayInlineMetricCards = [
+          {
+            label: "HRV",
+            value: Number.isFinite(hrv) && hrv > 0 ? Math.round(hrv) : null,
+            unit: "ms",
+            icon: "heart",
+          },
+          {
+            label: "RHR",
+            value: Number.isFinite(rhr) && rhr > 0 ? Math.round(rhr) : null,
+            unit: "bpm",
+            icon: "moon",
+          },
+          {
+            label: "Sleep",
+            value: sleepHours > 0 ? Number(sleepHours).toFixed(1) : null,
+            unit: "hrs",
+            icon: "bed",
+          },
+        ];
         const openConnectionsDrawer = () => {
           setDrawerSection("connections");
           setDrawerOpen(true);
@@ -4457,27 +4477,16 @@ export default function App() {
                       gap: 8,
                     }}
                   >
-                    <MetricCard
-                      layout="inline"
-                      label="HRV"
-                      value={Number.isFinite(hrv) && hrv > 0 ? Math.round(hrv) : null}
-                      unit="ms"
-                      icon="heart"
-                    />
-                    <MetricCard
-                      layout="inline"
-                      label="RHR"
-                      value={Number.isFinite(rhr) && rhr > 0 ? Math.round(rhr) : null}
-                      unit="bpm"
-                      icon="moon"
-                    />
-                    <MetricCard
-                      layout="inline"
-                      label="Sleep"
-                      value={sleepHours > 0 ? Number(sleepHours).toFixed(1) : null}
-                      unit="hrs"
-                      icon="bed"
-                    />
+                    {todayInlineMetricCards.map((metric) => (
+                      <MetricCard
+                        key={metric.label}
+                        layout="inline"
+                        label={metric.label}
+                        value={metric.value}
+                        unit={metric.unit}
+                        icon={metric.icon}
+                      />
+                    ))}
                   </div>
                 </div>
               </div>
@@ -5168,7 +5177,7 @@ export default function App() {
       {nav === "today" && (
         <div style={{ position: "fixed", bottom: 140, right: 16, zIndex: 999 }}>
           <Pill
-            variant="good"
+            variant="subtle"
             size="md"
             onClick={async () => {
               const {
