@@ -4437,23 +4437,11 @@ export default function App() {
                 style={{
                   ...glassCard,
                   cursor: "pointer",
-                  background: designColors.bgCardDark,
-                  border: `1px solid ${designColors.borderSubtle}`,
+                  background: "rgba(255,255,255,0.012)",
+                  border: "0.5px solid rgba(255,255,255,0.03)",
                   borderRadius: designSpacing.cardRadiusLarge,
                 }}
               >
-                <div style={specularTop()} />
-                <div
-                  style={{
-                    position: "absolute",
-                    top: -20,
-                    right: -20,
-                    width: 120,
-                    height: 120,
-                    background: `radial-gradient(circle,${designColors.accentGoldGlow} 0%,transparent 70%)`,
-                    pointerEvents: "none",
-                  }}
-                />
                 <div style={{ padding: "16px 18px", position: "relative", zIndex: 1 }}>
                   <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 4 }}>
                     <div style={{ fontSize: designTypography.sizeCaps, fontWeight: designTypography.weightMedium, color: designColors.accentGold, letterSpacing: designTypography.trackingCaps, textTransform: "uppercase" }}>
