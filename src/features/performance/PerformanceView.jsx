@@ -219,7 +219,7 @@ export default function PerformanceView({ user, supabase }) {
               sparklineData={rhrSeries}
               sparklineColor={trendColor(rhrSeries, "lowerIsBetter")}
               trendDescriptor={trendText(rhrSeries)}
-              icon="moon"
+              icon="pulse"
             />
             <MetricCard
               label="Sleep"
@@ -228,7 +228,7 @@ export default function PerformanceView({ user, supabase }) {
               sparklineData={sleepSeries}
               sparklineColor={trendColor(sleepSeries, "higherIsBetter")}
               trendDescriptor={trendText(sleepSeries)}
-              icon="bed"
+              icon="moon"
             />
             <MetricCard
               label="Strain"

@@ -4266,13 +4266,13 @@ export default function App() {
             label: "RHR",
             value: Number.isFinite(rhr) && rhr > 0 ? Math.round(rhr) : null,
             unit: "bpm",
-            icon: "moon",
+            icon: "pulse",
           },
           {
             label: "Sleep",
             value: sleepHours > 0 ? Number(sleepHours).toFixed(1) : null,
             unit: "hrs",
-            icon: "bed",
+            icon: "moon",
           },
         ];
         const openConnectionsDrawer = () => {

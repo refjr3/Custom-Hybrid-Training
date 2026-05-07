@@ -5,6 +5,13 @@ export const LineIcon = ({ name, size = 16, color }) => {
 
   const icons = {
     heart: <path d="M8 14s-5-3.5-5-7.5C3 4 5 2 7.5 2 8.5 2 9.5 2.5 10 3.5c0.5-1 1.5-1.5 2.5-1.5C15 2 17 4 17 6.5c0 4-5 7.5-5 7.5L8 14z" />,
+    pulse: <path d="M2 10h3l2-5 3 10 2-5h3l2 0" />,
+    clock: (
+      <>
+        <circle cx="10" cy="10" r="7" />
+        <path d="M10 6v4l2.5 2.5" />
+      </>
+    ),
     moon: <path d="M9 2a7 7 0 100 14 6 6 0 01-3-11 7 7 0 003 11z" />,
     bed: (
       <>

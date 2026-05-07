@@ -15,6 +15,7 @@ export const Pill = ({ children, variant = "default", size = "sm", onClick, ...r
     intentRecovery: { color: colors.intentRecovery, bg: "rgba(120,200,180,0.12)", border: "rgba(120,200,180,0.3)" },
   };
   const sizes = {
+    xs: { padding: "2px 7px", fontSize: 9 },
     sm: { padding: "3px 9px", fontSize: 10 },
     md: { padding: "5px 12px", fontSize: 11 },
     lg: { padding: "7px 14px", fontSize: 11 },

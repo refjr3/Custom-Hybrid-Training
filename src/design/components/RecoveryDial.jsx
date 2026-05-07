@@ -11,6 +11,7 @@ export const RecoveryDial = ({ score, deltaVsAvg, size = "hero" }) => {
   const valueSize = size === "hero" ? typography.sizeHeroNumber : 36;
   const status = classifyRecovery(score);
   const statusVariant = status.label === "PRIMED" ? "good" : status.label === "STEADY" ? "warn" : "bad";
+  const badgeSize = size === "hero" ? "sm" : "xs";
 
   return (
     <div
@@ -76,13 +77,13 @@ export const RecoveryDial = ({ score, deltaVsAvg, size = "hero" }) => {
           {score != null ? score : "—"}
         </div>
         <div style={{ marginTop: 6 }}>
-          <Pill variant={statusVariant} size="sm">
+          <Pill variant={statusVariant} size={badgeSize}>
             {status.label}
           </Pill>
         </div>
         {deltaVsAvg != null ? (
           <div style={{ marginTop: 6 }}>
-            <Pill variant={deltaVsAvg >= 0 ? "good" : "bad"} size="sm">
+            <Pill variant={deltaVsAvg >= 0 ? "good" : "bad"} size={badgeSize}>
               {deltaVsAvg >= 0 ? "+" : ""}
               {deltaVsAvg} vs 7d
             </Pill>
