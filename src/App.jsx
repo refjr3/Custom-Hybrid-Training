@@ -24,6 +24,7 @@ import { parseExerciseLine, normalizeWorkoutBlocks } from "./features/plan/lib/n
 import { parseWorkoutNote } from "./features/plan/lib/workoutNoteParser.js";
 import PerformanceView from "./features/performance/PerformanceView.jsx";
 import { SynthesisDetailModal } from "./features/performance/components/SynthesisDetailModal.jsx";
+import TodayV2 from "./components/today/TodayV2.jsx";
 import { mergeRowsByDay } from "./features/performance/lib/dataMerge.js";
 import { buildAthleteStateSnapshot } from "./features/coaching/lib/snapshotBuilder.js";
 import { interpretPhysiologicalStates } from "./features/coaching/lib/physiologicalInterpreter.js";
@@ -42,6 +43,7 @@ const supabase = createClient(
   supabaseUrl || "https://placeholder.supabase.co",
   supabaseKey || "placeholder"
 );
+const USE_TODAY_V2 = true;
 
 function getSyncStatus(lastSync) {
   if (!lastSync) return "gray";
@@ -4415,6 +4417,48 @@ export default function App() {
           : dataSources.primarySleepSource === "WHOOP"
             ? connectedSources?.whoop?.last_sync
             : connectedSources?.garmin?.last_sync || connectedSources?.apple_health?.last_sync;
+
+        if (USE_TODAY_V2) {
+          return (
+            <TodayV2
+              profileName={profile?.name?.split(" ")[0] || "Rafael"}
+              onOpenMenu={() => {
+                setDrawerOpen(true);
+                setDrawerSection("menu");
+              }}
+              syncStatus={getSyncStatus(recoveryLastSync)}
+              phaseName={currentPhaseName}
+              currentWeekNum={currentWeekNum}
+              totalPlanWeeks={totalPlanWeeks}
+              daysAway={daysAway}
+              daysCompletedThisWeek={daysCompletedThisWeek}
+              checkInLoading={checkInLoading}
+              hasCheckIn={!!todayCheckIn}
+              onOpenCheckIn={() => setCheckInSheetOpen(true)}
+              recoveryScore={recReadinessNum}
+              recoverySource={dataSources.primaryRecoverySource}
+              hrvValue={hrvMetricNum}
+              rhrValue={rhrMetricNum}
+              sleepValue={sleepHours > 0 ? Number(sleepHours).toFixed(1) : null}
+              coachingLoading={coachingLoading || (coachBriefLoading && !coachingDecision)}
+              coachingDecision={coachingDecision}
+              coachSynthesis={coachSynthesis}
+              onOpenSignals={() => setCoachingDetailOpen(true)}
+              onAskCoach={() => setCoachExpandSignal((s) => s + 1)}
+              todayTag={todayMeta.tag}
+              weekType={parsedTodayNote?.weekType || null}
+              isRestDay={!hasTodaySession || todayMeta.key === "rest"}
+              todaySessionLabel={todaySessionLabel}
+              todayDuration={todayDuration}
+              todayZoneLabel={todayZone.zone}
+              todayWorkoutSteps={todayWorkout?.steps || []}
+              onStartSession={() => {
+                if (!todayCardData) return;
+                setNav("plan");
+              }}
+            />
+          );
+        }
 
         return (
           <div style={{ padding: "12px 16px 20px", display: "flex", flexDirection: "column", gap: 14, overflowX: "hidden" }}>
