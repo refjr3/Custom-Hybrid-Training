@@ -17,6 +17,7 @@ import { ZoneVolumeDeepDive } from "./features/today/ZoneVolumeDeepDive.jsx";
 import { ZonePicker } from "./features/today/ZonePicker.jsx";
 import { getZoneConfig, normalizeZoneKey, ZONES } from "./features/today/zoneConfig.js";
 import { SleepDeepDive } from "./features/today/SleepDeepDive.jsx";
+import { CheckInSheet } from "./features/today/components/CheckInSheet.jsx";
 import { InfoPop } from "./components/InfoPop.jsx";
 import { metricExplainers } from "./features/explainers/metrics.js";
 import { parseExerciseLine, normalizeWorkoutBlocks } from "./features/plan/lib/normalizeWorkoutBlocks.js";
@@ -2641,6 +2642,9 @@ export default function App() {
   const [recoveryModalOpen, setRecoveryModalOpen] = useState(false);
   const [z2ModalOpen, setZ2ModalOpen] = useState(false);
   const [sleepModalOpen, setSleepModalOpen] = useState(false);
+  const [checkInSheetOpen, setCheckInSheetOpen] = useState(false);
+  const [todayCheckIn, setTodayCheckIn] = useState(null);
+  const [checkInLoading, setCheckInLoading] = useState(false);
   // Auth state is declared with the rest of top-level hooks to keep hook order stable.
   const [session, setSession]       = useState(null);
   const [profile, setProfile]       = useState(null);
@@ -2680,6 +2684,37 @@ export default function App() {
       setLocalSelectedZone(normalizeZoneKey(profile.selected_zone));
     }
   }, [profile?.zone_targets, profile?.selected_zone]);
+
+  useEffect(() => {
+    let cancelled = false;
+    const loadTodayCheckIn = async () => {
+      if (!session?.user?.id || nav !== "today") {
+        if (!cancelled) {
+          setTodayCheckIn(null);
+          setCheckInLoading(false);
+        }
+        return;
+      }
+      setCheckInLoading(true);
+      const todayIso = getDeviceLocalTodayYmd();
+      const { data, error } = await supabase
+        .from("manual_checkins")
+        .select("*")
+        .eq("user_id", session.user.id)
+        .eq("date", todayIso)
+        .maybeSingle();
+      if (cancelled) return;
+      if (error) {
+        console.error("[checkin] load failed", error);
+      }
+      setTodayCheckIn(data || null);
+      setCheckInLoading(false);
+    };
+    loadTodayCheckIn();
+    return () => {
+      cancelled = true;
+    };
+  }, [nav, session?.user?.id]);
 
   const handleZoneChange = useCallback(
     async (newZone) => {
@@ -4438,6 +4473,32 @@ export default function App() {
               <br />
               count, {profile?.name?.split(" ")[0] || "Rafael"}.
             </div>
+            <div style={{ marginTop: -8, marginBottom: 18 }}>
+              <button
+                type="button"
+                onClick={() => setCheckInSheetOpen(true)}
+                style={{
+                  background: "transparent",
+                  border: "none",
+                  padding: 0,
+                  cursor: "pointer",
+                  color: todayCheckIn ? "rgba(255,255,255,0.62)" : designColors.accentGold,
+                  fontSize: 11,
+                  letterSpacing: "1.3px",
+                  fontWeight: 500,
+                  textDecoration: "underline",
+                  textUnderlineOffset: 3,
+                  fontFamily: C.fs,
+                }}
+              >
+                {checkInLoading ? "Checking..." : todayCheckIn ? "✓ Checked in" : "+ Quick check-in"}
+              </button>
+              {todayCheckIn ? (
+                <div style={{ marginTop: 4, fontSize: 9, color: "rgba(255,255,255,0.28)", letterSpacing: "1px", fontFamily: C.fs }}>
+                  Tap to edit
+                </div>
+              ) : null}
+            </div>
             {dataSources.hasRecoverySource ? (
               <div
                 onClick={() => setRecoveryModalOpen(true)}
@@ -4972,6 +5033,19 @@ export default function App() {
         supabase={supabase}
         dataSources={dataSources}
         profile={profile}
+      />
+      <CheckInSheet
+        open={checkInSheetOpen}
+        onClose={() => setCheckInSheetOpen(false)}
+        onSubmit={(row) => setTodayCheckIn(row)}
+        supabase={supabase}
+        user={session?.user || null}
+        initialAnswers={todayCheckIn ? {
+          energy: todayCheckIn.energy ?? null,
+          legs: todayCheckIn.legs ?? null,
+          motivation: todayCheckIn.motivation ?? null,
+          sleep_quality: todayCheckIn.sleep_quality ?? null,
+        } : null}
       />
 
       {nav === "plan" && (
