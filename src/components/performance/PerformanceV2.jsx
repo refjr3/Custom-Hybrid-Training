@@ -137,7 +137,7 @@ function recoveryTag(score) {
   return "recovering";
 }
 
-export default function StatsV2({
+export default function PerformanceV2({
   onOpenMenu,
   syncStatus,
   whoopConnected,
@@ -150,7 +150,7 @@ export default function StatsV2({
   todaySessionSummary,
 }) {
   const mergedDailyMetrics = fitnessSeries;
-  console.log("[StatsV2] mounted", { hasMergedDailyMetrics: !!mergedDailyMetrics?.length });
+  console.log("[PerformanceV2] mounted", { hasMergedDailyMetrics: !!mergedDailyMetrics?.length });
   const [range, setRange] = useState("8W");
   const todayIso = toIsoYmd(new Date());
   const raceIso = normalizeIso(raceDate);

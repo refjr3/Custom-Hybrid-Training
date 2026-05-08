@@ -25,7 +25,7 @@ import { parseWorkoutNote } from "./features/plan/lib/workoutNoteParser.js";
 import PerformanceView from "./features/performance/PerformanceView.jsx";
 import { SynthesisDetailModal } from "./features/performance/components/SynthesisDetailModal.jsx";
 import TodayV2 from "./components/today/TodayV2.jsx";
-import StatsV2 from "./components/stats/StatsV2";
+import PerformanceV2 from "./components/performance/PerformanceV2.jsx";
 import { mergeRowsByDay } from "./features/performance/lib/dataMerge.js";
 import { buildAthleteStateSnapshot } from "./features/coaching/lib/snapshotBuilder.js";
 import { interpretPhysiologicalStates } from "./features/coaching/lib/physiologicalInterpreter.js";
@@ -45,7 +45,7 @@ const supabase = createClient(
   supabaseKey || "placeholder"
 );
 const USE_TODAY_V2 = true;
-const USE_STATS_V2 = true;
+const USE_PERFORMANCE_V2 = true;
 
 function getSyncStatus(lastSync) {
   if (!lastSync) return "gray";
@@ -5297,27 +5297,7 @@ export default function App() {
         </div>
       )}
 
-      {nav === "perf" && (
-        <PerformanceView
-          user={session?.user || null}
-          supabase={supabase}
-        />
-      )}
-
-      {nav === "stats" && (() => {
-        const sleepH = Number(whoopData?.sleep?.hours || 0);
-        const eff = Number(whoopData?.sleep?.efficiency || 0);
-        const awakeP = Math.max(0.03, Math.min(0.12, (100 - Math.min(100, Math.max(0, eff))) / 520 + 0.035));
-        const remP = 0.22;
-        const deepP = 0.17 + Math.min(0.12, eff / 750);
-        const lightP = Math.max(0.38, 1 - awakeP - remP - deepP);
-        const parts = [awakeP, remP, lightP, deepP];
-        const pSum = parts.reduce((a, b) => a + b, 0);
-        const [awakePct, remPct, lightPct, deepPct] = parts.map((p) => (p / pSum) * 100);
-        const sleepHm =
-          sleepH > 0
-            ? `${Math.floor(sleepH)}h ${String(Math.round((sleepH % 1) * 60)).padStart(2, "0")}m`
-            : "—";
+      {nav === "perf" && (() => {
         const todayDateIso = getDeviceLocalTodayYmd();
         const planYear = parseInt(String(todayDateIso || "").slice(0, 4), 10) || new Date().getFullYear();
         const toIsoFromPlanLabel = (label) => {
@@ -5412,28 +5392,46 @@ export default function App() {
           : dataSources.primaryRecoverySource === "Oura"
             ? connectedSources?.oura?.last_sync
             : connectedSources?.garmin?.last_sync;
-        const statsSyncStatus = getSyncStatus(recoveryLastSync);
+        const perfSyncStatus = getSyncStatus(recoveryLastSync);
 
-        if (USE_STATS_V2) {
-          return (
-            <StatsV2
-              onOpenMenu={() => {
-                setDrawerOpen(true);
-                setDrawerSection("menu");
-              }}
-              syncStatus={statsSyncStatus}
-              whoopConnected={whoopConnected}
-              daysToRace={daysToRace}
-              raceCode={raceCode}
-              raceName={raceName}
-              raceDate={raceDate}
-              fitnessSeries={mergedFitnessSeries}
-              phaseBands={phaseBands}
-              todaySessionSummary={todaySessionSummary}
-            />
-          );
-        }
+        return USE_PERFORMANCE_V2 ? (
+          <PerformanceV2
+            onOpenMenu={() => {
+              setDrawerOpen(true);
+              setDrawerSection("menu");
+            }}
+            syncStatus={perfSyncStatus}
+            whoopConnected={whoopConnected}
+            daysToRace={daysToRace}
+            raceCode={raceCode}
+            raceName={raceName}
+            raceDate={raceDate}
+            fitnessSeries={mergedFitnessSeries}
+            phaseBands={phaseBands}
+            todaySessionSummary={todaySessionSummary}
+          />
+        ) : (
+          <PerformanceView
+            user={session?.user || null}
+            supabase={supabase}
+          />
+        );
+      })()}
 
+      {nav === "stats" && (() => {
+        const sleepH = Number(whoopData?.sleep?.hours || 0);
+        const eff = Number(whoopData?.sleep?.efficiency || 0);
+        const awakeP = Math.max(0.03, Math.min(0.12, (100 - Math.min(100, Math.max(0, eff))) / 520 + 0.035));
+        const remP = 0.22;
+        const deepP = 0.17 + Math.min(0.12, eff / 750);
+        const lightP = Math.max(0.38, 1 - awakeP - remP - deepP);
+        const parts = [awakeP, remP, lightP, deepP];
+        const pSum = parts.reduce((a, b) => a + b, 0);
+        const [awakePct, remPct, lightPct, deepPct] = parts.map((p) => (p / pSum) * 100);
+        const sleepHm =
+          sleepH > 0
+            ? `${Math.floor(sleepH)}h ${String(Math.round((sleepH % 1) * 60)).padStart(2, "0")}m`
+            : "—";
         const dexaStatusColor = (st) => (st === "watch" ? statusDot.watch : st === "low" ? statusDot.low : statusDot.optimal);
         return (
           <div style={{ padding: "20px" }}>
