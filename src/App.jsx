@@ -23,7 +23,11 @@ import { metricExplainers } from "./features/explainers/metrics.js";
 import { parseExerciseLine, normalizeWorkoutBlocks } from "./features/plan/lib/normalizeWorkoutBlocks.js";
 import { parseWorkoutNote } from "./features/plan/lib/workoutNoteParser.js";
 import PerformanceView from "./features/performance/PerformanceView.jsx";
+import { SynthesisDetailModal } from "./features/performance/components/SynthesisDetailModal.jsx";
 import { mergeRowsByDay } from "./features/performance/lib/dataMerge.js";
+import { buildAthleteStateSnapshot } from "./features/coaching/lib/snapshotBuilder.js";
+import { interpretPhysiologicalStates } from "./features/coaching/lib/physiologicalInterpreter.js";
+import { evaluateTrainingCompatibility } from "./features/coaching/lib/decisionEngine.js";
 import { RecoveryDial, MetricCard, Pill, Chip } from "./design/components";
 import { colors as designColors, spacing as designSpacing, typography as designTypography } from "./design/tokens";
 
@@ -530,6 +534,14 @@ function getLoadInsight(atl, ctl, tsb) {
     return `TSB of ${T.toFixed(1)} — meaningful fatigue accumulating. Your CTL of ${Ctl.toFixed(1)} shows real fitness building. Respect your recovery gates this week.`;
   }
   return `TSB of ${T.toFixed(1)} — you're carrying significant fatigue. ATL ${A.toFixed(1)} is well above CTL ${Ctl.toFixed(1)}. Red WHOOP days are non-negotiable rest right now.`;
+}
+
+function firstSentence(text) {
+  const value = String(text || "").trim();
+  if (!value) return "";
+  const punctIdx = value.search(/[.!?](\s|$)/);
+  if (punctIdx === -1) return value;
+  return value.slice(0, punctIdx + 1).trim();
 }
 
 function meanFinite(arr) {
@@ -2645,6 +2657,11 @@ export default function App() {
   const [checkInSheetOpen, setCheckInSheetOpen] = useState(false);
   const [todayCheckIn, setTodayCheckIn] = useState(null);
   const [checkInLoading, setCheckInLoading] = useState(false);
+  const [coachingSnapshot, setCoachingSnapshot] = useState(null);
+  const [coachingStates, setCoachingStates] = useState(null);
+  const [coachingDecision, setCoachingDecision] = useState(null);
+  const [coachingLoading, setCoachingLoading] = useState(false);
+  const [coachingDetailOpen, setCoachingDetailOpen] = useState(false);
   // Auth state is declared with the rest of top-level hooks to keep hook order stable.
   const [session, setSession]       = useState(null);
   const [profile, setProfile]       = useState(null);
@@ -2711,6 +2728,44 @@ export default function App() {
       setCheckInLoading(false);
     };
     loadTodayCheckIn();
+    return () => {
+      cancelled = true;
+    };
+  }, [nav, session?.user?.id]);
+
+  useEffect(() => {
+    let cancelled = false;
+    const loadCoachingDecision = async () => {
+      if (!session?.user?.id || (nav !== "today" && nav !== "perf")) {
+        if (!cancelled) {
+          setCoachingSnapshot(null);
+          setCoachingStates(null);
+          setCoachingDecision(null);
+          setCoachingLoading(false);
+        }
+        return;
+      }
+      setCoachingLoading(true);
+      try {
+        const snapshot = await buildAthleteStateSnapshot(supabase, session.user.id);
+        const states = interpretPhysiologicalStates(snapshot);
+        const decision = evaluateTrainingCompatibility(states, snapshot);
+        if (cancelled) return;
+        setCoachingSnapshot(snapshot);
+        setCoachingStates(states);
+        setCoachingDecision(decision);
+      } catch (err) {
+        if (cancelled) return;
+        console.error("[coaching] failed to build decision", err);
+        setCoachingSnapshot(null);
+        setCoachingStates(null);
+        setCoachingDecision(null);
+      } finally {
+        if (!cancelled) setCoachingLoading(false);
+      }
+    };
+
+    loadCoachingDecision();
     return () => {
       cancelled = true;
     };
@@ -4569,8 +4624,43 @@ export default function App() {
                   <div style={{ fontSize: 9, fontWeight: 600, color: "rgba(255,255,255,0.22)", letterSpacing: "2.5px", textTransform: "uppercase", fontFamily: C.fs }}>AI Coach</div>
                   <div style={{ fontSize: 9, color: "rgba(255,255,255,0.18)", letterSpacing: "1px", fontFamily: C.fs }}>{"Today's brief"}</div>
                 </div>
-                {coachBriefLoading ? (
+                {coachingLoading || (coachBriefLoading && !coachingDecision) ? (
                   <div style={{ height: 60, background: "rgba(255,255,255,0.04)", borderRadius: 10, animation: "coach-brief-pulse 2s ease-in-out infinite" }} />
+                ) : coachingDecision ? (
+                  <>
+                    <div
+                      style={{
+                        marginBottom: 10,
+                        fontSize: 18,
+                        fontWeight: 600,
+                        color: "rgba(255,255,255,0.88)",
+                        letterSpacing: "-0.3px",
+                      }}
+                    >
+                      {coachingDecision.label}
+                    </div>
+                    <div
+                      style={{
+                        fontSize: 13,
+                        color: "rgba(255,255,255,0.58)",
+                        lineHeight: 1.55,
+                      }}
+                    >
+                      {firstSentence(coachingDecision.rationale)}
+                    </div>
+                    <div style={{ fontSize: 9, color: "rgba(255,255,255,0.26)", marginTop: 10, letterSpacing: "1.2px", fontFamily: C.fs }}>
+                      {String(coachingDecision.confidence?.label || "low").toUpperCase()} CONFIDENCE
+                    </div>
+                    <div style={{ display: "flex", gap: 8, marginTop: 14 }}>
+                      <Pill
+                        variant="gold"
+                        size="md"
+                        onClick={() => setCoachingDetailOpen(true)}
+                      >
+                        WHY · {coachingDecision.signalsConsidered.length} signals ↗
+                      </Pill>
+                    </div>
+                  </>
                 ) : (
                   <>
                     {coachSynthesis?.headline && (
@@ -5046,6 +5136,13 @@ export default function App() {
           motivation: todayCheckIn.motivation ?? null,
           sleep_quality: todayCheckIn.sleep_quality ?? null,
         } : null}
+      />
+      <SynthesisDetailModal
+        open={coachingDetailOpen}
+        onClose={() => setCoachingDetailOpen(false)}
+        decision={coachingDecision}
+        states={coachingStates}
+        snapshot={coachingSnapshot}
       />
 
       {nav === "plan" && (

@@ -7,10 +7,14 @@ import {
   RecoveryDial,
   SleepStagesBar,
   StrainGauge,
-  TSBHero,
 } from "../../design/components";
 import { colors, spacing, typography } from "../../design/tokens";
 import { mergeRowsByDay } from "./lib/dataMerge.js";
+import { buildAthleteStateSnapshot } from "../coaching/lib/snapshotBuilder.js";
+import { interpretPhysiologicalStates } from "../coaching/lib/physiologicalInterpreter.js";
+import { evaluateTrainingCompatibility } from "../coaching/lib/decisionEngine.js";
+import { SynthesisHero } from "./components/SynthesisHero.jsx";
+import { SynthesisDetailModal } from "./components/SynthesisDetailModal.jsx";
 
 function avg(arr) {
   const valid = (Array.isArray(arr) ? arr : []).map(Number).filter((v) => Number.isFinite(v));
@@ -88,15 +92,29 @@ function EmptyState({ message }) {
 export default function PerformanceView({ user, supabase }) {
   const [perfData, setPerfData] = useState(null);
   const [loading, setLoading] = useState(false);
+  const [coachingBundle, setCoachingBundle] = useState(null);
+  const [showSynthesisDetail, setShowSynthesisDetail] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
     async function load() {
       if (!supabase || !user?.id) {
         setPerfData({ empty: true });
+        setCoachingBundle(null);
         return;
       }
       setLoading(true);
+
+      let nextCoachingBundle = null;
+      try {
+        const snapshot = await buildAthleteStateSnapshot(supabase, user.id);
+        const states = interpretPhysiologicalStates(snapshot);
+        const decision = evaluateTrainingCompatibility(states, snapshot);
+        nextCoachingBundle = { snapshot, states, decision };
+      } catch (coachingErr) {
+        console.error("[PerformanceView] coaching bundle error", coachingErr);
+      }
+      if (!cancelled) setCoachingBundle(nextCoachingBundle);
 
       const cutoff = new Date();
       cutoff.setDate(cutoff.getDate() - 14);
@@ -190,6 +208,7 @@ export default function PerformanceView({ user, supabase }) {
   const hrvSeries = data.sparklines?.hrv || [];
   const rhrSeries = data.sparklines?.rhr || [];
   const sleepStageData = data.sleepStages || {};
+  const coachingDecision = coachingBundle?.decision || null;
   const hasSleepStageData = [sleepStageData.deepMin, sleepStageData.remMin, sleepStageData.lightMin, sleepStageData.awakeMin]
     .some((value) => Number.isFinite(Number(value)) && Number(value) > 0);
 
@@ -210,15 +229,15 @@ export default function PerformanceView({ user, supabase }) {
         </div>
       ) : null}
 
+      {coachingDecision ? (
+        <SynthesisHero
+          decision={coachingDecision}
+          onTapWhy={() => setShowSynthesisDetail(true)}
+        />
+      ) : null}
+
       {!data.empty ? (
         <>
-          <TSBHero
-            currentTSB={data.currentTSB}
-            tsbSeries={data.tsbSeries}
-            blockStartDate={data.blockStartDate}
-            blockEndDate={data.blockEndDate}
-          />
-
           <SectionLabel meta="14 DAYS">VITAL STATS</SectionLabel>
           <div
             style={{
@@ -295,6 +314,13 @@ export default function PerformanceView({ user, supabase }) {
       ) : (
         <EmptyState message="Sync WHOOP or your wearable to see performance metrics." />
       )}
+      <SynthesisDetailModal
+        open={showSynthesisDetail}
+        onClose={() => setShowSynthesisDetail(false)}
+        decision={coachingBundle?.decision || null}
+        states={coachingBundle?.states || null}
+        snapshot={coachingBundle?.snapshot || null}
+      />
     </div>
   );
 }
