@@ -25,6 +25,7 @@ import { parseWorkoutNote } from "./features/plan/lib/workoutNoteParser.js";
 import PerformanceView from "./features/performance/PerformanceView.jsx";
 import { SynthesisDetailModal } from "./features/performance/components/SynthesisDetailModal.jsx";
 import TodayV2 from "./components/today/TodayV2.jsx";
+import StatsV2 from "./components/stats/StatsV2";
 import { mergeRowsByDay } from "./features/performance/lib/dataMerge.js";
 import { buildAthleteStateSnapshot } from "./features/coaching/lib/snapshotBuilder.js";
 import { interpretPhysiologicalStates } from "./features/coaching/lib/physiologicalInterpreter.js";
@@ -44,6 +45,7 @@ const supabase = createClient(
   supabaseKey || "placeholder"
 );
 const USE_TODAY_V2 = true;
+const USE_STATS_V2 = true;
 
 function getSyncStatus(lastSync) {
   if (!lastSync) return "gray";
@@ -5316,6 +5318,122 @@ export default function App() {
           sleepH > 0
             ? `${Math.floor(sleepH)}h ${String(Math.round((sleepH % 1) * 60)).padStart(2, "0")}m`
             : "—";
+        const todayDateIso = getDeviceLocalTodayYmd();
+        const planYear = parseInt(String(todayDateIso || "").slice(0, 4), 10) || new Date().getFullYear();
+        const toIsoFromPlanLabel = (label) => {
+          if (!label) return null;
+          const text = String(label).trim();
+          if (!text) return null;
+          if (/^\d{4}-\d{2}-\d{2}$/.test(text)) return text;
+          const parsed = new Date(`${text} ${planYear}`);
+          if (Number.isNaN(parsed.getTime())) return null;
+          return formatLocalYmd(parsed);
+        };
+        const allPlanEntries = planBlocks
+          .flatMap((block) => (block?.weeks || []).map((week) => ({ block, week })))
+          .flatMap(({ block, week }) => (week?.days || []).map((day) => ({ block, week, day })));
+        const todayPlanEntry = allPlanEntries.find(
+          ({ day }) => toIsoFromPlanLabel(day?.date || day?.date_label) === todayDateIso,
+        ) || null;
+        const todayPlanDay = todayPlanEntry?.day || null;
+        const todaySessionName = todayPlanDay ? getSessionNameForDay(todayPlanDay, "am") : null;
+        const todaySessionKey = todayPlanDay?.am_session || todayPlanDay?.am;
+        const todaySessionLabel = todayPlanDay?.am_session_custom?.split("\n")[0]
+          || WL[todaySessionKey]?.title
+          || todaySessionKey
+          || "Rest day";
+        const todayMeta = deriveSessionMeta(todaySessionName, todayPlanDay);
+        const todaySessionSummary = todayMeta?.key === "rest"
+          ? "Rest day · recover"
+          : String(todaySessionLabel || "Session").replace(/\s+/g, " ").trim();
+
+        const mergedFitnessSeries = (mergedDailyMetrics || []).map((metric) => ({
+          date: metric.date,
+          ctl: metric.ctl,
+          atl: metric.atl,
+          tsb: metric.tsb,
+          recoveryScore: metric.recoveryScore,
+          hrv: metric.hrv,
+          sleepHours: metric.sleepHours,
+        }));
+
+        const addDaysIso = (iso, days) => {
+          const d = new Date(`${iso}T12:00:00`);
+          if (Number.isNaN(d.getTime())) return iso;
+          d.setDate(d.getDate() + days);
+          return formatLocalYmd(d);
+        };
+        const rawPhaseBands = planBlocks
+          .flatMap((block) => (block?.weeks || []).map((week) => ({ block, week })))
+          .map(({ block, week }) => {
+            const dayIsos = (week?.days || [])
+              .map((day) => toIsoFromPlanLabel(day?.date || day?.date_label))
+              .filter(Boolean)
+              .sort();
+            if (!dayIsos.length) return null;
+            return {
+              label: String(week?.phase || block?.label || block?.phase || "BUILD"),
+              startIso: dayIsos[0],
+              endIso: dayIsos[dayIsos.length - 1],
+            };
+          })
+          .filter(Boolean)
+          .sort((a, b) => String(a.startIso).localeCompare(String(b.startIso)));
+        const phaseBands = rawPhaseBands.reduce((acc, band) => {
+          const prev = acc[acc.length - 1];
+          const prevLabel = String(prev?.label || "").toUpperCase();
+          const currLabel = String(band.label || "").toUpperCase();
+          const contiguous = prev?.endIso && addDaysIso(prev.endIso, 1) >= band.startIso;
+          if (prev && prevLabel === currLabel && contiguous) {
+            prev.endIso = prev.endIso >= band.endIso ? prev.endIso : band.endIso;
+          } else {
+            acc.push({ ...band });
+          }
+          return acc;
+        }, []);
+
+        const racesList = Array.isArray(profile?.races) ? profile.races : [];
+        const primaryRace = racesList.find((r) => r?.is_primary && r?.date) || racesList.find((r) => r?.date) || null;
+        const raceName = primaryRace?.name || profile?.target_race_name || null;
+        const raceDate = primaryRace?.date || profile?.target_race_date || null;
+        const raceDateObj = raceDate ? new Date(`${raceDate}T00:00:00`) : null;
+        const now = new Date();
+        const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+        const daysToRace = raceDateObj
+          ? Math.max(0, Math.ceil((raceDateObj.getTime() - todayStart.getTime()) / 86400000))
+          : null;
+        const raceCode = /dc|washington/i.test(String(raceName || ""))
+          ? "DC"
+          : (String(raceName || "").trim().split(/\s+/).filter(Boolean).pop() || "RACE");
+
+        const connectedSources = profile?.connected_sources || {};
+        const recoveryLastSync = dataSources.primaryRecoverySource === "WHOOP"
+          ? connectedSources?.whoop?.last_sync
+          : dataSources.primaryRecoverySource === "Oura"
+            ? connectedSources?.oura?.last_sync
+            : connectedSources?.garmin?.last_sync;
+        const statsSyncStatus = getSyncStatus(recoveryLastSync);
+
+        if (USE_STATS_V2) {
+          return (
+            <StatsV2
+              onOpenMenu={() => {
+                setDrawerOpen(true);
+                setDrawerSection("menu");
+              }}
+              syncStatus={statsSyncStatus}
+              whoopConnected={whoopConnected}
+              daysToRace={daysToRace}
+              raceCode={raceCode}
+              raceName={raceName}
+              raceDate={raceDate}
+              fitnessSeries={mergedFitnessSeries}
+              phaseBands={phaseBands}
+              todaySessionSummary={todaySessionSummary}
+            />
+          );
+        }
+
         const dexaStatusColor = (st) => (st === "watch" ? statusDot.watch : st === "low" ? statusDot.low : statusDot.optimal);
         return (
           <div style={{ padding: "20px" }}>

@@ -1,0 +1,17 @@
+export const T = {
+  bg: "#000",
+  cardBg: "rgba(255,255,255,0.012)",
+  cardBorder: "rgba(255,255,255,0.04)",
+  hairline: "rgba(255,255,255,0.06)",
+  gold: "#C9A875",
+  goldGlow: "rgba(201,169,97,0.12)",
+  text: "#FFFFFF",
+  text70: "rgba(255,255,255,0.70)",
+  text50: "rgba(255,255,255,0.50)",
+  text35: "rgba(255,255,255,0.35)",
+  text22: "rgba(255,255,255,0.22)",
+  good: "#6BAE7E",
+  teal: "rgb(120,200,180)",
+  serif: "'DM Serif Display', serif",
+  sans: "'DM Sans', system-ui, sans-serif",
+};
