@@ -4590,7 +4590,8 @@ export default function App() {
                   <div
                     style={{
                       marginTop: 4,
-                      display: "flex",
+                      display: "grid",
+                      gridTemplateColumns: "repeat(3, 1fr)",
                       gap: 16,
                     }}
                   >

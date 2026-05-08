@@ -23,16 +23,16 @@ export const MetricCard = ({
         padding: isInline ? 0 : spacing.cardPaddingTight,
         display: "flex",
         flexDirection: "column",
-        alignItems: isInline ? "flex-start" : "stretch",
-        flex: isInline ? 1 : undefined,
+        alignItems: isInline ? "center" : "stretch",
+        textAlign: isInline ? "center" : "left",
       }}
     >
       <div
         style={{
           display: "flex",
-          justifyContent: isInline ? "flex-start" : "space-between",
+          justifyContent: isInline ? "center" : "space-between",
           alignItems: "center",
-          gap: isInline ? 5 : 0,
+          gap: isInline ? 6 : 0,
           marginBottom: isInline ? 4 : 12,
         }}
       >
@@ -48,7 +48,7 @@ export const MetricCard = ({
           {label}
         </span>
       </div>
-      <div>
+      <div style={{ textAlign: isInline ? "center" : "left" }}>
         <span
           style={{
             fontFamily: typography.fontDisplay,
