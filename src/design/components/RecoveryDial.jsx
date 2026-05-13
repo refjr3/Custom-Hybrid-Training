@@ -1,17 +1,18 @@
 import { colors, typography, classifyRecovery } from "../tokens";
 import { Pill } from "./Pill";
 
-export const RecoveryDial = ({ score, deltaVsAvg, size = "hero" }) => {
-  const dim = size === "hero" ? 220 : 130;
-  const strokeW = size === "hero" ? 14 : 10;
+export const RecoveryDial = ({ score, deltaVsAvg, size = "hero", deltaWindowLabel = "7d" }) => {
+  const isHero = size === "hero";
+  const dim = isHero ? 220 : 140;
+  const strokeW = isHero ? 14 : 10;
   const radius = dim / 2 - strokeW / 2 - 4;
   const circumference = 2 * Math.PI * radius;
   const progress = score != null ? score / 100 : 0;
   const offset = circumference * (1 - progress);
-  const valueSize = size === "hero" ? typography.sizeHeroNumber : 36;
+  const valueSize = isHero ? typography.sizeHeroNumber : 30;
   const status = classifyRecovery(score);
   const statusVariant = status.label === "PRIMED" ? "good" : status.label === "STEADY" ? "warn" : "bad";
-  const badgeSize = size === "hero" ? "sm" : "xs";
+  const badgeSize = isHero ? "sm" : "xs";
 
   return (
     <div
@@ -19,7 +20,7 @@ export const RecoveryDial = ({ score, deltaVsAvg, size = "hero" }) => {
         display: "flex",
         justifyContent: "center",
         position: "relative",
-        margin: size === "hero" ? "20px 0 28px" : "12px 0 16px",
+        margin: isHero ? "20px 0 28px" : "8px 0 10px",
       }}
     >
       <svg width={dim} height={dim}>
@@ -52,13 +53,15 @@ export const RecoveryDial = ({ score, deltaVsAvg, size = "hero" }) => {
           left: "50%",
           transform: "translate(-50%, -50%)",
           textAlign: "center",
+          width: isHero ? "auto" : dim - 28,
+          maxWidth: dim - 28,
         }}
       >
         <div
           style={{
-            fontSize: typography.sizeCaps,
+            fontSize: isHero ? typography.sizeCaps : 8,
             color: colors.textSecondary,
-            letterSpacing: typography.trackingCaps,
+            letterSpacing: isHero ? typography.trackingCaps : "1.4px",
             fontWeight: typography.weightMedium,
           }}
         >
@@ -70,22 +73,22 @@ export const RecoveryDial = ({ score, deltaVsAvg, size = "hero" }) => {
             fontSize: valueSize,
             color: colors.textPrimary,
             lineHeight: 1,
-            letterSpacing: "-1.5px",
-            marginTop: 4,
+            letterSpacing: isHero ? "-1.5px" : "-1px",
+            marginTop: isHero ? 4 : 2,
           }}
         >
           {score != null ? score : "—"}
         </div>
-        <div style={{ marginTop: 6 }}>
+        <div style={{ marginTop: isHero ? 6 : 4 }}>
           <Pill variant={statusVariant} size={badgeSize}>
             {status.label}
           </Pill>
         </div>
         {deltaVsAvg != null ? (
-          <div style={{ marginTop: 6 }}>
+          <div style={{ marginTop: isHero ? 6 : 4 }}>
             <Pill variant={deltaVsAvg >= 0 ? "good" : "bad"} size={badgeSize}>
               {deltaVsAvg >= 0 ? "+" : ""}
-              {deltaVsAvg} vs 7d
+              {deltaVsAvg} vs {deltaWindowLabel}
             </Pill>
           </div>
         ) : null}

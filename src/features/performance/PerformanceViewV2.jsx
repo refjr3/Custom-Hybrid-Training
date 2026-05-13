@@ -84,6 +84,17 @@ function getDateRangeLabel(dailyRows) {
   return `${start} — ${end}`;
 }
 
+function getRecoveryDelta14d(currentScore, dailyRows) {
+  if (currentScore == null || !Array.isArray(dailyRows) || dailyRows.length === 0) return null;
+  const past14 = dailyRows
+    .slice(-15, -1)
+    .map((day) => day?.recoveryScore)
+    .filter((value) => value != null);
+  if (past14.length < 3) return null;
+  const baseline = past14.reduce((sum, value) => sum + value, 0) / past14.length;
+  return Math.round(currentScore - baseline);
+}
+
 function EmptyState({ message }) {
   return (
     <div
@@ -182,14 +193,8 @@ export default function PerformanceViewV2({ user, supabase }) {
       const today = daily[daily.length - 1];
       const blockStartDate = loadDaily[0]?.date || daily[0]?.date || null;
       const blockEndDate = loadDaily[loadDaily.length - 1]?.date || today?.date || null;
-      const sevenDayAvgRows = daily.slice(-7);
       const todayRecovery = Number(today?.recoveryScore);
-      const recoveryAvg = avg(sevenDayAvgRows.map((r) => r?.recoveryScore));
-      const deltaVsAvg = Number.isFinite(todayRecovery)
-        && Number.isFinite(recoveryAvg)
-        && sevenDayAvgRows.length > 0
-          ? Math.round(todayRecovery - recoveryAvg)
-          : null;
+      const deltaVs14d = Number.isFinite(todayRecovery) ? getRecoveryDelta14d(todayRecovery, daily) : null;
 
       console.log("[P18.2 diagnose] RecoveryDial score (today.recoveryScore):", today?.recoveryScore ?? null);
       console.log("[P18.2 diagnose] Engine decision object:", nextCoachingBundle?.decision || null);
@@ -204,8 +209,8 @@ export default function PerformanceViewV2({ user, supabase }) {
       setPerfData({
         empty: false,
         recoveryScore: Number.isFinite(todayRecovery) ? todayRecovery : null,
-        deltaVsAvg,
-        recovery: { deltaVsAvg },
+        deltaVsAvg: deltaVs14d,
+        recovery: { deltaVsAvg: deltaVs14d, deltaVs14d },
         hrv: today?.hrv,
         rhr: today?.rhr,
         sleepHours: today?.sleepHours ?? null,
@@ -370,7 +375,8 @@ export default function PerformanceViewV2({ user, supabase }) {
             <div style={{ flex: "0 0 140px", display: "flex", justifyContent: "center" }}>
               <RecoveryDial
                 score={today?.recoveryScore ?? data.recoveryScore}
-                deltaVsAvg={data?.recovery?.deltaVsAvg ?? data.deltaVsAvg}
+                deltaVsAvg={data?.recovery?.deltaVs14d ?? data?.recovery?.deltaVsAvg ?? data.deltaVsAvg}
+                deltaWindowLabel="14d"
                 size="compact"
               />
             </div>
@@ -513,7 +519,7 @@ export default function PerformanceViewV2({ user, supabase }) {
             >
               {strainNarrative || "No strain data available."}
             </div>
-            <StrainGauge strain={data.strain} />
+            <StrainGauge strain={data.strain} headless />
             <div
               style={{
                 marginTop: 8,
