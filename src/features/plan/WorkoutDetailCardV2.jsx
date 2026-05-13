@@ -30,6 +30,42 @@ function EffortStatRow({ label, value }) {
   );
 }
 
+function DecisionRow({ label, text, tint, rail, labelColor }) {
+  if (!text) return null;
+  return (
+    <div
+      style={{
+        display: "flex",
+        alignItems: "flex-start",
+        gap: 10,
+        padding: "11px 14px",
+        marginBottom: 6,
+        borderRadius: "0 8px 8px 0",
+        background: tint,
+        borderLeft: `2px solid ${rail}`,
+      }}
+    >
+      <div
+        style={{
+          width: 42,
+          flexShrink: 0,
+          fontSize: 10,
+          letterSpacing: "0.22em",
+          fontWeight: 700,
+          color: labelColor,
+          textTransform: "uppercase",
+          lineHeight: 1.35,
+        }}
+      >
+        {label}
+      </div>
+      <div style={{ fontSize: 13.5, color: "rgba(255,255,255,0.85)", lineHeight: 1.4 }}>
+        {text}
+      </div>
+    </div>
+  );
+}
+
 export default function WorkoutDetailCardV2({
   parsed,
   dateLabel,
@@ -202,6 +238,66 @@ export default function WorkoutDetailCardV2({
                 {modalities.length > 0 ? (
                   <div style={{ fontSize: 13, color: "rgba(255,255,255,0.7)" }}>
                     {modalities.join(" · ")}
+                  </div>
+                ) : null}
+                {effort.decisionTree ? (
+                  <div style={{ marginTop: 2 }}>
+                    <div
+                      style={{
+                        borderTop: "0.5px solid rgba(255,255,255,0.12)",
+                        borderBottom: "0.5px solid rgba(255,255,255,0.08)",
+                        padding: "10px 0",
+                        marginBottom: 10,
+                        display: "flex",
+                        alignItems: "center",
+                        justifyContent: "space-between",
+                        gap: 8,
+                      }}
+                    >
+                      <div
+                        style={{
+                          fontSize: 11,
+                          letterSpacing: "0.24em",
+                          fontWeight: 700,
+                          color: "#E8DCC4",
+                          textTransform: "uppercase",
+                        }}
+                      >
+                        DAY-OF DECISION
+                      </div>
+                      <div
+                        style={{
+                          fontSize: 10,
+                          letterSpacing: "0.16em",
+                          fontWeight: 600,
+                          color: "rgba(255,255,255,0.45)",
+                          textTransform: "uppercase",
+                        }}
+                      >
+                        COACH&apos;S CALL
+                      </div>
+                    </div>
+                    <DecisionRow
+                      label="GO"
+                      text={effort.decisionTree.go}
+                      tint="rgba(74,222,128,0.05)"
+                      rail="#4ade80"
+                      labelColor="#4ade80"
+                    />
+                    <DecisionRow
+                      label="HOLD"
+                      text={effort.decisionTree.hold}
+                      tint="rgba(251,191,36,0.05)"
+                      rail="#fbbf24"
+                      labelColor="#fbbf24"
+                    />
+                    <DecisionRow
+                      label="REST"
+                      text={effort.decisionTree.rest}
+                      tint="rgba(248,113,113,0.05)"
+                      rail="#f87171"
+                      labelColor="#f87171"
+                    />
                   </div>
                 ) : null}
                 {effort.coachingNote ? (

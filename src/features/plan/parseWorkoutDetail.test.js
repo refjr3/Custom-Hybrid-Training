@@ -53,9 +53,20 @@ const sampleC = {
   note: "Z2 Erg + Mobility — Row, Ski or Echo Bike. Cap at WHOOP strain target. HR 133-148bpm. Dynamic mobility after.",
 };
 
+const sampleD = {
+  sessionName: "HYROX Motion — Group Class",
+  phase: "Peak",
+  workout: { type: "HYROX", duration: "60 min" },
+  note: `Coach-led group class at gym. Just show up and work.
+🟢 Full send.
+🟡 Full send or skip — no half measures.
+🔴 Full rest.`,
+};
+
 const parsedA = parseWorkoutDetail(sampleA);
 const parsedB = parseWorkoutDetail(sampleB);
 const parsedC = parseWorkoutDetail(sampleC);
+const parsedD = parseWorkoutDetail(sampleD);
 
 console.log("=== Sample A ===");
 console.log(JSON.stringify(parsedA, null, 2));
@@ -63,3 +74,5 @@ console.log("\n=== Sample B ===");
 console.log(JSON.stringify(parsedB, null, 2));
 console.log("\n=== Sample C ===");
 console.log(JSON.stringify(parsedC, null, 2));
+console.log("\n=== Sample D ===");
+console.log(JSON.stringify(parsedD, null, 2));

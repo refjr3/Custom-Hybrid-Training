@@ -92,28 +92,104 @@ function parseExerciseLine(line) {
   };
 }
 
-function inferEffortBlock(label, lines) {
+function escapeRegex(value) {
+  return String(value || "").replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
+function removeMatchedSnippets(source, snippets) {
+  let next = String(source || "");
+  snippets
+    .map(cleanLine)
+    .filter(Boolean)
+    .forEach((snippet) => {
+      const re = new RegExp(escapeRegex(snippet), "gi");
+      next = next.replace(re, " ");
+    });
+  return next;
+}
+
+function cleanupCoachingText(value) {
+  return String(value || "")
+    .replace(/\s+/g, " ")
+    .replace(/\s([,.;:!?])/g, "$1")
+    .replace(/^[\s@,.;:!?\-–—]+/, "")
+    .replace(/\(\s*\)/g, "")
+    .replace(/(?:^|\s)[-–—](?:\s|$)/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+function findModalityList(source) {
+  const lines = String(source || "")
+    .split(/[\n.!?]/)
+    .map(cleanLine)
+    .filter(Boolean);
+  const re = /\b(echo bike|row|ski|run|bike)\b/gi;
+  const map = {
+    "echo bike": "Echo Bike",
+    row: "Row",
+    ski: "Ski",
+    run: "Run",
+    bike: "Bike",
+  };
+  for (const line of lines) {
+    const matches = [];
+    let m;
+    while ((m = re.exec(line)) !== null) {
+      matches.push({
+        raw: m[0].toLowerCase(),
+        index: m.index,
+        end: m.index + String(m[0]).length,
+      });
+    }
+    const unique = [];
+    matches.forEach((item) => {
+      const label = map[item.raw];
+      if (label && !unique.includes(label)) unique.push(label);
+    });
+    const hasListSeparator = /,|\bor\b|\band\b|\//i.test(line);
+    if (unique.length >= 2 && hasListSeparator) {
+      const first = matches[0];
+      const last = matches[matches.length - 1];
+      const snippet = line.slice(first.index, last.end);
+      return { modalities: unique, snippets: [snippet] };
+    }
+  }
+  return { modalities: [], snippets: [] };
+}
+
+function extractDecisionTree(lines) {
+  const rows = lines.map(cleanLine).filter(Boolean);
+  const snippets = [];
+  const decision = { go: null, hold: null, rest: null };
+  rows.forEach((line) => {
+    const go = line.match(/^(?:[-•]\s*)?(?:🟢|GREEN)\s*[:\-]?\s*(.+)$/i);
+    const hold = line.match(/^(?:[-•]\s*)?(?:🟡|YELLOW)\s*[:\-]?\s*(.+)$/i);
+    const rest = line.match(/^(?:[-•]\s*)?(?:🔴|RED)\s*[:\-]?\s*(.+)$/i);
+    if (go) {
+      decision.go = cleanLine(go[1]).replace(/[.]+$/, "");
+      snippets.push(line);
+    } else if (hold) {
+      decision.hold = cleanLine(hold[1]).replace(/[.]+$/, "");
+      snippets.push(line);
+    } else if (rest) {
+      decision.rest = cleanLine(rest[1]).replace(/[.]+$/, "");
+      snippets.push(line);
+    }
+  });
+  if (decision.go && decision.hold && decision.rest) {
+    return { decisionTree: decision, snippets };
+  }
+  return { decisionTree: null, snippets: [] };
+}
+
+function isDecisionLine(line) {
+  return /^(?:[-•]\s*)?(?:🟢|🟡|🔴|GREEN|YELLOW|RED)\b/i.test(cleanLine(line));
+}
+
+function inferEffortBlock(label, lines, options = {}) {
   const body = lines.map(cleanLine).filter(Boolean);
   const joined = body.join(" ");
-  const lower = joined.toLowerCase();
-
-  const hrMatch = joined.match(/HR\s*(\d{2,3})\s*[-–]\s*(\d{2,3})(?:\s*bpm)?/i);
-  const capMatch = joined.match(/Cap at ([^.!\n]+)/i);
-  const rpeMatch = joined.match(
-    /(comfortably hard effort|very easy|easy|moderate|hard effort|all[- ]out|conversational pace)/i,
-  );
-
-  const knownModalities = [
-    { key: "row", label: "Row" },
-    { key: "ski", label: "Ski" },
-    { key: "echo bike", label: "Echo Bike" },
-    { key: "run", label: "Run" },
-  ];
-  let modalities = knownModalities
-    .filter((m) => lower.includes(m.key))
-    .map((m) => m.label)
-    .filter((value, index, arr) => arr.indexOf(value) === index);
-  if (/\bbike\b/i.test(joined) && !/echo bike/i.test(joined)) modalities = [...modalities, "Bike"];
 
   let primary = body[0] || "Workout effort";
   let introRemainder = "";
@@ -127,7 +203,41 @@ function inferEffortBlock(label, lines) {
   const coachingParts = [];
   if (introRemainder) coachingParts.push(introRemainder);
   if (body.length > 1) coachingParts.push(...body.slice(1));
-  const coachingNote = coachingParts.join(" ").trim() || null;
+  const coachingSource = coachingParts.join("\n").trim();
+
+  const hrMatch = joined.match(/HR\s*(\d{2,3})\s*[-–]\s*(\d{2,3})(?:\s*bpm)?/i);
+  const hrSnippet = joined.match(/HR\s*\d{2,3}\s*[-–]\s*\d{2,3}(?:\s*bpm)?\.?/i)?.[0] || null;
+
+  const capMatch = joined.match(/Cap at ([^.!\n]+)/i);
+  const capSnippet = joined.match(/Cap at [^.!\n]+\.?/i)?.[0] || null;
+
+  const rpeMatch = joined.match(
+    /(comfortably hard effort|very easy|easy|moderate|hard effort|all[- ]out|conversational pace)/i,
+  );
+  const durationSnippet = joined.match(/\b\d+(?:\s*[-–]\s*\d+)?\s*(?:min|mins|minutes)\b(?:\s+[A-Za-z]+)?/i)?.[0] || null;
+  const phaseSnippet = joined.match(/\b(?:base|accumulation|intensification|peak|sharpen|taper|deload|race)\s+phase\b/i)?.[0] || null;
+
+  const { modalities, snippets: modalitySnippets } = findModalityList(coachingSource);
+  const { decisionTree, snippets: decisionSnippets } = extractDecisionTree(coachingSource.split("\n"));
+
+  const cleanedCoaching = cleanupCoachingText(
+    removeMatchedSnippets(coachingSource, [
+      hrSnippet,
+      capSnippet,
+      rpeMatch?.[0],
+      durationSnippet,
+      phaseSnippet,
+      ...modalitySnippets,
+      ...decisionSnippets,
+    ]),
+  );
+
+  let coachingNote = cleanedCoaching || null;
+  if (!coachingNote && decisionTree) {
+    const leadLine = body.find((line) => !isDecisionLine(line));
+    const fallback = cleanLine(leadLine);
+    if (fallback) coachingNote = fallback;
+  }
 
   return {
     label,
@@ -139,13 +249,15 @@ function inferEffortBlock(label, lines) {
       rpe: rpeMatch ? rpeMatch[1] : null,
       cap: capMatch ? capMatch[1].trim() : null,
       modalities,
+      decisionTree,
       coachingNote: coachingNote || null,
     },
     exercises: [],
+    syntheticLeading: Boolean(options.syntheticLeading),
   };
 }
 
-function inferBlock(label, duration, lines) {
+function inferBlock(label, duration, lines, options = {}) {
   const body = lines.map(cleanLine).filter(Boolean);
   const parsedRows = body.map((line) => ({ line, parsed: parseExerciseLine(line) }));
   const exerciseRows = parsedRows.map((row) => row.parsed).filter(Boolean);
@@ -160,10 +272,11 @@ function inferBlock(label, duration, lines) {
       effort: null,
       exercises: exerciseRows,
       residualNotes,
+      syntheticLeading: Boolean(options.syntheticLeading),
     };
   }
 
-  const effortBlock = inferEffortBlock(label, body);
+  const effortBlock = inferEffortBlock(label, body, options);
   return {
     ...effortBlock,
     duration,
@@ -178,23 +291,31 @@ function splitIntoSections(note) {
     .filter((line) => line && !/^WEEK TYPE:/i.test(line));
 
   const sections = [];
+  const looseLines = [];
   let current = null;
 
   lines.forEach((line) => {
     const header = parseHeader(line);
     if (header) {
       if (current && current.lines.length > 0) sections.push(current);
-      current = { label: header.label, duration: header.duration, lines: [] };
+      current = { label: header.label, duration: header.duration, lines: [], syntheticLeading: false };
       return;
     }
-    if (!current) {
-      current = { label: "THE EFFORT", duration: null, lines: [] };
-    }
-    current.lines.push(line);
+    if (!current) looseLines.push(line);
+    else current.lines.push(line);
   });
 
   if (current && current.lines.length > 0) sections.push(current);
-  return sections;
+  return { sections, looseLines, allLines: lines };
+}
+
+function extractFinisherNote(allLines, looseLines) {
+  const explicit = allLines
+    .map((line) => line.match(/\b(?:FINISHER|EXTRA)\s*:\s*(.+)$/i))
+    .find(Boolean);
+  if (explicit) return cleanLine(explicit[1]) || null;
+  const standalone = (looseLines || []).map(cleanLine).find((line) => parseExerciseLine(line));
+  return standalone || null;
 }
 
 function sumMinutesFromBlocks(blocks) {
@@ -216,29 +337,39 @@ function sumMinutesFromBlocks(blocks) {
 
 export function parseWorkoutDetail({ sessionName, workout, note, phase }) {
   const { kicker, headline } = splitSessionName(sessionName);
-  const sections = splitIntoSections(note || "");
+  const { sections, looseLines, allLines } = splitIntoSections(note || "");
 
-  const parsedBlocks = sections.length > 0
-    ? sections.map((section) => inferBlock(section.label, section.duration, section.lines))
-    : [
-        inferEffortBlock("THE EFFORT", [String(note || "").trim() || "Session detail unavailable."]),
-      ];
+  let parsedBlocks = sections.length > 0
+    ? sections.map((section) => inferBlock(section.label, section.duration, section.lines, { syntheticLeading: false }))
+    : [];
+  if (looseLines.length > 0) {
+    const leading = inferBlock("THE EFFORT", null, looseLines, { syntheticLeading: true });
+    parsedBlocks = [leading, ...parsedBlocks];
+  }
+  if (parsedBlocks.length === 0) {
+    parsedBlocks = [
+      inferEffortBlock("THE EFFORT", [String(note || "").trim() || "Session detail unavailable."], { syntheticLeading: true }),
+    ];
+  }
+
+  const hasExerciseBlock = parsedBlocks.some((block) => block.type === "exercises");
+  if (hasExerciseBlock && parsedBlocks[0]?.type === "effort" && parsedBlocks[0]?.syntheticLeading) {
+    const effort = parsedBlocks[0]?.effort || {};
+    const noStructuredEffortFacts =
+      !effort.hr &&
+      !effort.rpe &&
+      !effort.cap &&
+      (!Array.isArray(effort.modalities) || effort.modalities.length === 0) &&
+      !effort.decisionTree;
+    if (noStructuredEffortFacts) parsedBlocks = parsedBlocks.slice(1);
+  }
 
   const duration = formatDurationLabel(workout?.duration || "") || sumMinutesFromBlocks(parsedBlocks);
   const tag = toUpperWords(workout?.type || "");
 
-  const finisherNote = (() => {
-    const residualNotes = parsedBlocks.flatMap((block) => block.residualNotes || []).map(cleanLine).filter(Boolean);
-    if (residualNotes.length > 0) return residualNotes[residualNotes.length - 1];
-    const allExerciseNotes = parsedBlocks
-      .flatMap((block) => block.exercises || [])
-      .map((ex) => cleanLine(ex.note))
-      .filter(Boolean);
-    if (allExerciseNotes.length > 0) return allExerciseNotes[allExerciseNotes.length - 1];
-    return workout?.note ? String(workout.note).trim() : null;
-  })();
+  const finisherNote = extractFinisherNote(allLines, looseLines);
 
-  const blocks = parsedBlocks.map(({ residualNotes, ...block }) => block);
+  const blocks = parsedBlocks.map(({ residualNotes, syntheticLeading, ...block }) => block);
 
   return {
     kicker: kicker || toUpperWords(workout?.type || "WORKOUT"),
