@@ -7,7 +7,7 @@
  * explain the recommendation in practical coaching language.
  */
 
-export const ENGINE_VERSION = "1.0.0";
+export const ENGINE_VERSION = "1.0.1";
 
 export function evaluateTrainingCompatibility(states, snapshot) {
   const decision = computeDecisionState(states, snapshot);
@@ -27,13 +27,16 @@ export function evaluateTrainingCompatibility(states, snapshot) {
 }
 
 function computeDecisionState(states, snapshot) {
+  // Hard-stop mismatch: autonomic suppression + elevated strain signal.
   if (states.aerobic.state === "strained" && states.nervousSystem.state === "suppressed") {
     return { state: "red", label: "Back Off Today" };
   }
+  // Sleep debt plus poor subjective readiness should still hold a red veto.
   if (states.sleep.state === "insufficient" && states.subjective.state === "flat") {
     return { state: "red", label: "Back Off Today" };
   }
 
+  // Contextual fatigue check: heavy fatigue alone should not force red.
   if (states.fatigue.state === "heavy") {
     const otherNegatives = [
       states.nervousSystem.state === "suppressed",
@@ -44,7 +47,11 @@ function computeDecisionState(states, snapshot) {
     if (otherNegatives >= 1) {
       return { state: "red", label: "Back Off Today" };
     }
-    return { state: "yellow", label: "Hold the Line", fatigueOverride: true };
+    return {
+      state: "yellow",
+      label: "Hold the Line",
+      fatigueOverride: true,
+    };
   }
 
   const greenSignals = [
