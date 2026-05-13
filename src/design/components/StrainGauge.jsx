@@ -2,7 +2,7 @@ import { colors, spacing, typography } from "../tokens";
 
 const STRAIN_MAX = 21;
 
-export const StrainGauge = ({ strain }) => {
+export const StrainGauge = ({ strain, headless = false }) => {
   const strainValue = Number(strain);
   const hasStrain = Number.isFinite(strainValue) && strainValue >= 0;
 
@@ -17,6 +17,38 @@ export const StrainGauge = ({ strain }) => {
   const currentZone = hasStrain
     ? zones.find((zone) => strainValue >= zone.min && strainValue <= zone.max) || zones[zones.length - 1]
     : null;
+
+  if (headless) {
+    return (
+      <div style={{ position: "relative", height: 8, borderRadius: 4, overflow: "hidden", display: "flex" }}>
+        {zones.map((zone) => (
+          <div
+            key={zone.label}
+            style={{
+              flex: zone.max - zone.min + 1,
+              background: zone.color,
+              opacity: 0.5,
+            }}
+          />
+        ))}
+        {hasStrain ? (
+          <div
+            style={{
+              position: "absolute",
+              left: `${markerPos}%`,
+              top: -2,
+              transform: "translateX(-50%)",
+              width: 3,
+              height: 12,
+              background: colors.textPrimary,
+              borderRadius: 1,
+              boxShadow: "0 0 4px rgba(0,0,0,0.6)",
+            }}
+          />
+        ) : null}
+      </div>
+    );
+  }
 
   return (
     <div
