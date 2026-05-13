@@ -2,8 +2,8 @@
 import { useEffect, useState } from "react";
 import {
   LineIcon,
-  MiniChart,
   RecoveryDial,
+  Sparkline,
   StrainGauge,
 } from "../../design/components";
 import { buildAthleteStateSnapshot } from "../coaching/lib/snapshotBuilder.js";
@@ -66,6 +66,22 @@ function getStrainBand(strain) {
   if (n < 14) return { label: "MODERATE", color: "#fbbf24" };
   if (n < 18) return { label: "HIGH", color: "#fb923c" };
   return { label: "ALL-OUT", color: "#f87171" };
+}
+
+function formatRangeDate(dateStr) {
+  if (!dateStr) return "";
+  const parsed = new Date(`${String(dateStr).slice(0, 10)}T12:00:00`);
+  if (Number.isNaN(parsed.getTime())) return "";
+  return parsed.toLocaleDateString("en-US", { month: "short", day: "numeric" }).toUpperCase();
+}
+
+function getDateRangeLabel(dailyRows) {
+  const rows = Array.isArray(dailyRows) ? dailyRows : [];
+  if (!rows.length) return "";
+  const start = formatRangeDate(rows[0]?.date);
+  const end = formatRangeDate(rows[rows.length - 1]?.date);
+  if (!start || !end) return "";
+  return `${start} — ${end}`;
 }
 
 function EmptyState({ message }) {
@@ -233,6 +249,7 @@ export default function PerformanceViewV2({ user, supabase }) {
   const strainBand = getStrainBand(data.strain);
   const strainNarrative = getStrainNarrative(data.strain);
   const verdict = splitVerdictLabel(coachingDecision?.label || "");
+  const dateRangeLabel = getDateRangeLabel(dailyRows);
 
   return (
     <div style={{ background: "#0A0A0A", padding: "0 18px 100px" }}>
@@ -407,7 +424,13 @@ export default function PerformanceViewV2({ user, supabase }) {
               </div>
             </div>
             <div style={{ flex: "0 0 60%", maxWidth: "60%" }}>
-              <MiniChart data={hrvSeries} color="#4ade80" height={36} trend={hrvTrend} />
+              <Sparkline
+                data={hrvSeries}
+                color="#4ade80"
+                height={36}
+                latestValueLabel={metricValue(today?.hrv ?? data.hrv)}
+                dateRangeLabel={dateRangeLabel}
+              />
               <div style={{ marginTop: 4, fontSize: 11, letterSpacing: "0.04em", color: "rgba(255,255,255,0.45)" }}>
                 {trendCaption(hrvSeries)}
               </div>
@@ -438,7 +461,13 @@ export default function PerformanceViewV2({ user, supabase }) {
               </div>
             </div>
             <div style={{ flex: "0 0 60%", maxWidth: "60%" }}>
-              <MiniChart data={rhrSeries} color={rhrChartColor} height={36} trend={rhrTrend} />
+              <Sparkline
+                data={rhrSeries}
+                color={rhrChartColor}
+                height={36}
+                latestValueLabel={metricValue(today?.rhr ?? data.rhr)}
+                dateRangeLabel={dateRangeLabel}
+              />
               <div style={{ marginTop: 4, fontSize: 11, letterSpacing: "0.04em", color: "rgba(255,255,255,0.45)" }}>
                 {trendCaption(rhrSeries)}
               </div>
