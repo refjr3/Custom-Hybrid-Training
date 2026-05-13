@@ -80,26 +80,28 @@ export default function WorkoutDetailCardV2({
         >
           {safeUpper(safe.tag || "SESSION")}
         </div>
-        <button
-          type="button"
-          onClick={onEdit}
-          style={{
-            marginLeft: "auto",
-            background: "transparent",
-            border: "1px solid rgba(255,255,255,0.15)",
-            color: "rgba(255,255,255,0.72)",
-            borderRadius: 999,
-            padding: "5px 11px",
-            fontSize: 10,
-            letterSpacing: "0.12em",
-            fontWeight: 600,
-            textTransform: "uppercase",
-            cursor: "pointer",
-            fontFamily: "'DM Sans', sans-serif",
-          }}
-        >
-          ✎ Edit
-        </button>
+        {typeof onEdit === "function" ? (
+          <button
+            type="button"
+            onClick={onEdit}
+            style={{
+              marginLeft: "auto",
+              background: "transparent",
+              border: "1px solid rgba(255,255,255,0.15)",
+              color: "rgba(255,255,255,0.72)",
+              borderRadius: 999,
+              padding: "5px 11px",
+              fontSize: 10,
+              letterSpacing: "0.12em",
+              fontWeight: 600,
+              textTransform: "uppercase",
+              cursor: "pointer",
+              fontFamily: "'DM Sans', sans-serif",
+            }}
+          >
+            ✎ Edit
+          </button>
+        ) : null}
       </div>
 
       <div
@@ -271,26 +273,28 @@ export default function WorkoutDetailCardV2({
         </div>
       ) : null}
 
-      <button
-        type="button"
-        onClick={onMarkComplete}
-        style={{
-          width: "100%",
-          marginTop: 14,
-          padding: 14,
-          background: "rgba(212,169,83,0.08)",
-          border: "1px solid rgba(212,169,83,0.35)",
-          borderRadius: 14,
-          color: "#D4A953",
-          fontSize: 14,
-          fontWeight: 600,
-          textAlign: "center",
-          cursor: "pointer",
-          fontFamily: "'DM Sans', sans-serif",
-        }}
-      >
-        ✓ Mark complete
-      </button>
+      {typeof onMarkComplete === "function" ? (
+        <button
+          type="button"
+          onClick={onMarkComplete}
+          style={{
+            width: "100%",
+            marginTop: 14,
+            padding: 14,
+            background: "rgba(212,169,83,0.08)",
+            border: "1px solid rgba(212,169,83,0.35)",
+            borderRadius: 14,
+            color: "#D4A953",
+            fontSize: 14,
+            fontWeight: 600,
+            textAlign: "center",
+            cursor: "pointer",
+            fontFamily: "'DM Sans', sans-serif",
+          }}
+        >
+          ✓ Mark complete
+        </button>
+      ) : null}
     </div>
   );
 }
