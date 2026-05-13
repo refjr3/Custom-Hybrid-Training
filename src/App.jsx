@@ -23,6 +23,7 @@ import { metricExplainers } from "./features/explainers/metrics.js";
 import { parseExerciseLine, normalizeWorkoutBlocks } from "./features/plan/lib/normalizeWorkoutBlocks.js";
 import { parseWorkoutNote } from "./features/plan/lib/workoutNoteParser.js";
 import PerformanceView from "./features/performance/PerformanceView.jsx";
+import PerformanceViewV2 from "./features/performance/PerformanceViewV2.jsx";
 import { SynthesisDetailModal } from "./features/performance/components/SynthesisDetailModal.jsx";
 import TodayV2 from "./components/today/TodayV2.jsx";
 import { mergeRowsByDay } from "./features/performance/lib/dataMerge.js";
@@ -46,6 +47,7 @@ const supabase = createClient(
 const USE_TODAY_V2 = true;
 const USE_WORKOUT_DETAIL_V2 = true;
 const USE_PLAN_LAYOUT_V2 = true;
+const USE_PERFORMANCE_V2 = true;
 
 function getSyncStatus(lastSync) {
   if (!lastSync) return "gray";
@@ -5300,10 +5302,17 @@ export default function App() {
       )}
 
       {nav === "perf" && (
-        <PerformanceView
-          user={session?.user || null}
-          supabase={supabase}
-        />
+        USE_PERFORMANCE_V2 ? (
+          <PerformanceViewV2
+            user={session?.user || null}
+            supabase={supabase}
+          />
+        ) : (
+          <PerformanceView
+            user={session?.user || null}
+            supabase={supabase}
+          />
+        )
       )}
 
       {nav === "stats" && (() => {
