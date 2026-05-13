@@ -2,8 +2,8 @@
 import { useEffect, useState } from "react";
 import {
   LineIcon,
-  MiniChart,
   RecoveryDial,
+  Sparkline,
   StrainGauge,
 } from "../../design/components";
 import { buildAthleteStateSnapshot } from "../coaching/lib/snapshotBuilder.js";
@@ -68,6 +68,33 @@ function getStrainBand(strain) {
   return { label: "ALL-OUT", color: "#f87171" };
 }
 
+function formatRangeDate(dateStr) {
+  if (!dateStr) return "";
+  const parsed = new Date(`${String(dateStr).slice(0, 10)}T12:00:00`);
+  if (Number.isNaN(parsed.getTime())) return "";
+  return parsed.toLocaleDateString("en-US", { month: "short", day: "numeric" }).toUpperCase();
+}
+
+function getDateRangeLabel(dailyRows) {
+  const rows = Array.isArray(dailyRows) ? dailyRows : [];
+  if (!rows.length) return "";
+  const start = formatRangeDate(rows[0]?.date);
+  const end = formatRangeDate(rows[rows.length - 1]?.date);
+  if (!start || !end) return "";
+  return `${start} — ${end}`;
+}
+
+function getRecoveryDelta14d(currentScore, dailyRows) {
+  if (currentScore == null || !Array.isArray(dailyRows) || dailyRows.length === 0) return null;
+  const past14 = dailyRows
+    .slice(-15, -1)
+    .map((day) => day?.recoveryScore)
+    .filter((value) => value != null);
+  if (past14.length < 3) return null;
+  const baseline = past14.reduce((sum, value) => sum + value, 0) / past14.length;
+  return Math.round(currentScore - baseline);
+}
+
 function EmptyState({ message }) {
   return (
     <div
@@ -106,10 +133,14 @@ export default function PerformanceViewV2({ user, supabase }) {
       setLoading(true);
 
       let nextCoachingBundle = null;
+      let snapshotForDecision = null;
+      let statesForDecision = null;
       try {
         const snapshot = await buildAthleteStateSnapshot(supabase, user.id);
         const states = interpretPhysiologicalStates(snapshot);
         const decision = evaluateTrainingCompatibility(states, snapshot);
+        snapshotForDecision = snapshot;
+        statesForDecision = states;
         nextCoachingBundle = { snapshot, states, decision };
       } catch (coachingErr) {
         console.error("[PerformanceViewV2] coaching bundle error", coachingErr);
@@ -166,21 +197,31 @@ export default function PerformanceViewV2({ user, supabase }) {
       const today = daily[daily.length - 1];
       const blockStartDate = loadDaily[0]?.date || daily[0]?.date || null;
       const blockEndDate = loadDaily[loadDaily.length - 1]?.date || today?.date || null;
-      const sevenDayAvgRows = daily.slice(-7);
       const todayRecovery = Number(today?.recoveryScore);
-      const recoveryAvg = avg(sevenDayAvgRows.map((r) => r?.recoveryScore));
-      const deltaVsAvg = Number.isFinite(todayRecovery)
-        && Number.isFinite(recoveryAvg)
-        && sevenDayAvgRows.length > 0
-          ? Math.round(todayRecovery - recoveryAvg)
-          : null;
+      const deltaVs14d = Number.isFinite(todayRecovery) ? getRecoveryDelta14d(todayRecovery, daily) : null;
+
+      console.log("[P18.2 diagnose] RecoveryDial score (today.recoveryScore):", today?.recoveryScore ?? null);
+      console.log("[P18.2 diagnose] Engine decision object:", nextCoachingBundle?.decision || null);
+      console.log("[P18.2 diagnose] Engine snapshot object:", nextCoachingBundle?.snapshot || null);
+      console.log("[P18.2 diagnose] Engine states object:", nextCoachingBundle?.states || null);
+      console.log("[P18.2 diagnose] Date alignment:", {
+        dialDate: today?.date || null,
+        snapshotAsOfDate: nextCoachingBundle?.snapshot?.asOfDate || null,
+      });
+      console.log("[P18.5 diagnose] Fatigue inputs:", {
+        tsb: snapshotForDecision?.tsb ?? null,
+        ctl: snapshotForDecision?.ctl ?? null,
+        atl: snapshotForDecision?.atl ?? null,
+        fatigueState: statesForDecision?.fatigue?.state ?? null,
+        fatigueRule: statesForDecision?.fatigue?.rule ?? null,
+      });
 
       setDailyRows(daily);
       setPerfData({
         empty: false,
         recoveryScore: Number.isFinite(todayRecovery) ? todayRecovery : null,
-        deltaVsAvg,
-        recovery: { deltaVsAvg },
+        deltaVsAvg: deltaVs14d,
+        recovery: { deltaVsAvg: deltaVs14d, deltaVs14d },
         hrv: today?.hrv,
         rhr: today?.rhr,
         sleepHours: today?.sleepHours ?? null,
@@ -224,6 +265,7 @@ export default function PerformanceViewV2({ user, supabase }) {
   const strainBand = getStrainBand(data.strain);
   const strainNarrative = getStrainNarrative(data.strain);
   const verdict = splitVerdictLabel(coachingDecision?.label || "");
+  const dateRangeLabel = getDateRangeLabel(dailyRows);
 
   return (
     <div style={{ background: "#0A0A0A", padding: "0 18px 100px" }}>
@@ -340,15 +382,16 @@ export default function PerformanceViewV2({ user, supabase }) {
             </div>
           </div>
 
-          <div style={{ display: "flex", gap: 18, padding: "8px 0 24px", alignItems: "center" }}>
-            <div style={{ flex: "0 0 40%", maxWidth: "40%", minWidth: 130 }}>
+          <div style={{ display: "flex", gap: 20, padding: "8px 0 24px", alignItems: "center" }}>
+            <div style={{ flex: "0 0 140px", display: "flex", justifyContent: "center" }}>
               <RecoveryDial
                 score={today?.recoveryScore ?? data.recoveryScore}
-                deltaVsAvg={data?.recovery?.deltaVsAvg ?? data.deltaVsAvg}
-                size="hero"
+                deltaVsAvg={data?.recovery?.deltaVs14d ?? data?.recovery?.deltaVsAvg ?? data.deltaVsAvg}
+                deltaWindowLabel="14d"
+                size="compact"
               />
             </div>
-            <div style={{ flex: 1 }}>
+            <div style={{ flex: 1, minWidth: 0 }}>
               <div
                 style={{
                   fontSize: 11,
@@ -398,7 +441,13 @@ export default function PerformanceViewV2({ user, supabase }) {
               </div>
             </div>
             <div style={{ flex: "0 0 60%", maxWidth: "60%" }}>
-              <MiniChart data={hrvSeries} color="#4ade80" height={36} trend={hrvTrend} />
+              <Sparkline
+                data={hrvSeries}
+                color="#4ade80"
+                height={36}
+                latestValueLabel={metricValue(today?.hrv ?? data.hrv)}
+                dateRangeLabel={dateRangeLabel}
+              />
               <div style={{ marginTop: 4, fontSize: 11, letterSpacing: "0.04em", color: "rgba(255,255,255,0.45)" }}>
                 {trendCaption(hrvSeries)}
               </div>
@@ -429,7 +478,13 @@ export default function PerformanceViewV2({ user, supabase }) {
               </div>
             </div>
             <div style={{ flex: "0 0 60%", maxWidth: "60%" }}>
-              <MiniChart data={rhrSeries} color={rhrChartColor} height={36} trend={rhrTrend} />
+              <Sparkline
+                data={rhrSeries}
+                color={rhrChartColor}
+                height={36}
+                latestValueLabel={metricValue(today?.rhr ?? data.rhr)}
+                dateRangeLabel={dateRangeLabel}
+              />
               <div style={{ marginTop: 4, fontSize: 11, letterSpacing: "0.04em", color: "rgba(255,255,255,0.45)" }}>
                 {trendCaption(rhrSeries)}
               </div>
@@ -475,7 +530,7 @@ export default function PerformanceViewV2({ user, supabase }) {
             >
               {strainNarrative || "No strain data available."}
             </div>
-            <StrainGauge strain={data.strain} />
+            <StrainGauge strain={data.strain} headless />
             <div
               style={{
                 marginTop: 8,
