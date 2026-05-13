@@ -133,10 +133,14 @@ export default function PerformanceViewV2({ user, supabase }) {
       setLoading(true);
 
       let nextCoachingBundle = null;
+      let snapshotForDecision = null;
+      let statesForDecision = null;
       try {
         const snapshot = await buildAthleteStateSnapshot(supabase, user.id);
         const states = interpretPhysiologicalStates(snapshot);
         const decision = evaluateTrainingCompatibility(states, snapshot);
+        snapshotForDecision = snapshot;
+        statesForDecision = states;
         nextCoachingBundle = { snapshot, states, decision };
       } catch (coachingErr) {
         console.error("[PerformanceViewV2] coaching bundle error", coachingErr);
@@ -205,11 +209,11 @@ export default function PerformanceViewV2({ user, supabase }) {
         snapshotAsOfDate: nextCoachingBundle?.snapshot?.asOfDate || null,
       });
       console.log("[P18.5 diagnose] Fatigue inputs:", {
-        tsb: nextCoachingBundle?.snapshot?.tsb ?? null,
-        ctl: nextCoachingBundle?.snapshot?.ctl ?? null,
-        atl: nextCoachingBundle?.snapshot?.atl ?? null,
-        fatigueState: nextCoachingBundle?.states?.fatigue?.state ?? null,
-        fatigueRule: nextCoachingBundle?.states?.fatigue?.rule ?? null,
+        tsb: snapshotForDecision?.tsb ?? null,
+        ctl: snapshotForDecision?.ctl ?? null,
+        atl: snapshotForDecision?.atl ?? null,
+        fatigueState: statesForDecision?.fatigue?.state ?? null,
+        fatigueRule: statesForDecision?.fatigue?.rule ?? null,
       });
 
       setDailyRows(daily);
