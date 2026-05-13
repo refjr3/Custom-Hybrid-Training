@@ -349,15 +349,15 @@ export default function PerformanceViewV2({ user, supabase }) {
             </div>
           </div>
 
-          <div style={{ display: "flex", gap: 18, padding: "8px 0 24px", alignItems: "center" }}>
-            <div style={{ flex: "0 0 40%", maxWidth: "40%", minWidth: 130 }}>
+          <div style={{ display: "flex", gap: 20, padding: "8px 0 24px", alignItems: "center" }}>
+            <div style={{ flex: "0 0 140px", display: "flex", justifyContent: "center" }}>
               <RecoveryDial
                 score={today?.recoveryScore ?? data.recoveryScore}
                 deltaVsAvg={data?.recovery?.deltaVsAvg ?? data.deltaVsAvg}
-                size="hero"
+                size="compact"
               />
             </div>
-            <div style={{ flex: 1 }}>
+            <div style={{ flex: 1, minWidth: 0 }}>
               <div
                 style={{
                   fontSize: 11,
