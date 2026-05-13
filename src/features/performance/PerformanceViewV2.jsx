@@ -175,6 +175,15 @@ export default function PerformanceViewV2({ user, supabase }) {
           ? Math.round(todayRecovery - recoveryAvg)
           : null;
 
+      console.log("[P18.2 diagnose] RecoveryDial score (today.recoveryScore):", today?.recoveryScore ?? null);
+      console.log("[P18.2 diagnose] Engine decision object:", nextCoachingBundle?.decision || null);
+      console.log("[P18.2 diagnose] Engine snapshot object:", nextCoachingBundle?.snapshot || null);
+      console.log("[P18.2 diagnose] Engine states object:", nextCoachingBundle?.states || null);
+      console.log("[P18.2 diagnose] Date alignment:", {
+        dialDate: today?.date || null,
+        snapshotAsOfDate: nextCoachingBundle?.snapshot?.asOfDate || null,
+      });
+
       setDailyRows(daily);
       setPerfData({
         empty: false,
