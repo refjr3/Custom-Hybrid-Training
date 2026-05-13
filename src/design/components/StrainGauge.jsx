@@ -18,32 +18,62 @@ export const StrainGauge = ({ strain, headless = false }) => {
     ? zones.find((zone) => strainValue >= zone.min && strainValue <= zone.max) || zones[zones.length - 1]
     : null;
 
+  if (headless) {
+    return (
+      <div style={{ position: "relative", height: 8, borderRadius: 4, overflow: "hidden", display: "flex" }}>
+        {zones.map((zone) => (
+          <div
+            key={zone.label}
+            style={{
+              flex: zone.max - zone.min + 1,
+              background: zone.color,
+              opacity: 0.5,
+            }}
+          />
+        ))}
+        {hasStrain ? (
+          <div
+            style={{
+              position: "absolute",
+              left: `${markerPos}%`,
+              top: -2,
+              transform: "translateX(-50%)",
+              width: 3,
+              height: 12,
+              background: colors.textPrimary,
+              borderRadius: 1,
+              boxShadow: "0 0 4px rgba(0,0,0,0.6)",
+            }}
+          />
+        ) : null}
+      </div>
+    );
+  }
+
   return (
     <div
       style={{
-        background: headless ? "transparent" : colors.bgCardSubtle,
-        border: headless ? "none" : `0.5px solid ${colors.borderSubtle}`,
-        borderRadius: headless ? 0 : spacing.cardRadius,
-        padding: headless ? 0 : spacing.cardPaddingTight,
+        background: colors.bgCardSubtle,
+        border: `0.5px solid ${colors.borderSubtle}`,
+        borderRadius: spacing.cardRadius,
+        padding: spacing.cardPaddingTight,
       }}
     >
-      {!headless ? (
-        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", marginBottom: 10 }}>
-          <span style={{ fontSize: typography.sizeCaps, color: colors.textSecondary, letterSpacing: typography.trackingMicro, fontWeight: typography.weightMedium }}>
-            STRAIN
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", marginBottom: 10 }}>
+        <span style={{ fontSize: typography.sizeCaps, color: colors.textSecondary, letterSpacing: typography.trackingMicro, fontWeight: typography.weightMedium }}>
+          STRAIN
+        </span>
+        <div>
+          <span style={{ fontFamily: typography.fontDisplay, fontSize: 24, color: colors.textPrimary, letterSpacing: "-0.4px" }}>
+            {hasStrain ? strainValue.toFixed(1) : "—"}
           </span>
-          <div>
-            <span style={{ fontFamily: typography.fontDisplay, fontSize: 24, color: colors.textPrimary, letterSpacing: "-0.4px" }}>
-              {hasStrain ? strainValue.toFixed(1) : "—"}
-            </span>
-            <span style={{ fontSize: 10, color: currentZone?.color || colors.textTertiary, marginLeft: 8, letterSpacing: "1.4px", fontWeight: typography.weightMedium }}>
-              {currentZone?.label || "NO DATA"}
-            </span>
-          </div>
+          <span style={{ fontSize: 10, color: currentZone?.color || colors.textTertiary, marginLeft: 8, letterSpacing: "1.4px", fontWeight: typography.weightMedium }}>
+            {currentZone?.label || "NO DATA"}
+          </span>
         </div>
-      ) : null}
+      </div>
 
-      <div style={{ position: "relative", height: 8, borderRadius: 4, overflow: "hidden", marginBottom: headless ? 0 : 6, display: "flex" }}>
+      <div style={{ position: "relative", height: 8, borderRadius: 4, overflow: "hidden", marginBottom: 6, display: "flex" }}>
         {zones.map((zone) => (
           <div
             key={zone.label}
@@ -71,15 +101,13 @@ export const StrainGauge = ({ strain, headless = false }) => {
         ) : null}
       </div>
 
-      {!headless ? (
-        <div style={{ display: "flex", justifyContent: "space-between", fontSize: 8, color: colors.textTertiary, letterSpacing: "0.8px", fontWeight: typography.weightMedium }}>
-          <span>0</span>
-          <span>10</span>
-          <span>14</span>
-          <span>18</span>
-          <span>21</span>
-        </div>
-      ) : null}
+      <div style={{ display: "flex", justifyContent: "space-between", fontSize: 8, color: colors.textTertiary, letterSpacing: "0.8px", fontWeight: typography.weightMedium }}>
+        <span>0</span>
+        <span>10</span>
+        <span>14</span>
+        <span>18</span>
+        <span>21</span>
+      </div>
     </div>
   );
 };
