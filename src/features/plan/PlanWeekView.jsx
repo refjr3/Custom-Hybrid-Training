@@ -184,6 +184,7 @@ export default function PlanWeekView({
   onOpenPlanBuilder,
   onSwitchVariant,
   onPlanRefetch,
+  useWorkoutDetailV2 = false,
 }) {
   const [selectedWeekId, setSelectedWeekId] = useState(null);
   const [selectedDayIndex, setSelectedDayIndex] = useState(null);
@@ -794,6 +795,8 @@ export default function PlanWeekView({
         <SessionHeroCard
           day={selectedDay}
           isToday={selectedDayIndex === todayIndex}
+          weekPhase={String(currentWeek?.phase || currentWeek?._blockLabel || "")}
+          useWorkoutDetailV2={useWorkoutDetailV2}
           completionState={resolveCompletionState(selectedDay)}
           onMarkComplete={() => {
             setFeedbackDay(selectedDay);
