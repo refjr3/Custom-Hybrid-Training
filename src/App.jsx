@@ -44,6 +44,7 @@ const supabase = createClient(
   supabaseKey || "placeholder"
 );
 const USE_TODAY_V2 = true;
+const USE_WORKOUT_DETAIL_V2 = true;
 
 function getSyncStatus(lastSync) {
   if (!lastSync) return "gray";
@@ -5199,6 +5200,7 @@ export default function App() {
           activeVariantId={activeVariantId}
           planBlocks={planBlocks}
           planLoading={planLoading}
+          useWorkoutDetailV2={USE_WORKOUT_DETAIL_V2}
           onOpenPlanBuilder={() => setPlanBuilderOpen(true)}
           onSwitchVariant={switchVariant}
           onPlanRefetch={() => fetchPlan(session?.access_token)}

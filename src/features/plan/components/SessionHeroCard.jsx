@@ -1,6 +1,8 @@
 import { useEffect, useMemo, useState } from "react";
 import { getSessionIntent } from "./intentConfig.js";
 import { parseWorkoutNote } from "../lib/workoutNoteParser.js";
+import { parseWorkoutDetail } from "../parseWorkoutDetail.js";
+import WorkoutDetailCardV2 from "../WorkoutDetailCardV2.jsx";
 import { Pill } from "../../../design/components";
 import { colors, typography } from "../../../design/tokens";
 
@@ -135,6 +137,8 @@ export function SessionHeroCard({
   onSaveNote,
   onResetComplete,
   completionState,
+  weekPhase,
+  useWorkoutDetailV2 = false,
 }) {
   const [editMode, setEditMode] = useState(false);
   const [editedBlocks, setEditedBlocks] = useState([]);
@@ -161,10 +165,83 @@ export function SessionHeroCard({
   const blocks = editMode ? editedBlocks : rawBlocks;
   const dayLabel = String(day?.day_name || day?.day || "").toUpperCase();
   const dateLabel = formatShortDate(day?.calendar_date || day?._iso || day?.date, day?.date_label);
+  const displayDateLabel = `${dayLabel || "DAY"}${dateLabel ? ` · ${dateLabel}` : ""}`;
+  const inferredDurationMin = useMemo(
+    () =>
+      rawBlocks.reduce((sum, block) => {
+        const mins = Number(block?.duration_min || 0);
+        return Number.isFinite(mins) ? sum + mins : sum;
+      }, 0),
+    [rawBlocks],
+  );
+  const parserWorkout = useMemo(() => {
+    const type = String(day?.am_session_type || intent?.label || day?.am_session || day?.am || "Session").toUpperCase();
+    const blockDuration = inferredDurationMin > 0 ? `${inferredDurationMin} min` : "";
+    return {
+      type,
+      duration: parsedNote.duration || blockDuration || "",
+      note: noteFull || null,
+    };
+  }, [day?.am_session, day?.am_session_type, day?.am, intent?.label, inferredDurationMin, parsedNote.duration, noteFull]);
+  const parsedWorkout = useMemo(
+    () =>
+      parseWorkoutDetail({
+        sessionName: String(day?.am_session_custom || day?.am_session || day?.am || "").split("\n")[0].trim(),
+        workout: parserWorkout,
+        note: noteFull,
+        phase: weekPhase,
+      }),
+    [day?.am_session_custom, day?.am_session, day?.am, parserWorkout, noteFull, weekPhase],
+  );
 
   const plannedKey = day?.am_session || day?.am;
   const canMarkComplete =
     !!plannedKey && !String(plannedKey).toUpperCase().includes("REST") && !isCompleted;
+
+  if (useWorkoutDetailV2 && !editMode) {
+    return (
+      <div>
+        <WorkoutDetailCardV2
+          parsed={parsedWorkout}
+          dateLabel={displayDateLabel}
+          onEdit={() => setEditMode(true)}
+          onMarkComplete={canMarkComplete ? onMarkComplete : undefined}
+        />
+        {isCompleted ? (
+          <div
+            style={{
+              marginTop: -14,
+              marginBottom: 28,
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+              gap: 8,
+            }}
+          >
+            <div style={{ fontSize: 11, color: "rgba(120,200,180,0.7)" }}>
+              {resolvedCompletion?.auto
+                ? `✓ Detected from ${String(resolvedCompletion.source || "activity").toUpperCase()}`
+                : "✓ Completed"}
+            </div>
+            {isManualCompleted ? (
+              <button
+                type="button"
+                onClick={onResetComplete}
+                style={{
+                  border: "none",
+                  background: "transparent",
+                  padding: 0,
+                  cursor: "pointer",
+                }}
+              >
+                <Pill variant="default" size="sm">↺ Reset</Pill>
+              </button>
+            ) : null}
+          </div>
+        ) : null}
+      </div>
+    );
+  }
 
   const handleSave = async () => {
     if (hasBlocks) {
