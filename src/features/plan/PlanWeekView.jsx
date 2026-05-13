@@ -6,6 +6,8 @@ import { SessionHeroCard } from "./components/SessionHeroCard.jsx";
 import { SessionFeedbackSheet } from "./components/SessionFeedbackSheet.jsx";
 import { WeeklyStructureSnapshot } from "./components/WeeklyStructureSnapshot.jsx";
 import { PlanQuadrant } from "./components/PlanQuadrant.jsx";
+import DaySelectorV2 from "./components/DaySelectorV2.jsx";
+import PhaseProgressCardV2 from "./components/PhaseProgressCardV2.jsx";
 import { WeekFocusModal } from "./components/WeekFocusModal.jsx";
 import { ComplianceDetailModal } from "./components/ComplianceDetailModal.jsx";
 import { getCompletionState, matchSessionsToActivities } from "./lib/sessionActivityMatcher.js";
@@ -185,6 +187,7 @@ export default function PlanWeekView({
   onSwitchVariant,
   onPlanRefetch,
   useWorkoutDetailV2 = false,
+  usePlanLayoutV2 = false,
 }) {
   const [selectedWeekId, setSelectedWeekId] = useState(null);
   const [selectedDayIndex, setSelectedDayIndex] = useState(null);
@@ -333,16 +336,22 @@ export default function PlanWeekView({
     );
     const currentName = String(currentWeek?.phase || currentWeek?._blockLabel || base?.phaseName || "").trim();
     const progress = base || {
+      phaseName: currentName || "Base",
       phase: { name: currentName || "Base" },
       phaseTotalWeeks: 1,
       currentWeekInPhase: 1,
+      daysIntoPhase: Math.max(1, Number(todayInfo?.todayDayIndex || 0) + 1),
+      totalDaysInPhase: 7,
       phaseProgressPercent: 100,
       phaseStatusLabel: "Wk 1 of 1",
     };
     return {
+      phaseName: progress.phaseName || currentName || "Base",
       isDeloadWeek: /deload/i.test(String(currentWeek?.subtitle || "")),
       currentWeekInPhase: progress.currentWeekInPhase,
       phaseTotalWeeks: progress.phaseTotalWeeks,
+      daysIntoPhase: Number(progress.daysIntoPhase || 1),
+      totalDaysInPhase: Number(progress.totalDaysInPhase || 7),
       phaseProgressPercent: Number(progress.phaseProgressPercent || 0),
       phaseStatusLabel: progress.phaseStatusLabel || `Wk ${progress.currentWeekInPhase} of ${progress.phaseTotalWeeks}`,
     };
@@ -791,6 +800,14 @@ export default function PlanWeekView({
         </button>
       ) : null}
 
+      {usePlanLayoutV2 ? (
+        <DaySelectorV2
+          weekDays={daysState}
+          selectedDayIndex={selectedDayIndex}
+          onSelectDay={(idx) => setSelectedDayIndex(idx)}
+        />
+      ) : null}
+
       {selectedDay ? (
         <SessionHeroCard
           day={selectedDay}
@@ -808,18 +825,32 @@ export default function PlanWeekView({
         />
       ) : null}
 
-      <PlanQuadrant
-        weekDays={daysState}
-        todayDayIndex={isCurrentWeek ? todayIndex : null}
-        phaseProgress={phaseCtx}
-        weekFocus={weekFocus}
-        weekType={weeklyStructure.weekType}
-        completionResolver={resolveCompletionState}
-        onTapDay={(idx) => setSelectedDayIndex(idx)}
-        onTapPhase={() => setShowBlockTimeline(true)}
-        onTapFocus={() => setShowWeekFocusModal(true)}
-        onTapCompliance={() => setShowComplianceModal(true)}
-      />
+      {usePlanLayoutV2 ? (
+        <PhaseProgressCardV2
+          phaseName={phaseCtx.phaseName}
+          weekOfPhase={phaseCtx.currentWeekInPhase}
+          totalWeeksInPhase={phaseCtx.phaseTotalWeeks}
+          dayOfPhase={phaseCtx.daysIntoPhase}
+          totalDaysInPhase={phaseCtx.totalDaysInPhase}
+          progressPercent={phaseCtx.phaseProgressPercent}
+          completedCount={weeklyStructure.completedCount}
+          plannedSessions={weeklyStructure.plannedSessions}
+          daysToRace={daysToRace}
+        />
+      ) : (
+        <PlanQuadrant
+          weekDays={daysState}
+          todayDayIndex={isCurrentWeek ? todayIndex : null}
+          phaseProgress={phaseCtx}
+          weekFocus={weekFocus}
+          weekType={weeklyStructure.weekType}
+          completionResolver={resolveCompletionState}
+          onTapDay={(idx) => setSelectedDayIndex(idx)}
+          onTapPhase={() => setShowBlockTimeline(true)}
+          onTapFocus={() => setShowWeekFocusModal(true)}
+          onTapCompliance={() => setShowComplianceModal(true)}
+        />
+      )}
 
       <WeeklyStructureSnapshot
         days={daysState}
