@@ -19,6 +19,7 @@ export function evaluateTrainingCompatibility(states, snapshot) {
     state: decision.state,
     label: decision.label,
     rationale,
+    fatigueOverride: decision.fatigueOverride === true,
     confidence,
     signalsConsidered,
     engineVersion: ENGINE_VERSION,
@@ -29,11 +30,21 @@ function computeDecisionState(states, snapshot) {
   if (states.aerobic.state === "strained" && states.nervousSystem.state === "suppressed") {
     return { state: "red", label: "Back Off Today" };
   }
-  if (states.fatigue.state === "heavy") {
-    return { state: "red", label: "Back Off Today" };
-  }
   if (states.sleep.state === "insufficient" && states.subjective.state === "flat") {
     return { state: "red", label: "Back Off Today" };
+  }
+
+  if (states.fatigue.state === "heavy") {
+    const otherNegatives = [
+      states.nervousSystem.state === "suppressed",
+      states.aerobic.state === "strained",
+      states.sleep.state === "insufficient",
+      states.subjective.state === "flat",
+    ].filter(Boolean).length;
+    if (otherNegatives >= 1) {
+      return { state: "red", label: "Back Off Today" };
+    }
+    return { state: "yellow", label: "Hold the Line", fatigueOverride: true };
   }
 
   const greenSignals = [
@@ -92,6 +103,10 @@ function generateRationale(decision, states, snapshot) {
       : "All systems stable.";
     rationale += ` Today's planned ${session?.session || "training"} aligns well with your current state.`;
     return rationale;
+  }
+
+  if (decision.fatigueOverride) {
+    return "Accumulated load is high, but recovery markers are strong. Execute the planned session — keep intensity honest, skip optional add-ons.";
   }
 
   if (stressors.length && isLowIntensityPlan && session?.session) {

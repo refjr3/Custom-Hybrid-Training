@@ -204,6 +204,13 @@ export default function PerformanceViewV2({ user, supabase }) {
         dialDate: today?.date || null,
         snapshotAsOfDate: nextCoachingBundle?.snapshot?.asOfDate || null,
       });
+      console.log("[P18.5 diagnose] Fatigue inputs:", {
+        tsb: nextCoachingBundle?.snapshot?.tsb ?? null,
+        ctl: nextCoachingBundle?.snapshot?.ctl ?? null,
+        atl: nextCoachingBundle?.snapshot?.atl ?? null,
+        fatigueState: nextCoachingBundle?.states?.fatigue?.state ?? null,
+        fatigueRule: nextCoachingBundle?.states?.fatigue?.rule ?? null,
+      });
 
       setDailyRows(daily);
       setPerfData({
