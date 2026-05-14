@@ -26,6 +26,7 @@ import PerformanceView from "./features/performance/PerformanceView.jsx";
 import PerformanceViewV2 from "./features/performance/PerformanceViewV2.jsx";
 import { SynthesisDetailModal } from "./features/performance/components/SynthesisDetailModal.jsx";
 import TodayV2 from "./components/today/TodayV2.jsx";
+import TodayV3 from "./components/today/TodayV3.jsx";
 import { mergeRowsByDay } from "./features/performance/lib/dataMerge.js";
 import { buildAthleteStateSnapshot } from "./features/coaching/lib/snapshotBuilder.js";
 import { interpretPhysiologicalStates } from "./features/coaching/lib/physiologicalInterpreter.js";
@@ -45,6 +46,7 @@ const supabase = createClient(
   supabaseKey || "placeholder"
 );
 const USE_TODAY_V2 = true;
+const USE_TODAY_V3 = true;
 const USE_WORKOUT_DETAIL_V2 = true;
 const USE_PLAN_LAYOUT_V2 = true;
 const USE_PERFORMANCE_V2 = true;
@@ -4422,45 +4424,59 @@ export default function App() {
             ? connectedSources?.whoop?.last_sync
             : connectedSources?.garmin?.last_sync || connectedSources?.apple_health?.last_sync;
 
+        const todayV2Props = {
+          profileName: profile?.name?.split(" ")[0] || "Rafael",
+          onOpenMenu: () => {
+            setDrawerOpen(true);
+            setDrawerSection("menu");
+          },
+          syncStatus: getSyncStatus(recoveryLastSync),
+          phaseName: currentPhaseName,
+          currentWeekNum,
+          totalPlanWeeks,
+          daysAway,
+          daysCompletedThisWeek,
+          checkInLoading,
+          hasCheckIn: !!todayCheckIn,
+          onOpenCheckIn: () => setCheckInSheetOpen(true),
+          recoveryScore: recReadinessNum,
+          recoverySource: dataSources.primaryRecoverySource,
+          hrvValue: hrvMetricNum,
+          rhrValue: rhrMetricNum,
+          sleepValue: sleepHours > 0 ? Number(sleepHours).toFixed(1) : null,
+          coachingLoading: coachingLoading || (coachBriefLoading && !coachingDecision),
+          coachingDecision,
+          coachSynthesis,
+          onOpenSignals: () => setCoachingDetailOpen(true),
+          onAskCoach: () => setCoachExpandSignal((s) => s + 1),
+          todayTag: todayMeta.tag,
+          weekType: parsedTodayNote?.weekType || null,
+          isRestDay: !hasTodaySession || todayMeta.key === "rest",
+          todaySessionLabel,
+          todayDuration,
+          todayZoneLabel: todayZone.zone,
+          todayWorkoutSteps: todayWorkout?.steps || [],
+          onStartSession: () => {
+            if (!todayCardData) return;
+            setNav("plan");
+          },
+        };
+
+        if (USE_TODAY_V3) {
+          return (
+            <TodayV3
+              {...todayV2Props}
+              todaySessionName={todaySessionName}
+              todayWorkout={todayWorkout}
+              todayCoachingNote={todayCoachingNote}
+              daily={mergedDailyMetrics}
+            />
+          );
+        }
+
         if (USE_TODAY_V2) {
           return (
-            <TodayV2
-              profileName={profile?.name?.split(" ")[0] || "Rafael"}
-              onOpenMenu={() => {
-                setDrawerOpen(true);
-                setDrawerSection("menu");
-              }}
-              syncStatus={getSyncStatus(recoveryLastSync)}
-              phaseName={currentPhaseName}
-              currentWeekNum={currentWeekNum}
-              totalPlanWeeks={totalPlanWeeks}
-              daysAway={daysAway}
-              daysCompletedThisWeek={daysCompletedThisWeek}
-              checkInLoading={checkInLoading}
-              hasCheckIn={!!todayCheckIn}
-              onOpenCheckIn={() => setCheckInSheetOpen(true)}
-              recoveryScore={recReadinessNum}
-              recoverySource={dataSources.primaryRecoverySource}
-              hrvValue={hrvMetricNum}
-              rhrValue={rhrMetricNum}
-              sleepValue={sleepHours > 0 ? Number(sleepHours).toFixed(1) : null}
-              coachingLoading={coachingLoading || (coachBriefLoading && !coachingDecision)}
-              coachingDecision={coachingDecision}
-              coachSynthesis={coachSynthesis}
-              onOpenSignals={() => setCoachingDetailOpen(true)}
-              onAskCoach={() => setCoachExpandSignal((s) => s + 1)}
-              todayTag={todayMeta.tag}
-              weekType={parsedTodayNote?.weekType || null}
-              isRestDay={!hasTodaySession || todayMeta.key === "rest"}
-              todaySessionLabel={todaySessionLabel}
-              todayDuration={todayDuration}
-              todayZoneLabel={todayZone.zone}
-              todayWorkoutSteps={todayWorkout?.steps || []}
-              onStartSession={() => {
-                if (!todayCardData) return;
-                setNav("plan");
-              }}
-            />
+            <TodayV2 {...todayV2Props} />
           );
         }
 
