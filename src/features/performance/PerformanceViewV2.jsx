@@ -12,6 +12,7 @@ import { evaluateTrainingCompatibility } from "../coaching/lib/decisionEngine.js
 import { SynthesisDetailModal } from "./components/SynthesisDetailModal.jsx";
 import { mergeRowsByDay } from "./lib/dataMerge.js";
 import {
+  getRecoveryDelta14d,
   getRecoveryNarrative,
   getStrainNarrative,
   splitVerdictLabel,
@@ -82,17 +83,6 @@ function getDateRangeLabel(dailyRows) {
   const end = formatRangeDate(rows[rows.length - 1]?.date);
   if (!start || !end) return "";
   return `${start} — ${end}`;
-}
-
-function getRecoveryDelta14d(currentScore, dailyRows) {
-  if (currentScore == null || !Array.isArray(dailyRows) || dailyRows.length === 0) return null;
-  const past14 = dailyRows
-    .slice(-15, -1)
-    .map((day) => day?.recoveryScore)
-    .filter((value) => value != null);
-  if (past14.length < 3) return null;
-  const baseline = past14.reduce((sum, value) => sum + value, 0) / past14.length;
-  return Math.round(currentScore - baseline);
 }
 
 function EmptyState({ message }) {
