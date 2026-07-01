@@ -1,0 +1,25 @@
+{
+  "name": "lab-connect",
+  "version": "0.1.0",
+  "description": "MCP server proof of concept — exposes Fagundo Training OS recovery data to Claude Desktop",
+  "type": "module",
+  "bin": {
+    "lab-connect": "./build/index.js"
+  },
+  "scripts": {
+    "build": "tsc && chmod 755 build/index.js",
+    "start": "node build/index.js",
+    "dev": "tsc && node build/index.js",
+    "verify": "node scripts/verify-tools.mjs"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.29.0",
+    "@supabase/supabase-js": "^2.39.0",
+    "zod": "^3.24.0"
+  },
+  "devDependencies": {
+    "@types/node": "^22.0.0",
+    "typescript": "^5.7.0"
+  },
+  "files": ["build"]
+}
