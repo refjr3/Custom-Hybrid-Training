@@ -2,3 +2,10 @@ node_modules/
 dist/
 .env
 .env.local
+.env.production
+
+# Garmin sync (personal/dev — never commit secrets or session tokens)
+scripts/garmin-sync/.env
+scripts/garmin-sync/.venv/
+scripts/garmin-sync/.garth/
+scripts/garmin-sync/__pycache__/
