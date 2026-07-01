@@ -70,9 +70,9 @@ For a single-user POC on your machine, stdio requires no network server, no port
 
 ---
 
-## Step 1 — This Server
+## Tools
 
-### Tool: `get_recent_recovery`
+### `get_recent_recovery`
 
 Returns the user's recovery scores, HRV, and RHR for the last N days from connected wearables (WHOOP, Intervals.icu, etc.), using the same source-priority resolver logic as the main app's `/api/metrics/range` endpoint.
 
@@ -109,7 +109,72 @@ Returns the user's recovery scores, HRV, and RHR for the last N days from connec
 }
 ```
 
-### Setup
+### `get_todays_verdict`
+
+Returns today's training recommendation from the app's decision engine (including the phase 18.5 contextual fatigue check). Uses the **live** coaching modules from `src/features/coaching/lib/` — not a stale copy.
+
+**Input:** none (uses today's date)
+
+**Output:**
+
+```json
+{
+  "verdict": "Hold the Line",
+  "state": "yellow",
+  "confidence": "medium",
+  "rationale": "HRV is within your normal range, but manageable. Complete today's session as prescribed — avoid adding extra intensity.",
+  "signals": [
+    { "name": "Recovery", "value": 55, "status": "moderate" },
+    { "name": "HRV trend", "value": "-6% vs 7d", "status": "stable" }
+  ],
+  "asOfDate": "2026-06-30"
+}
+```
+
+| Field | Values |
+|-------|--------|
+| `verdict` | `Ready to Push` / `Hold the Line` / `Back Off Today` |
+| `state` | `green` / `yellow` / `red` |
+| `confidence` | `high` / `medium` / `low` / `very_low` |
+
+### `get_workouts`
+
+Returns recent planned and completed training sessions from the active plan variant.
+
+**Input:**
+
+```json
+{ "days": 7 }
+```
+
+| Field | Type | Default | Description |
+|-------|------|---------|-------------|
+| `days` | number | 7 | Calendar days to include (1–30) |
+
+**Output:**
+
+```json
+{
+  "days_requested": 7,
+  "sessions_returned": 5,
+  "data": [
+    {
+      "date": "2026-06-28",
+      "sessionName": "Z2 Erg + Mobility",
+      "type": "z2",
+      "duration": "52m",
+      "completed": true,
+      "plannedVsActual": "Planned: Z2 Erg + Mobility → Completed: rowing (52m)"
+    }
+  ]
+}
+```
+
+Completion is detected via manual mark (`am_completed_at`) or auto-match against synced activities (Garmin/Strava), same as the Plan view.
+
+---
+
+## Setup
 
 ```bash
 cd lab-connect
@@ -133,6 +198,19 @@ For interactive testing, use the [MCP Inspector](https://github.com/modelcontext
 npx @modelcontextprotocol/inspector node build/index.js
 ```
 
+To verify all three tools register and call verdict/workouts against your data:
+
+```bash
+# Set env vars (or export from your Claude Desktop config)
+export SUPABASE_URL=...
+export SUPABASE_SERVICE_KEY=...
+export LAB_CONNECT_USER_ID=...
+
+npm run verify
+```
+
+This prints the raw `get_todays_verdict` JSON to stdout for sanity-checking against the app.
+
 ### Claude Desktop config example
 
 After building, add to `claude_desktop_config.json` (replace paths and secrets):
@@ -153,7 +231,10 @@ After building, add to `claude_desktop_config.json` (replace paths and secrets):
 }
 ```
 
-Then ask Claude: *"What was my recovery like over the last 7 days?"*
+Then ask Claude:
+- *"What was my recovery like over the last 7 days?"*
+- *"What's my training verdict for today?"*
+- *"Show my workouts from the past week"*
 
 ---
 
@@ -163,14 +244,18 @@ Then ask Claude: *"What was my recovery like over the last 7 days?"*
 Claude Desktop
     │ stdio (JSON-RPC)
     ▼
-lab-connect/          ← this directory (standalone, no app imports)
-    │ Supabase service role
-    ▼
-unified_metrics       ← WHOOP, Intervals, etc.
-user_profiles         ← source_preferences
+lab-connect/                    ← standalone MCP service
+    │
+    ├─► unified_metrics         ← recovery/HRV/RHR (get_recent_recovery)
+    ├─► src/features/coaching/  ← snapshot + interpreter + decision engine (get_todays_verdict)
+    └─► training_days + garmin_activities  ← plan + completion (get_workouts)
 ```
 
-This POC intentionally does **not** modify any existing app code. It reads the same Supabase tables the app uses.
+`get_todays_verdict` imports the **current** coaching engine from the main repo at runtime (`snapshotBuilder.js`, `physiologicalInterpreter.js`, `decisionEngine.js`) so the phase 18.5 fatigue-veto fix is always in sync with the app.
+
+`get_workouts` reuses `getActiveVariant.js` and `sessionActivityMatcher.js` for the same plan variant and completion logic as the Plan view.
+
+This POC does **not** modify existing app code — it reads shared modules and Supabase tables.
 
 ## Security note
 

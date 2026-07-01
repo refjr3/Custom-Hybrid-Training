@@ -30,7 +30,7 @@ function normalizeDateKey(value: unknown): string | null {
   return s.length >= 10 ? s.slice(0, 10) : s;
 }
 
-function addCalendarDaysToIsoYmd(isoYmd: string, deltaDays: number): string | null {
+export function addCalendarDaysToIsoYmd(isoYmd: string, deltaDays: number): string | null {
   const [y, m, d] = isoYmd.split("-").map((x) => Number(x));
   if (!y || !m || !d) return null;
   const u = new Date(Date.UTC(y, m - 1, d, 12, 0, 0));
@@ -41,7 +41,7 @@ function addCalendarDaysToIsoYmd(isoYmd: string, deltaDays: number): string | nu
   return `${Y}-${M}-${D}`;
 }
 
-function getTodayIsoYmd(): string {
+export function getTodayIsoYmd(): string {
   const now = new Date();
   const Y = now.getUTCFullYear();
   const M = String(now.getUTCMonth() + 1).padStart(2, "0");
