@@ -46,7 +46,6 @@ type TrainingDayRow = {
   week_id: string;
   day_name: string;
   date_label: string | null;
-  calendar_date?: string | null;
   am_session: string | null;
   pm_session: string | null;
   am_session_type?: string | null;
@@ -120,21 +119,22 @@ async function resolveCalendarDate(
   day: TrainingDayRow,
   dayIndex: number
 ): Promise<string | null> {
-  if (day.calendar_date && /^\d{4}-\d{2}-\d{2}$/.test(day.calendar_date)) {
-    return day.calendar_date;
-  }
-
+  // Match the app's resolver (src/features/plan/PlanWeekView.jsx `normalizeDays`):
+  // training_days has NO calendar_date column, and date_label is display-only. The
+  // authoritative date is the week's start (parsed from training_weeks.dates) plus the
+  // day's DAY_ORDER offset (MON=0 … SUN=6), formatted via toISOString like the app.
   const yearHint = new Date().getFullYear();
-  const fromLabel = dateLabelToIso(day.date_label, yearHint);
-  if (fromLabel) return fromLabel;
-
   const { parseWeekDates } = await loadWeekDateUtils();
   const weekRange = parseWeekDates(week.dates, yearHint);
   if (weekRange?.start) {
     const d = new Date(weekRange.start);
     d.setDate(d.getDate() + resolveDayIndex(day, dayIndex));
-    return formatYmd(d);
+    return d.toISOString().slice(0, 10);
   }
+
+  // Fallback only when the week range can't be parsed: derive from the display label.
+  const fromLabel = dateLabelToIso(day.date_label, yearHint);
+  if (fromLabel) return fromLabel;
 
   return null;
 }
@@ -231,7 +231,7 @@ export async function getWorkouts(
     supabase
       .from("training_days")
       .select(
-        "id, week_id, day_name, date_label, calendar_date, am_session, pm_session, am_session_type, am_session_custom, pm_session_custom, am_completed_at"
+        "id, week_id, day_name, date_label, am_session, pm_session, am_session_custom, pm_session_custom, am_completed_at"
       )
       .eq("user_id", userId)
       .in("week_id", weekIds),
